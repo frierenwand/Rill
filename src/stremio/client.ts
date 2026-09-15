@@ -1,6 +1,6 @@
 import type { Ctx } from '../context';
 import { metaAddons } from '../config/schema';
-import { fetchJson, memo } from '../util/cache';
+import { cacheGet, cachePut, fetchJson } from '../util/cache';
 import { mapLimit, uniq } from '../util/concurrency';
 import type { ContentType, Manifest, Meta, MetaPreview, Stream, Subtitle } from './types';
 
@@ -63,34 +63,50 @@ export async function externalMeta(ctx: Ctx, type: ContentType, id: string): Pro
   return null;
 }
 
+function pickSupported(manifest: Manifest | null, resource: string, types: ContentType[], ids: string[]): { type: ContentType; id: string } | null {
+  if (!manifest) return { type: types[0], id: ids[0] };
+  for (const type of uniq(types, (x) => x)) {
+    for (const id of ids) if (resourceSupports(manifest, resource, type, id)) return { type, id };
+  }
+  return null;
+}
+
 export interface SourcedStream extends Stream {
   addon: string;
 }
 
-export async function externalStreams(ctx: Ctx, type: ContentType, id: string): Promise<SourcedStream[]> {
-  const key = `streams:${ctx.scope}:${type}:${id}`;
-  return memo(key, 120, async () => {
-    const results = await mapLimit(ctx.cfg.addons.stream, 6, async (url) => {
-      const base = addonBase(url);
-      if (!base) return [] as SourcedStream[];
-      const manifest = await getManifest(url);
-      if (manifest && !resourceSupports(manifest, 'stream', type, id)) return [];
-      const data = await fetchJson<{ streams?: Stream[] }>(`${base}/stream/${type}/${encodeURIComponent(id)}.json`, { ttl: 0, timeoutMs: 20000 });
-      const name = manifest?.name || base;
-      return (data?.streams ?? []).map((s) => ({ ...s, addon: name }));
-    });
-    return uniq(results.flat(), (s) => s.url || s.infoHash || s.externalUrl || s.ytId || JSON.stringify(s));
+export async function externalStreams(ctx: Ctx, type: ContentType, ids: string | string[], fallbackType: ContentType = type): Promise<SourcedStream[]> {
+  const candidates = uniq((Array.isArray(ids) ? ids : [ids]).filter(Boolean), (x) => x);
+  if (!candidates.length) return [];
+  const key = `streams:${ctx.scope}:${type}:${candidates.join('|')}`;
+  const hit = await cacheGet<SourcedStream[]>(key);
+  if (hit?.length) return hit;
+  const results = await mapLimit(ctx.cfg.addons.stream, 6, async (url) => {
+    const base = addonBase(url);
+    if (!base) return [] as SourcedStream[];
+    const manifest = await getManifest(url);
+    const asked = pickSupported(manifest, 'stream', [type, fallbackType], candidates);
+    if (!asked) return [];
+    const data = await fetchJson<{ streams?: Stream[] }>(`${base}/stream/${asked.type}/${encodeURIComponent(asked.id)}.json`, { ttl: 0, timeoutMs: 20000 });
+    const name = manifest?.name || base;
+    return (data?.streams ?? []).map((s) => ({ ...s, addon: name }));
   });
+  const streams = uniq(results.flat(), (s) => s.url || s.infoHash || s.externalUrl || s.ytId || JSON.stringify(s));
+  if (streams.length) await cachePut(key, streams, 120);
+  return streams;
 }
 
-export async function externalSubtitles(ctx: Ctx, type: ContentType, id: string, extra: { filename?: string; videoHash?: string; videoSize?: number } = {}): Promise<Subtitle[]> {
+export async function externalSubtitles(ctx: Ctx, type: ContentType, ids: string | string[], extra: { filename?: string; videoHash?: string; videoSize?: number } = {}, fallbackType: ContentType = type): Promise<Subtitle[]> {
+  const candidates = uniq((Array.isArray(ids) ? ids : [ids]).filter(Boolean), (x) => x);
+  if (!candidates.length) return [];
   const parts = Object.entries(extra).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
   const results = await mapLimit(ctx.cfg.addons.subtitle, 6, async (url) => {
     const base = addonBase(url);
     if (!base) return [] as Subtitle[];
     const manifest = await getManifest(url);
-    if (manifest && !resourceSupports(manifest, 'subtitles', type, id)) return [];
-    const path = `${base}/subtitles/${type}/${encodeURIComponent(id)}${parts.length ? `/${parts.join('&')}` : ''}.json`;
+    const asked = pickSupported(manifest, 'subtitles', [type, fallbackType], candidates);
+    if (!asked) return [];
+    const path = `${base}/subtitles/${asked.type}/${encodeURIComponent(asked.id)}${parts.length ? `/${parts.join('&')}` : ''}.json`;
     const data = await fetchJson<{ subtitles?: Subtitle[] }>(path, { ttl: 600 });
     return data?.subtitles ?? [];
   });

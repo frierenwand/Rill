@@ -26,11 +26,12 @@ export async function resolveSources(lib: Library, g: TitleGuid, itemId: string)
   if (g.kind === 'movie' && !meta) return empty;
   if(meta?.collection)return empty;
   const streamType = lib.streamTypeOf(g);
-  const streamId = lib.streamIdOf(show, g);
+  const streamIds = lib.streamIdsOf(show, g, meta);
+  const streamId = streamIds[0];
 
   let streams: Stream[] = [];
   try {
-    streams = await externalStreams(ctx, streamType, streamId);
+    streams = await externalStreams(ctx, streamType, streamIds, g.kind === 'movie' ? 'movie' : 'series');
   } catch {
     streams = [];
   }
@@ -38,7 +39,7 @@ export async function resolveSources(lib: Library, g: TitleGuid, itemId: string)
   if (!usable.length) return { sources: [], streamType, streamId };
 
   const runtime = runtimeTicks(meta?.runtime);
-  const subs = ctx.cfg.addons.subtitle.length ? subtitleEntries(await externalSubtitles(ctx, streamType, streamId).catch(() => [])) : [];
+  const subs = ctx.cfg.addons.subtitle.length ? subtitleEntries(await externalSubtitles(ctx, streamType, streamIds, {}, g.kind === 'movie' ? 'movie' : 'series').catch(() => [])) : [];
 
   const seen = new Set<string>();
   const sources: Dto[] = [];

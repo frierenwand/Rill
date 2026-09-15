@@ -457,10 +457,22 @@ export class Library {
   }
 
   streamIdOf(show: Show | null, g: TitleGuid): string {
-    if (g.kind === 'movie' || g.kind === 'series') return stremioIdOfGuid(g);
+    return this.streamIdsOf(show, g)[0];
+  }
+
+  streamIdsOf(show: Show | null, g: TitleGuid, meta?: Meta | null): string[] {
+    const ids = meta?.ids ?? show?.meta.ids;
+    const imdb = ids?.imdb && /^tt\d+$/.test(ids.imdb) ? ids.imdb : g.source === 'imdb' ? stremioIdOfGuid(g) : null;
+    const canonical = stremioIdOfGuid(g);
+    if (g.kind === 'movie' || g.kind === 'series') {
+      return uniq([canonical, imdb, ids?.kitsu ? `kitsu:${ids.kitsu}` : null, ids?.tmdb ? `tmdb:${ids.tmdb}` : null, ids?.mal ? `mal:${ids.mal}` : null].filter((x): x is string => !!x), (x) => x);
+    }
     const ep = show ? this.findEpisode(show, g) : undefined;
-    if (ep?.video?.id) return String(ep.video.id);
-    return stremioEpisodeId(stremioIdOfGuid(g), g.season, g.episode ?? 1);
+    const video = ep?.video?.id ? String(ep.video.id) : null;
+    const season = g.season ?? 1;
+    const episode = g.episode ?? 1;
+    const absolute = ep?.video?.episode ?? episode;
+    return uniq([video, imdb ? `${imdb}:${season}:${episode}` : null, ids?.kitsu ? `kitsu:${ids.kitsu}:${absolute}` : null, ids?.tmdb ? `tmdb:${ids.tmdb}:${season}:${episode}` : null, ids?.mal ? `mal:${ids.mal}:${absolute}` : null, stremioEpisodeId(canonical, season, episode)].filter((x): x is string => !!x), (x) => x);
   }
 
   streamTypeOf(g: TitleGuid): ContentType {
