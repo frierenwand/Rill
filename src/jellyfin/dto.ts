@@ -298,6 +298,12 @@ function peopleOf(meta: Partial<Meta>): Dto[] {
   return out.filter((p) => p.Name);
 }
 
+/** Clients echo image tags back on every image request, so the tag carries the artwork URL itself
+ *  and the image route can answer without resolving the title again. */
+export function imageTag(url: string | undefined | null): string | undefined {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : undefined;
+}
+
 export interface TitleItemOptions {
   parentId?: string | null;
   /** Number of seasons, when known. */
@@ -312,9 +318,9 @@ export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, wh
   const isMovie = g.kind === 'movie';
   const genres = Array.isArray(meta.genres) ? meta.genres.filter((x) => typeof x === 'string' && x) : [];
   const imageTags: Record<string, string> = {};
-  if (meta.poster) imageTags.Primary = 'p';
-  if (meta.logo) imageTags.Logo = 'l';
-  if (meta.background) imageTags.Thumb = 't';
+  if (imageTag(meta.poster)) imageTags.Primary = imageTag(meta.poster)!;
+  if (imageTag(meta.logo)) imageTags.Logo = imageTag(meta.logo)!;
+  if (imageTag(meta.background)) imageTags.Thumb = imageTag(meta.background)!;
 
   const item: Dto = {
     Name: meta.name,
@@ -346,7 +352,7 @@ export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, wh
       .slice(0, 5)
       .map((t) => ({ Name: t.type || 'Trailer', Url: /^https?:/i.test(t.source) ? t.source : `https://www.youtube.com/watch?v=${t.source}` })),
     ImageTags: imageTags,
-    BackdropImageTags: meta.background ? ['b'] : [],
+    BackdropImageTags: imageTag(meta.background) ? [imageTag(meta.background)!] : [],
     ImageBlurHashes: {},
     UserData: userData(id),
     LocationType: 'Remote',
@@ -395,7 +401,7 @@ export function seasonItem(s: SeasonInput, who: Identity): Dto {
     ChildCount: s.episodeCount,
     RecursiveItemCount: s.episodeCount,
     UserData: userData(s.id),
-    ImageTags: s.poster ? { Primary: 'p' } : {},
+    ImageTags: imageTag(s.poster) ? { Primary: imageTag(s.poster)! } : {},
     BackdropImageTags: [],
     ImageBlurHashes: {},
     LocationType: 'Remote',
@@ -417,9 +423,9 @@ export interface EpisodeInput {
   video: MetaVideo;
   certification?: string;
   runtimeTicks?: number | null;
-  /** Series poster, used as ParentBackdrop/Logo hints. */
-  hasBackdrop?: boolean;
-  hasLogo?: boolean;
+  /** Series artwork URLs, surfaced as ParentBackdrop/Logo tags. */
+  backdrop?: string;
+  logo?: string;
 }
 
 export function episodeItem(e: EpisodeInput, who: Identity): Dto {
@@ -447,7 +453,7 @@ export function episodeItem(e: EpisodeInput, who: Identity): Dto {
     CommunityRating: ratingOf(v.rating),
     RunTimeTicks: e.runtimeTicks ?? null,
     ProviderIds: {},
-    ImageTags: v.thumbnail ? { Primary: 'p' } : {},
+    ImageTags: imageTag(v.thumbnail) ? { Primary: imageTag(v.thumbnail)! } : {},
     BackdropImageTags: [],
     ImageBlurHashes: {},
     UserData: userData(e.id),
@@ -461,13 +467,13 @@ export function episodeItem(e: EpisodeInput, who: Identity): Dto {
     VideoType: 'VideoFile',
     Path: `/library/${e.id}`,
   };
-  if (e.hasBackdrop) {
+  if (imageTag(e.backdrop)) {
     item.ParentBackdropItemId = e.seriesId;
-    item.ParentBackdropImageTags = ['b'];
+    item.ParentBackdropImageTags = [imageTag(e.backdrop)!];
   }
-  if (e.hasLogo) {
+  if (imageTag(e.logo)) {
     item.ParentLogoItemId = e.seriesId;
-    item.ParentLogoImageTag = 'l';
+    item.ParentLogoImageTag = imageTag(e.logo)!;
   }
   // A future air date is what makes an episode "missing"/"unaired" in clients.
   if (premiere && Date.parse(premiere) > Date.now()) item.IsUnaired = true;

@@ -513,7 +513,7 @@ export class Library {
 
   seasonItems(show: Show): Dto[] {
     return show.seasons.map((s) =>
-      seasonItem({ id: s.id, seriesId: show.id, seriesName: show.meta.name, number: s.number, episodeCount: s.episodes.length, poster: show.meta.poster }, this.jf.who),
+      seasonItem({ id: s.id, seriesId: show.id, seriesName: show.meta.name, number: s.number, episodeCount: s.episodes.length, poster: show.meta.seasonPosters?.[s.number] ?? show.meta.poster }, this.jf.who),
     );
   }
 
@@ -536,8 +536,8 @@ export class Library {
         video: e.video,
         certification: show.meta.certification,
         runtimeTicks: rt,
-        hasBackdrop: Boolean(show.meta.background),
-        hasLogo: Boolean(show.meta.logo),
+        backdrop: show.meta.background,
+        logo: show.meta.logo,
       },
       this.jf.who,
     );

@@ -24,7 +24,7 @@ import {
   tokenOf,
   verifyToken,
 } from './auth';
-import { collectionFolder, genreDto, listOf, publicSystemInfo, sessionDto, systemInfo, userDto, type Dto } from './dto';
+import { collectionFolder, genreDto, imageTag, listOf, publicSystemInfo, sessionDto, systemInfo, userDto, type Dto } from './dto';
 import { dashGuid, decodeGuid, encodeGuid, genreIdOf, parentSeriesOf, plainGuid, type LabelGuid, type TitleGuid } from './ids';
 import { imageUrlFor, redirectTo } from './images';
 import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type Show } from './library';
@@ -551,7 +551,7 @@ async function singleItem(L: Library, id: string, withSources: boolean): Promise
   if (g.kind === 'misc') {
     if(g.sub==='genre')return genreDto(await L.genreNameOf(g),L.jf.who);
     const person=await personFor(L.ctx,g);
-    return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday??null,EndDate:person.deathday??null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ImageTags:person.profile_path?{Primary:'p'}:{},IsFolder:false}:null;
+    return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday??null,EndDate:person.deathday??null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ImageTags:person.profile_path?{Primary:`https://image.tmdb.org/t/p/h632${person.profile_path}`}:{},IsFolder:false}:null;
   }
 
   if (g.kind === 'movie' || g.kind === 'series') {
@@ -954,6 +954,9 @@ inner.post('/users/:uid/items/:id/userdata', userDataHandler);
 // ---------------------------------------------------------------------------
 
 async function imageHandler(c: C): Promise<Response> {
+  // The tag is the artwork URL handed out with the item, so no lookup is needed when a client echoes it.
+  const tag = imageTag(c.get('jf').q('tag'));
+  if (tag) return redirectTo(tag);
   const url = await imageUrlFor(lib(c), plainGuid(c.req.param('id')), c.req.param('type') ?? 'primary');
   return url ? redirectTo(url) : c.body(null, 404);
 }
