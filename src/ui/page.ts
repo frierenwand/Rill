@@ -48,9 +48,16 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .brand { display:flex; align-items:center; gap:9px; }
 .brand img { width:28px; height:28px; }
 .wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
-.header-actions { display:flex; align-items:center; gap:20px; }
-#account-bar { display:inline-flex; align-items:center; gap:10px; font-size:12px; color:var(--mute); }
+.header-actions { display:flex; align-items:center; gap:18px; }
+.who { display:inline-flex; align-items:center; gap:14px; font-size:12px; color:var(--mute); white-space:nowrap; }
+.who:empty { display:none; }
+#account-bar { display:inline-flex; align-items:center; gap:10px; }
+#account-bar:empty { display:none; }
 #account-bar .acct { color:var(--fg); }
+#account-bar .q { padding:0; }
+.tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
+.tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
+.tabs-row .mode { flex:none; }
 #login-gate { position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
 #login-gate[hidden] { display:none; }
 #login-form { width:100%; max-width:360px; }
@@ -189,7 +196,7 @@ input:focus,select:focus,textarea:focus { border-color:#aaaaaa; box-shadow:0 0 0
 .service-card summary:after { font-size:19px; color:var(--accent); }
 .service-card summary:hover { background:#202020; }
 #draft-status { font-size:11px; }
-#draft-status:before { content:''; display:inline-block; height:5px; width:5px; border-radius:50%; background:var(--accent); margin-right:8px; }
+#draft-status:not(:empty):before { content:''; display:inline-block; height:5px; width:5px; border-radius:50%; background:var(--accent); margin-right:8px; }
 .select-control { position:relative; min-width:0; }
 .select-control > select { display:none; }
 .sel:has(.select-control):after { display:none; }
@@ -244,7 +251,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(min-width:701px) { #s-tracking .two { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); } }
 @media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble label { padding:12px 9px; gap:7px; font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
-@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } #draft-status { display:none; } #connect-nav { padding:10px 13px; font-size:13px; } #connect-nav:after { padding-left:10px; } .tabs { margin-top:20px; padding-bottom:14px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } #draft-status { display:none; } #account-bar .acct { display:none; } .header-actions { gap:12px; } #connect-nav { padding:10px 12px; font-size:13px; white-space:nowrap; } #connect-nav:after { padding-left:10px; } .tabs-row { margin-top:18px; padding-bottom:12px; gap:10px; } .mode span { padding:6px 9px; font-size:11px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
@@ -257,10 +264,13 @@ function body(): string {
 <main>
 <div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div><span id="account-bar"></span><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
+  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="who"><span id="account-bar"></span><span id="draft-status" role="status">Saved on this device</span></div><button type="button" id="connect-nav">Connect apps</button></div></div>
+  <div class="tabs-row">
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
     ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
   </nav>
+  <div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div>
+  </div>
 </header>
 <div class="workspace"><div id="panels">
 
