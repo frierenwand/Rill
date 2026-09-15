@@ -48,17 +48,54 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .brand { display:flex; align-items:center; gap:9px; }
 .brand img { width:28px; height:28px; }
 .wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
-.header-actions { display:flex; align-items:center; gap:18px; }
-.who { display:inline-flex; align-items:center; gap:14px; font-size:12px; color:var(--mute); white-space:nowrap; }
-.who:empty { display:none; }
-#account-bar { display:inline-flex; align-items:center; gap:10px; }
-#account-bar:empty { display:none; }
-#account-bar .acct { color:var(--fg); }
-#account-bar .q { padding:0; }
+.header-actions { display:flex; align-items:center; gap:14px; }
+.account { position:relative; }
+.account:empty { display:none; }
+.chip { display:inline-flex; align-items:center; gap:9px; padding:5px 12px 5px 5px; border:1px solid var(--line); border-radius:999px; background:#101010; color:var(--fg); font-size:13px; font-weight:500; line-height:1; }
+.chip:hover, .chip[aria-expanded=true] { background:#181818; border-color:#3a3a3a; }
+.chip .chev { color:var(--mute); font-size:10px; margin-left:-2px; }
+.chip.cta { padding:8px 14px; color:var(--mute); }
+.chip.cta:hover { color:var(--fg); }
+.avatar { width:26px; height:26px; border-radius:50%; background:var(--accent); color:#111; font-weight:700; font-size:12px; display:inline-grid; place-items:center; letter-spacing:0; }
+.avatar.big { width:36px; height:36px; font-size:15px; }
+.popover { position:absolute; right:0; top:calc(100% + 10px); min-width:250px; background:#131313; border:1px solid var(--line); border-radius:14px; padding:8px; box-shadow:0 24px 60px #000c; z-index:30; }
+.popover[hidden] { display:none; }
+.pop-user { display:flex; align-items:center; gap:12px; padding:10px 10px 12px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+.pop-user strong { display:block; font-size:14px; font-weight:600; }
+.pop-user small { display:block; font-size:12px; color:var(--mute); margin-top:3px; }
+.popover [role=menuitem] { display:block; width:100%; text-align:left; padding:10px 10px; border-radius:9px; background:none; border:0; color:var(--fg); font-size:13px; }
+.popover [role=menuitem]:hover { background:#1e1e1e; }
+#menu-btn { display:none; }
+#drawer-backdrop { position:fixed; inset:0; background:#000a; z-index:55; backdrop-filter:blur(3px); opacity:0; transition:opacity .25s ease; }
+#drawer-backdrop.open { opacity:1; }
+#drawer { position:fixed; top:0; right:0; bottom:0; width:min(330px,88vw); background:#0e0e0e; border-left:1px solid var(--line); z-index:60; padding:22px 18px 26px; display:flex; flex-direction:column; gap:20px; transform:translateX(100%); transition:transform .28s cubic-bezier(.2,.8,.2,1); overflow-y:auto; }
+#drawer.open { transform:none; }
+#drawer[hidden], #drawer-backdrop[hidden] { display:none; }
+.drawer-head { display:flex; justify-content:space-between; align-items:center; }
+.drawer-head .wordmark { font-size:22px; font-weight:600; letter-spacing:-.8px; }
+#drawer-close { width:36px; height:36px; border-radius:50%; border:1px solid var(--line); background:#151515; color:var(--fg); font-size:13px; }
+#drawer-account { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:14px; background:#121212; }
+#drawer-account:empty { display:none; }
+#drawer-account .meta { flex:1; min-width:0; }
+#drawer-account strong { display:block; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#drawer-account small { display:block; font-size:12px; color:var(--mute); margin-top:2px; }
+#drawer-account .q { padding:0; font-size:12px; }
+.drawer-nav { display:flex; flex-direction:column; gap:3px; }
+.drawer-nav button { display:flex; align-items:center; justify-content:space-between; width:100%; text-align:left; padding:13px 14px; border-radius:11px; background:none; border:0; color:var(--mute); font-size:16px; font-weight:500; }
+.drawer-nav button:after { content:'›'; color:#5a5a5a; font-size:18px; }
+.drawer-nav button.active { background:#1b1b1b; color:var(--fg); }
+.drawer-nav button[hidden] { display:none; }
+.drawer-mode { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 4px; }
+.drawer-mode .t { margin:0; color:var(--mute); font-size:12px; }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#101010; }
+.seg button { padding:9px 14px; background:none; border:0; color:var(--mute); font-size:13px; }
+.seg button[aria-pressed=true] { background:#222; color:var(--fg); }
+.drawer-foot { margin-top:auto; }
+#drawer-connect { width:100%; background:var(--accent); color:#141414; border:1px solid #fff; padding:13px 16px; border-radius:11px; font-weight:650; font-size:14px; }
 .tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
 .tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
 .tabs-row .mode { flex:none; }
-#login-gate { position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
+#login-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
 #login-gate[hidden] { display:none; }
 #login-form { width:100%; max-width:360px; }
 #login-form .brand { margin-bottom:18px; }
@@ -251,7 +288,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(min-width:701px) { #s-tracking .two { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); } }
 @media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble label { padding:12px 9px; gap:7px; font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
-@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } #draft-status { display:none; } #account-bar .acct { display:none; } .header-actions { gap:12px; } #connect-nav { padding:10px 12px; font-size:13px; white-space:nowrap; } #connect-nav:after { padding-left:10px; } .tabs-row { margin-top:18px; padding-bottom:12px; gap:10px; } .mode span { padding:6px 9px; font-size:11px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, #connect-nav, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
@@ -264,7 +301,7 @@ function body(): string {
 <main>
 <div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="who"><span id="account-bar"></span><span id="draft-status" role="status">Saved on this device</span></div><button type="button" id="connect-nav">Connect apps</button></div></div>
+  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="connect-nav">Connect apps</button><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
   <div class="tabs-row">
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
     ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
@@ -272,6 +309,14 @@ function body(): string {
   <div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div>
   </div>
 </header>
+<div id="drawer-backdrop" hidden></div>
+<aside id="drawer" hidden aria-label="Menu">
+  <div class="drawer-head"><div class="brand"><img src="/logo.svg?v=rill" alt=""><span class="wordmark">rill</span></div><button type="button" id="drawer-close" aria-label="Close menu">✕</button></div>
+  <div id="drawer-account"></div>
+  <nav id="drawer-nav" class="drawer-nav" aria-label="Sections"></nav>
+  <div class="drawer-mode"><span class="t">Mode</span><div class="seg" role="group" aria-label="Settings mode"><button type="button" data-mode="simple" aria-pressed="false">Simple</button><button type="button" data-mode="advanced" aria-pressed="false">Advanced</button></div></div>
+  <div class="drawer-foot"><button type="button" id="drawer-connect">Connect apps ↗</button></div>
+</aside>
 <div class="workspace"><div id="panels">
 
 
@@ -573,6 +618,7 @@ const JS = String.raw`
     simpleHost.hidden = advanced;
     var current = all('[data-tab]').filter(function(t) { return t.getAttribute('aria-selected') === 'true'; })[0];
     if (current && current.hidden) { location.hash = 'general'; selectTab('general', false); }
+    if (typeof renderDrawerNav === 'function' && document.getElementById('drawer-nav').children.length) renderDrawerNav();
   }
   function selectTab(key, focus) {
     if (!groups[key]) key = 'general';
@@ -668,7 +714,7 @@ const JS = String.raw`
   // ---- change pipeline ----------------------------------------------------------------------------
   var encTimer = null, catTimer = null, lastCatKey = '';
   function catalogKey() {
-    return JSON.stringify([cfg.keys, cfg.addons, cfg.lists, cfg.customCatalogs, cfg.movieLens, cfg.recommendations, cfg.providers, cfg.language, cfg.ageCap, trackerFingerprint()]);
+    return JSON.stringify([cfg.advanced, cfg.keys, cfg.addons, cfg.lists, cfg.customCatalogs, cfg.movieLens, cfg.recommendations, cfg.providers, cfg.language, cfg.ageCap, trackerFingerprint()]);
   }
   function trackerFingerprint() {
     var t = cfg.trackers;
@@ -701,19 +747,64 @@ const JS = String.raw`
     renderAll(); encode(); loadCatalogs();
     $('draft-status').textContent = 'Synced with your server';
   }
+  var activePop = null;
+  document.addEventListener('click', function (e) { if (activePop && !activePop.pop.hidden && !activePop.host.contains(e.target)) activePop.close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && activePop && !activePop.pop.hidden) { activePop.close(); activePop.chip.focus(); } });
+  function initial(name) { return (name || '?').trim().charAt(0).toUpperCase() || '?'; }
+  function statusText() { return $('draft-status').textContent || ''; }
   function renderAccount() {
-    var bar = $('account-bar'); clear(bar);
-    if (account.durable) {
-      if (account.signedIn) {
-        bar.appendChild(el('span', { class: 'acct', text: account.username }));
-        bar.appendChild(el('button', { type: 'button', class: 'q', text: 'Log out', onclick: logout }));
-      } else if (!account.exists) {
-        bar.appendChild(el('button', { type: 'button', class: 'q', text: 'Save to server', title: 'Store these settings on your Worker so they follow you to every device', onclick: protect }));
-      }
+    var host = $('account'), side = $('drawer-account'); clear(host); clear(side);
+    if (account.durable && account.signedIn) {
+      var chip = el('button', { type: 'button', class: 'chip', 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [
+        el('span', { class: 'avatar', 'aria-hidden': 'true', text: initial(account.username) }), el('span', { text: account.username }), el('span', { class: 'chev', 'aria-hidden': 'true', text: '▾' })]);
+      var pop = el('div', { class: 'popover', role: 'menu', hidden: true });
+      function openPop(open) { pop.hidden = !open; chip.setAttribute('aria-expanded', String(open)); if (open) { clear(pop);
+        pop.appendChild(el('div', { class: 'pop-user' }, [el('span', { class: 'avatar big', 'aria-hidden': 'true', text: initial(account.username) }), el('div', {}, [el('strong', { text: account.username }), el('small', { text: statusText() })])]));
+        pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Connect apps', onclick: function () { openPop(false); location.hash = 'install'; selectTab('install', true); } }));
+        pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Log out', onclick: function () { openPop(false); logout(); } })); } }
+      chip.addEventListener('click', function (e) { e.stopPropagation(); openPop(pop.hidden); });
+      activePop = { pop: pop, chip: chip, host: host, close: function () { openPop(false); } };
+      host.appendChild(chip); host.appendChild(pop);
+      side.appendChild(el('span', { class: 'avatar big', 'aria-hidden': 'true', text: initial(account.username) }));
+      side.appendChild(el('div', { class: 'meta' }, [el('strong', { text: account.username }), el('small', { text: statusText() })]));
+      side.appendChild(el('button', { type: 'button', class: 'q', text: 'Log out', onclick: function () { closeDrawer(); logout(); } }));
+    } else if (account.durable && !account.exists) {
+      host.appendChild(el('button', { type: 'button', class: 'chip cta', title: 'Store these settings on your Worker so they follow you to every device', text: 'Save to server', onclick: protect }));
+      side.appendChild(el('div', { class: 'meta' }, [el('strong', { text: 'Not saved to server' }), el('small', { text: 'Settings live only in this browser.' })]));
+      side.appendChild(el('button', { type: 'button', class: 'q', text: 'Save to server', onclick: function () { closeDrawer(); protect(); } }));
     }
     $('login-gate').hidden = !(account.exists && !account.signedIn);
     if (!$('login-gate').hidden) $('login-user').focus();
   }
+
+  // ---- mobile drawer --------------------------------------------------------------------------------
+  var drawer = $('drawer'), backdrop = $('drawer-backdrop'), drawerTimer = null;
+  function openDrawer() {
+    clearTimeout(drawerTimer); renderDrawerNav(); renderAccount();
+    drawer.hidden = false; backdrop.hidden = false; $('menu-btn').setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(function () { drawer.classList.add('open'); backdrop.classList.add('open'); });
+    document.body.style.overflow = 'hidden';
+  }
+  function closeDrawer() {
+    drawer.classList.remove('open'); backdrop.classList.remove('open'); $('menu-btn').setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    clearTimeout(drawerTimer); drawerTimer = setTimeout(function () { drawer.hidden = true; backdrop.hidden = true; }, 300);
+  }
+  function renderDrawerNav() {
+    var nav = $('drawer-nav'); clear(nav);
+    all('[data-tab]').forEach(function (tab) {
+      var item = el('button', { type: 'button', class: tab.getAttribute('aria-selected') === 'true' ? 'active' : '', text: tab.textContent, hidden: tab.hidden || undefined,
+        onclick: function () { location.hash = tab.dataset.tab; selectTab(tab.dataset.tab, false); closeDrawer(); window.scrollTo({ top: 0 }); } });
+      nav.appendChild(item);
+    });
+    all('.seg [data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', String((b.dataset.mode === 'advanced') === !!cfg.advanced)); });
+  }
+  $('menu-btn').addEventListener('click', function () { drawer.hidden ? openDrawer() : closeDrawer(); });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  backdrop.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !drawer.hidden) closeDrawer(); });
+  $('drawer-connect').addEventListener('click', function () { closeDrawer(); location.hash = 'install'; selectTab('install', true); window.scrollTo({ top: 0 }); });
+  all('.seg [data-mode]').forEach(function (b) { b.addEventListener('click', function () { cfg.advanced = b.dataset.mode === 'advanced'; changed(); applyMode(); renderDrawerNav(); }); });
   function saveRemote() {
     return api('/api/account/save', { config: cfg }).then(function (r) {
       if (r.error) { $('draft-status').textContent = r.error; return r; }
