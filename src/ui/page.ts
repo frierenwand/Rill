@@ -151,7 +151,16 @@ h3 { font-size:15px; font-weight:500; letter-spacing:-.2px; margin:24px 0 14px; 
 .section-content { min-width:0; }
 .section-content > :first-child { margin-top:0; }
 .f { margin-bottom:18px; min-width:0; }
-label.t { display:block; font-size:14px; font-weight:500; margin-bottom:10px; }
+label.t, span.t { display:block; font-size:14px; font-weight:500; margin-bottom:10px; }
+label.f { display:block; }
+.group { padding:18px; border:1px solid var(--line); border-radius:10px; background:#111; margin:0 0 14px; }
+.group > .f:last-of-type { margin-bottom:14px; }
+.group > select { margin-bottom:14px; }
+.group .f:has(> input + button) { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.group .f:has(> input + button) > input { flex:1 1 240px; }
+input[type=file] { width:100%; min-height:46px; padding:10px 12px; border:1px dashed #3a3a3a; border-radius:8px; background:#0f0f0f; color:var(--mute); font:inherit; font-size:13px; }
+input[type=file]::file-selector-button { font:inherit; font-size:13px; font-weight:500; color:var(--fg); background:#1e1e1e; border:1px solid #393939; border-radius:6px; padding:6px 12px; margin-right:12px; cursor:pointer; }
+input[type=file]::file-selector-button:hover { background:#262626; }
 input[type=text],input[type=password],input[type=number],input[type=url],select,textarea { width:100%; min-width:0; min-height:38px; font:inherit; color:inherit; background:#0d0d0d; border:1px solid #383838; border-radius:6px; padding:8px 11px; margin:0; outline:none; appearance:none; }
 input::placeholder,textarea::placeholder { color:#717171; }
 input:hover,select:hover,textarea:hover { border-color:#606060; }
@@ -192,6 +201,9 @@ input[type=checkbox]:before { content:''; position:absolute; width:12px; height:
 input[type=checkbox]:checked { background:var(--accent); border-color:var(--accent); }
 input[type=checkbox]:checked:before { background:#191919; transform:translateX(14px); }
 .checks { display:flex; flex-wrap:wrap; gap:12px 24px; margin:0 0 24px; }
+label.check { display:flex; align-items:center; gap:11px; margin:0 0 14px; font-size:14px; line-height:1.4; cursor:pointer; }
+.two > label.check { grid-column:1 / -1; }
+label.check + .two, label.check + .hint { margin-top:-4px; }
 .checks label { display:inline-flex; align-items:center; gap:9px; font-size:14px; cursor:pointer; }
 #scrobble { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 #scrobble label { border:1px solid #353535; border-radius:6px; background:#141414; padding:14px; }
@@ -305,9 +317,9 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 #profile-add { margin-top:10px; }
 #s-jellyfin .section-content > .two { margin-bottom:8px; }
 @media(min-width:701px) { #s-tracking .two { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); } }
-@media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble label { padding:12px 9px; gap:7px; font-size:12px; } }
+@media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble { grid-template-columns:1fr; } #scrobble label { padding:12px 12px; gap:9px; font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
-@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
@@ -396,7 +408,7 @@ function body(): string {
   </div>
   <h3>MovieLens</h3>
   <div class="two">
-    <div class="f"><label class="t" for="ml-user">Username</label><input id="ml-user" data-k="movieLens.username" autocomplete="off"></div>
+    <div class="f"><label class="t" for="ml-user">Username</label><input type="text" id="ml-user" data-k="movieLens.username" autocomplete="off" spellcheck="false"></div>
     <div class="f"><label class="t" for="ml-pass">Password</label><input id="ml-pass" type="password" data-k="movieLens.password" autocomplete="off"></div>
     <label class="check"><input type="checkbox" data-k="movieLens.syncRatings">Import ratings daily from connected Trakt, Simkl and MDBList accounts</label>
     <div class="b"><button type="button" id="ml-sync">Import ratings now</button><button type="button" id="ml-status">Check last import</button></div>
@@ -417,7 +429,7 @@ function body(): string {
     <div class="f"><label class="t" for="rec-provider">Provider</label><select id="rec-provider" data-k="recommendations.provider"><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option></select></div>
     <div class="f"><label class="t" for="rec-sources">Viewing history</label><select id="rec-sources" data-k="recommendations.sources"><option value="both">Simkl and MDBList</option><option value="simkl">Simkl</option><option value="mdblist">MDBList</option><option value="primary">Primary tracker</option></select><p class="hint">Local playback history is included. Independent profiles use only their own history.</p></div>
     <div class="f"><label class="t" for="rec-key">API key</label><input id="rec-key" type="password" data-k="recommendations.apiKey" autocomplete="off"></div>
-    <div class="f"><label class="t" for="rec-model">Model</label><input id="rec-model" data-k="recommendations.model" placeholder="Your provider's model name"></div>
+    <div class="f"><label class="t" for="rec-model">Model</label><input type="text" id="rec-model" data-k="recommendations.model" placeholder="Your provider's model name" autocomplete="off" spellcheck="false"></div>
     <div class="f"><label class="t" for="rec-reasoning">Reasoning effort</label><select id="rec-reasoning" data-k="recommendations.reasoning"><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
     <div class="f"><label class="t" for="rec-order">Order</label><select id="rec-order" data-k="recommendations.order"><option value="balanced">Balance rating and audience</option><option value="suggested">Suggested order</option><option value="popular">Most popular</option><option value="acclaimed">Highest rated</option></select></div>
     <div class="f"><label class="t" for="rec-hours">Refresh</label><select id="rec-hours" data-k="recommendations.refreshHours"><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Daily</option></select></div>
@@ -991,6 +1003,7 @@ const JS = String.raw`
       box.appendChild(el('button',{type:'button',text:'Remove catalog',onclick:function(){cfg.customCatalogs.splice(index,1);renderCustomCatalogs();changed();}}));
       root.appendChild(box);
     });
+    enhanceSelects();
   }
   $('add-custom-catalog').addEventListener('click',function(){cfg.customCatalogs=cfg.customCatalogs || [];cfg.customCatalogs.push({id:crypto.randomUUID(),name:'My catalog',provider:'tmdb',type:'movie',params:{}});renderCustomCatalogs();changed();});
   var recommendationPoll;
