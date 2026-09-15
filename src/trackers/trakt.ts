@@ -283,6 +283,7 @@ async function catalogs(ctx: Ctx): Promise<ManifestCatalog[]> {
   for (const kind of KINDS) {
     out.push({ type: kind, id: `trakt:watchlist:${kind}`, name: 'Trakt Watchlist', extra: [{ name: 'skip' }] });
     out.push({ type: kind, id: `trakt:recs:${kind}`, name: 'Trakt Recommendations', extra: [{ name: 'skip' }] });
+    out.push({ type: kind, id: `trakt:favorites:${kind}`, name: 'Trakt Favorites', extra: [{ name: 'skip' }] });
   }
   const own = (await get<UserList[]>(ctx, s, '/users/me/lists', 600)) ?? [];
   for (const list of own) {
@@ -313,6 +314,7 @@ function itemsPath(catalogId: string, page: number): { path: string; kind: 'movi
   const parts = catalogId.split(':');
   if (parts[0] !== 'trakt') return null;
   const q = `?page=${page}&limit=${PAGE}&extended=full,images`;
+  if(parts[1]==='favorites'&&(parts[2]==='movie'||parts[2]==='series'))return{path:`/users/me/favorites/${traktType(parts[2])}/added${q}`,kind:parts[2]};
   if (parts[1] === 'watchlist' && (parts[2] === 'movie' || parts[2] === 'series')) {
     return { path: `/sync/watchlist/${traktType(parts[2])}/added${q}`, kind: parts[2] };
   }
@@ -355,4 +357,3 @@ export const traktTracker: Tracker = {
   catalogs,
   catalogItems,
 };
-

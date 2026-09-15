@@ -9,12 +9,16 @@
 import { Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { Env } from '../env';
-import { normalizeConfig, type TitanConfig } from '../config/schema';
+import { normalizeConfig, type RillConfig } from '../config/schema';
 import { decodeConfig, encodeConfig } from '../config/codec';
 import { getManifest } from '../stremio/client';
 import { sha256 } from '../util/bytes';
 import { listCatalogDefinitions } from '../addon/catalogs';
 import { renderPage, renderLogo } from './page';
+import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
+import { syncMovieLens,movieLensSyncStatus,importRatingsCsv } from '../addon/movielens-sync';
+import { aiCatalog } from '../addon/ai';
+import { importLayout,exportLayout,saveLayout,loadLayout } from '../addon/layouts';
 
 export const uiRouter = new Hono<{ Variables: { ctx?: Ctx }; Bindings: Env }>();
 
@@ -75,7 +79,7 @@ function expiryFrom(expiresIn: unknown): number | undefined {
 }
 
 /** Pull a config token out of whatever the user pasted: bare token, install URL, stremio:// link. */
-async function tokenFromInput(input: string): Promise<{ token: string; config: TitanConfig } | null> {
+async function tokenFromInput(input: string): Promise<{ token: string; config: RillConfig } | null> {
   const raw = input.trim();
   if (!raw) return null;
   const candidates: string[] = [];
@@ -101,15 +105,16 @@ async function tokenFromInput(input: string): Promise<{ token: string; config: T
   return null;
 }
 
-async function buildCtx(cfg: TitanConfig, env: Env | undefined, origin: string): Promise<Ctx> {
+async function buildCtx(cfg: RillConfig, env: Env | undefined, origin: string): Promise<Ctx> {
   const cfgToken = await encodeConfig(cfg);
-  const scope = (await sha256(cfgToken)).slice(0, 16);
+  const scope = (await sha256(cfg.installationKey||cfgToken)).slice(0,cfg.installationKey?32:16);
   return {
     cfg,
     env: env ?? {},
     cfgToken,
     origin,
     scope,
+    cacheRevision:(await sha256(JSON.stringify(cfg))).slice(0,16),
     lang: (cfg.language || 'en').slice(0, 2).toLowerCase(),
     tmdbKey: cfg.keys.tmdb || env?.TMDB_KEY,
   };
@@ -166,6 +171,56 @@ uiRouter.post('/api/catalogs', async (c) => {
   } catch {
     return c.json({ error: 'Catalog list is unavailable right now.', catalogs: [] }, 502);
   }
+});
+
+uiRouter.post('/api/recommendations/generate',async c=>{
+  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config??body);
+  if(!cfg.recommendations?.enabled||!cfg.recommendations.apiKey||!cfg.recommendations.model)return c.json({error:'Enable recommendations and enter the model and API key first.'},400);
+  if(!c.env.DB)return c.json({error:'Connect durable storage before generating recommendations.'},503);
+  const ctx=await buildCtx(cfg,c.env,new URL(c.req.url).origin);
+  if(!ctx.tmdbKey)return c.json({error:'Add a TMDB key to resolve recommended titles.'},400);
+  try {
+    return c.json({job:await queueRecommendations(ctx,body.rebuild===true)},202);
+  } catch {return c.json({error:'Recommendations could not be prepared. Check your history, model name and provider key, then try again.'},502);}
+});
+
+uiRouter.post('/api/recommendations/status',async c=>{
+  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config??body);
+  const ctx=await buildCtx(cfg,c.env,new URL(c.req.url).origin);
+  if(!ctx.env.DB)return c.json({error:'Connect durable storage first.'},503);
+  return c.json({job:await recommendationJob(ctx,field(body,'id')||undefined)});
+});
+
+uiRouter.post('/api/movielens/:action',async c=>{
+  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config??body);
+  const ctx=await buildCtx(cfg,c.env,new URL(c.req.url).origin);
+  if(!cfg.movieLens?.username||!cfg.movieLens.password)return c.json({error:'Connect MovieLens first.'},400);
+  try {
+    if(c.req.param('action')==='status')return c.json({status:await movieLensSyncStatus(ctx)});
+    if(c.req.param('action')==='sync')return c.json({status:await syncMovieLens(ctx,true)});
+    if(c.req.param('action')==='import')return c.json({status:await importRatingsCsv(ctx,field(body,'csv'))});
+    return c.json({error:'Unknown MovieLens action.'},404);
+  }catch(error){return c.json({error:error instanceof Error?error.message:'MovieLens import failed.'},502);}
+});
+
+uiRouter.post('/api/catalogs/generate',async c=>{
+  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config);
+  try{return c.json({catalog:await aiCatalog(await buildCtx(cfg,c.env,new URL(c.req.url).origin),field(body,'query'),field(body,'provider'),field(body,'type'))});}
+  catch(error){return c.json({error:error instanceof Error?error.message:'The catalog could not be generated.'},400);}
+});
+
+uiRouter.post('/api/collections/:action',async c=>{
+  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config);
+  const ctx=await buildCtx(cfg,c.env,new URL(c.req.url).origin);
+  try {
+    switch(c.req.param('action')) {
+      case 'import':return c.json(importLayout(body.layout));
+      case 'save':return c.json({layout:await saveLayout(ctx,body.layout)});
+      case 'load':return c.json({layout:await loadLayout(ctx)});
+      case 'export':if(!['nuvio','fusion'].includes(field(body,'target')))return c.json({error:'Choose Nuvio or Fusion.'},400);return c.json(exportLayout(ctx,body.layout,body.target as 'nuvio'|'fusion',body.share!==false));
+      default:return c.json({error:'Unknown collection action.'},404);
+    }
+  }catch(error){return c.json({error:error instanceof Error?error.message:'Collection operation failed.'},400);}
 });
 
 uiRouter.post('/api/probe', async (c) => {

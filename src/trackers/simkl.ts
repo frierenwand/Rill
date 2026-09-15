@@ -3,7 +3,7 @@ import type { Ctx } from '../context';
 import type { SimklAuth } from '../config/schema';
 import type { IdBundle } from '../meta/types';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
-import { fetchJson } from '../util/cache';
+import { fetchJson,memo } from '../util/cache';
 import { clampPercent, emptySnapshot, epoch, fingerprint, isoOrNow, nowIso, sendRequest, stremioIdOf } from './common';
 import type { MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
 
@@ -16,6 +16,8 @@ interface SimklIds { simkl?: number; imdb?: string; tmdb?: string | number; tvdb
 interface SimklTitle { title?: string; year?: number; poster?: string; ids?: SimklIds; overview?: string; genres?: string[]; anime_type?: string }
 interface SimklEpisode { number: number; season?: number; watched_at?: string }
 interface LibraryItem {
+  user_rating?:number;
+  next_to_watch?:string;
   last_watched_at?: string;
   status?: Status;
   watched_episodes_count?: number;
@@ -99,9 +101,41 @@ function rowsOf(payload: LibraryPayload | LibraryItem[] | null, kind: SimklKind)
   return Array.isArray(list) ? list : [];
 }
 
-async function library(ctx: Ctx, a: SimklAuth, kind: SimklKind, status: Status, extended: boolean): Promise<LibraryItem[]> {
-  const q = extended ? '?extended=full' : '';
-  return rowsOf(await get<LibraryPayload | LibraryItem[]>(ctx, a, `/sync/all-items/${kind}/${status}${q}`, 60), kind);
+const activityRequests=new WeakMap<Ctx,Promise<string>>();
+const listRequests=new WeakMap<Ctx,Map<Status,Promise<LibraryPayload>>>();
+function activity(ctx:Ctx,a:SimklAuth):Promise<string> {
+  let task=activityRequests.get(ctx);
+  if(!task){task=get<Record<string,unknown>>(ctx,a,'/sync/activities',60).then(data=>{if(!data)throw new Error('Simkl activity check unavailable');return fingerprint(JSON.stringify(data));});activityRequests.set(ctx,task);}
+  return task;
+}
+async function statusRows(ctx:Ctx,a:SimklAuth,status:Status):Promise<LibraryPayload> {
+  let tasks=listRequests.get(ctx);if(!tasks){tasks=new Map();listRequests.set(ctx,tasks);}
+  let task=tasks.get(status);
+  if(!task){task=(async()=>{
+    const changed=await activity(ctx,a),key=`simkl:status:v2:${ctx.scope}:${await fingerprint(a.accessToken)}:${status}:${changed}`;
+    return memo(key,86400,async()=>{
+      const data=await get<LibraryPayload>(ctx,a,`/sync/all-items/${status}?extended=full&episode_watched_at=yes&next_watch_info=yes`,0);
+      if(!data)throw new Error('Simkl library unavailable');return data;
+    });
+  })();tasks.set(status,task);}
+  return task;
+}
+async function library(ctx: Ctx, a: SimklAuth, kind: SimklKind, status: Status, _extended: boolean): Promise<LibraryItem[]> {
+  return rowsOf(await statusRows(ctx,a,status),kind);
+}
+
+export interface ViewingSignal {ids:IdBundle;kind:'movie'|'series';anime:boolean;title?:string;year?:number;at:string;state:string;rating?:number}
+/** Preserve explicit ratings and dropped/held/planned states for taste inference. */
+export async function simklSignals(ctx:Ctx):Promise<ViewingSignal[]> {
+  const a=auth(ctx);if(!a||ctx.profile&&!ctx.profile.sharesHistory)return [];
+  const statuses:Status[]=['completed','watching','hold','dropped','plantowatch'];
+  return (await Promise.all(statuses.map(async status=>{
+    const data=await statusRows(ctx,a,status);
+    return (['movies','shows','anime'] as const).flatMap(bucket=>(data[bucket]??[]).flatMap(row=>{
+      const title=row.movie??row.show;if(!title)return [];
+      return [{ids:bundleOf(title.ids,bucket==='movies'?'movie':'tv'),kind:bucket==='movies'?'movie' as const:'series' as const,anime:bucket==='anime',title:title.title,year:title.year,at:row.last_watched_at??'',state:row.status??status,rating:row.user_rating}];
+    }));
+  }))).flat();
 }
 
 /* ----------------------------------------------------------------------------
@@ -228,15 +262,17 @@ const PTW: Array<{ type: 'movie' | 'series' | 'anime'; kind: SimklKind; name: st
 
 async function catalogs(ctx: Ctx): Promise<ManifestCatalog[]> {
   if (!auth(ctx)) return [];
-  return PTW.map((c) => ({ type: c.type, id: `simkl:ptw:${c.type}`, name: c.name, extra: [{ name: 'skip' }] }));
+  return PTW.flatMap(c=>[{ type:c.type,id:`simkl:ptw:${c.type}`,name:c.name,extra:[{name:'skip'}]},...(['watching','completed','hold','dropped'] as Status[]).filter(status=>c.type!=='movie'||status!=='watching'&&status!=='hold').map(status=>({type:c.type,id:`simkl:${status}:${c.type}`,name:`Simkl ${status==='hold'?'On hold':status[0].toUpperCase()+status.slice(1)}`,extra:[{name:'skip'}]}))]);
 }
 
 async function catalogItems(ctx: Ctx, catalogId: string, skip: number): Promise<MetaPreview[]> {
   const a = auth(ctx);
   if (!a) return [];
-  const def = PTW.find((c) => `simkl:ptw:${c.type}` === catalogId);
+  const parts=catalogId.split(':'),status:Status=parts[1]==='ptw'?'plantowatch':parts[1] as Status;
+  if(!['plantowatch','watching','completed','hold','dropped'].includes(status))return [];
+  const def = PTW.find((c) => c.type===parts[2]);
   if (!def) return [];
-  const rows = await library(ctx, a, def.kind, 'plantowatch', false);
+  const rows = await library(ctx, a, def.kind, status, false);
   const out: MetaPreview[] = [];
   for (const row of rows.slice(Math.max(0, skip), Math.max(0, skip) + 100)) {
     const title = row.movie ?? row.show;

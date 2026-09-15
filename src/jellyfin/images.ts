@@ -6,6 +6,7 @@
 import type { Meta } from '../stremio/types';
 import { decodeGuid } from './ids';
 import type { Library } from './library';
+import { personFor } from './people';
 
 export type ImageKind = 'primary' | 'backdrop' | 'logo' | 'thumb' | 'banner' | 'art';
 
@@ -29,7 +30,11 @@ function pickTitleImage(meta: Meta, kind: ImageKind): string | undefined {
 export async function imageUrlFor(lib: Library, itemId: string, kindRaw: string): Promise<string | null> {
   const kind = kindRaw.toLowerCase() as ImageKind;
   const g = decodeGuid(itemId);
-  if (!g || g.kind === 'view' || g.kind === 'misc') return null;
+  if (!g || g.kind === 'view') return null;
+  if(g.kind==='misc') {
+    const person=await personFor(lib.ctx,g);
+    return person?.profile_path?`https://image.tmdb.org/t/p/h632${person.profile_path}`:null;
+  }
 
   if (g.kind === 'movie' || g.kind === 'series') {
     const meta = await lib.meta(g);
@@ -39,7 +44,7 @@ export async function imageUrlFor(lib: Library, itemId: string, kindRaw: string)
   const show = await lib.show(g);
   if (!show) return null;
   if (g.kind === 'season') {
-    // Metas carry no per-season art; the series poster stands in.
+    if(kind==='primary'&&g.season!==undefined&&show.meta.seasonPosters?.[g.season])return show.meta.seasonPosters[g.season];
     return pickTitleImage(show.meta, kind === 'primary' ? 'primary' : kind) ?? null;
   }
   const ep = lib.findEpisode(show, g);

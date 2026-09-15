@@ -1,10 +1,10 @@
-import { normalizeConfig, type TitanConfig } from './schema';
+import { normalizeConfig, type RillConfig } from './schema';
 import { b64urlDecode, b64urlEncode } from '../util/bytes';
 
 const PREFIX = 'c1.';
 
 /** JSON -> deflate-raw -> base64url, prefixed with a version tag. */
-export async function encodeConfig(cfg: TitanConfig): Promise<string> {
+export async function encodeConfig(cfg: RillConfig): Promise<string> {
   const json = new TextEncoder().encode(JSON.stringify(cfg));
   const cs = new CompressionStream('deflate-raw');
   const w = cs.writable.getWriter();
@@ -13,7 +13,7 @@ export async function encodeConfig(cfg: TitanConfig): Promise<string> {
   return PREFIX + b64urlEncode(out);
 }
 
-export async function decodeConfig(token: string): Promise<TitanConfig | null> {
+export async function decodeConfig(token: string): Promise<RillConfig | null> {
   try {
     if (token.startsWith(PREFIX)) {
       const bytes = b64urlDecode(token.slice(PREFIX.length));

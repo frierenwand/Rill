@@ -1,5 +1,5 @@
 /**
- * Stremio id conventions Titan understands.
+ * Stremio id conventions Rill understands.
  *   tt1234567            IMDb movie/series
  *   tt1234567:1:2        IMDb series episode (season:episode)
  *   tmdb:123 / tmdb:123:1:2
@@ -9,7 +9,7 @@
  *   anilist:123 / anilist:123:5
  *   anidb:123
  */
-export type IdSource = 'imdb' | 'tmdb' | 'tvdb' | 'kitsu' | 'mal' | 'anilist' | 'anidb' | 'other';
+export type IdSource = 'imdb' | 'tmdb' | 'tvdb' | 'tvmaze' | 'tvdbc' | 'tmdbc' | 'kitsu' | 'mal' | 'anilist' | 'anidb' | 'other';
 
 export interface ParsedId {
   source: IdSource;
@@ -31,12 +31,12 @@ export function parseStremioId(raw: string): ParsedId {
   if (imdb) {
     return { source: 'imdb', key: imdb[1], num: Number(imdb[1].slice(2)), season: imdb[2] ? Number(imdb[2]) : undefined, episode: imdb[3] ? Number(imdb[3]) : undefined, title: imdb[1], raw: s };
   }
-  const pref = /^(tmdb|tvdb|kitsu|mal|anilist|anidb):(\d+)(?::(\d+))?(?::(\d+))?$/.exec(s);
+  const pref = /^(tmdb|tvdb|tvmaze|tvdbc|tmdbc|kitsu|mal|anilist|anidb):(\d+)(?::(\d+))?(?::(\d+))?$/.exec(s);
   if (pref) {
     const source = pref[1] as IdSource;
     const num = Number(pref[2]);
     // tmdb/tvdb carry season:episode; anime sources carry a single absolute episode.
-    if (source === 'tmdb' || source === 'tvdb') {
+    if (source === 'tmdb' || source === 'tvdb' || source==='tvmaze') {
       return { source, key: pref[2], num, season: pref[3] ? Number(pref[3]) : undefined, episode: pref[4] ? Number(pref[4]) : undefined, title: `${source}:${pref[2]}`, raw: s };
     }
     return { source, key: pref[2], num, season: pref[3] && pref[4] ? Number(pref[3]) : undefined, episode: pref[4] ? Number(pref[4]) : pref[3] ? Number(pref[3]) : undefined, title: `${source}:${pref[2]}`, raw: s };
@@ -47,6 +47,6 @@ export function parseStremioId(raw: string): ParsedId {
 
 export function episodeId(titleId: string, season: number | undefined, episode: number): string {
   const p = parseStremioId(titleId);
-  if (p.source === 'imdb' || p.source === 'tmdb' || p.source === 'tvdb') return `${p.title}:${season ?? 1}:${episode}`;
+  if (p.source === 'imdb' || p.source === 'tmdb' || p.source === 'tvdb' || p.source==='tvmaze') return `${p.title}:${season ?? 1}:${episode}`;
   return `${p.title}:${episode}`;
 }

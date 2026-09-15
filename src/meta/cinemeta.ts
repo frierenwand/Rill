@@ -37,7 +37,7 @@ export async function cinemetaIds(ctx: Ctx, type: ContentType, imdb: string): Pr
   return { imdb, tmdb: num(m.moviedb_id), tvdb: num(m.tvdb_id), tmdbType: m.moviedb_id ? (cinemetaType(type) === 'movie' ? 'movie' : 'tv') : undefined };
 }
 
-/** Full meta, normalised into Titan's shape. Videos keep Cinemeta's own tt:S:E ids. */
+/** Full meta, normalised into Rill's shape. Videos keep Cinemeta's own tt:S:E ids. */
 export async function cinemetaMeta(ctx: Ctx, type: ContentType, imdb: string): Promise<Meta | null> {
   const m = await rawMeta(type, imdb);
   if (!m) return null;

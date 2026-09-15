@@ -81,7 +81,7 @@ export async function anilistQuery<T>(ctx: Ctx, query: string, variables: Record
     const res = await fetchJson<{ data?: T; errors?: unknown[] }>(ENDPOINT, {
       method: 'POST',
       body,
-      headers: { 'content-type': 'application/json', accept: 'application/json', referer: ctx.origin || 'https://titan.invalid/' },
+      headers: { 'content-type': 'application/json', accept: 'application/json', referer: ctx.origin || 'https://rill.invalid/' },
       timeoutMs: 15000,
     });
     return res?.data ?? null;

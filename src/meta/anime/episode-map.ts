@@ -14,12 +14,12 @@ function attrs(text: string): Record<string, string> {
 }
 export function parseEpisodeMaps(xml: string): EpisodeMap[] {
   const out: EpisodeMap[] = [];
-  for (const match of xml.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<anime\s+([^>]+)>([\s\S]*?)<\/anime>/g)) {
+  for (const match of xml.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<anime\s+([^>]+?)(?:\/>|>([\s\S]*?)<\/anime>)/g)) {
     const a = attrs(match[1]);
     const anidb = integer(a.anidbid), tvdb = integer(a.tvdbid), tmdb = integer(a.tmdbtv);
     if (!anidb || (!tvdb && !tmdb)) continue;
     const row: EpisodeMap = { anidb, tvdb, tmdb, tvdbSeason: integer(a.defaulttvdbseason), tmdbSeason: integer(a.tmdbseason), tvdbOffset: integer(a.episodeoffset) ?? 0, tmdbOffset: integer(a.tmdboffset) ?? 0, tvdbRules: [], tmdbRules: [] };
-    for (const m of match[2].matchAll(/<mapping\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/mapping>)/g)) {
+    for (const m of (match[2]??'').matchAll(/<mapping\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/mapping>)/g)) {
       const b = attrs(m[1]);
       const pairs: EpisodeRule['pairs'] = [];
       for (const pair of (m[2] ?? '').split(';')) {

@@ -9,7 +9,7 @@
  *   mdblist.<ref>      an MDBList list (numeric id or user/slug)
  *   trakt.list.<id>    a public Trakt list from cfg.lists.trakt
  *   addon.<n>.<id>     catalog <id> of the n-th external meta addon
- *   titan.search       the search catalog for each type
+ *   rill.search       the search catalog for each type
  */
 import type { Ctx } from '../context';
 import type { ContentType, ManifestCatalog, MetaPreview } from '../stremio/types';
@@ -23,6 +23,11 @@ import { anilistList } from '../meta/anime/anilist';
 import { applyAgeCap, hasAgeCap } from './agecap';
 import { mdbListInfo, mdbListPage, mdbTopLists, mdbUserLists } from './mdblist';
 import { unifiedSearch } from './search';
+import { sourceDefinitions, sourceItems } from './sources';
+import { discoverItems } from './discovery';
+import { mergedItems } from './merged';
+import { recommendationItems } from './recommendations';
+import { collectionsPage,collectionMembers } from './collections';
 import {
   AIRING_REGIONS, MAL_DECADES, MAL_GENRES, MAL_STUDIOS, STREAMING_PROVIDERS, TMDB_KEYWORDS, TMDB_LANGUAGES, TMDB_NETWORKS, WEEKDAYS,
   isoDate, parseSeasonLabel, recentSeasonLabels, regionOf, seasonOf, yearOptions,
@@ -143,7 +148,7 @@ function animeDefinitions(): CatalogDefinition[] {
 
 function searchDefinitions(): CatalogDefinition[] {
   return (['movie', 'series', 'anime'] as const).map((type) => ({
-    id: 'titan.search', type, name: 'Search', group: 'Search',
+    id: 'rill.search', type, name: 'Search', group: 'Search',
     extra: [{ name: 'search', isRequired: true }, SKIP],
   }));
 }
@@ -245,10 +250,11 @@ async function addonDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
 
 /** Every catalog this config could serve, in a stable display order. */
 export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
-  return memo(`catalog-defs:v3:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
+  return memo(`catalog-defs:v4:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
     const have = satisfied(ctx);
-    const [movieGenres, tvGenres, tracker, mdb, trakt, addons] = await Promise.all([
+    const [movieGenres, tvGenres, tracker, mdb, trakt, addons, sources] = await Promise.all([
       tmdbGenres(ctx, 'movie'), tmdbGenres(ctx, 'tv'), trackerDefinitions(ctx), mdblistDefinitions(ctx), traktListDefinitions(ctx), addonDefinitions(ctx),
+      sourceDefinitions(ctx),
     ]);
     const all: CatalogDefinition[] = [
       ...searchDefinitions(),
@@ -258,6 +264,8 @@ export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinitio
       ...mdb,
       ...trakt,
       ...addons,
+      ...sources,
+      ...(ctx.cfg.recommendations?.enabled&&ctx.cfg.recommendations.apiKey&&ctx.cfg.recommendations.model&&ctx.tmdbKey?(['movie','series','anime'] as const).map(type=>({id:`recommendations.${type}`,type,name:type==='movie'?'Films For You':type==='series'?'Series For You':'Anime For You',group:'Recommendations',extra:[SKIP]})):[]),
     ];
     return all.filter((d) => (d.needs ?? []).every((n) => have.has(n)));
   });
@@ -266,11 +274,13 @@ export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinitio
 /** What a fresh config shows before the user touches the picker. */
 function defaultOn(def: CatalogDefinition, hasTmdb: boolean): boolean {
   const head = def.id.split('.')[0];
-  if (head === 'titan' || head === 'tracker' || head === 'addon' || head === 'trakt') return true;
+  if(def.id.includes('.custom.'))return true;
+  if (head === 'rill' || head === 'tracker' || head === 'addon' || head === 'trakt') return true;
   if (head === 'mdblist') return def.group === 'MDBList: my lists';
   if (head === 'tmdb') return ['tmdb.trending', 'tmdb.popular', 'tmdb.top_rated', 'tmdb.now_playing', 'tmdb.on_the_air', 'tmdb.genre'].includes(def.id);
   if (head === 'cinemeta') return false;
   if (head === 'mal') return ['mal.airing', 'mal.top_anime', 'mal.seasons', 'mal.genres'].includes(def.id);
+  if (['tvdb','letterboxd','movielens','flixpatrol','merged','recommendations'].includes(head)) return true;
   return false;
 }
 
@@ -492,12 +502,26 @@ async function trackerItems(ctx: Ctx, catalogId: string, extra: CatalogExtra): P
 
 /** One page of a catalog as Stremio previews: dispatched by id family, capped, de-duplicated. */
 export async function catalogPage(ctx: Ctx, type: ContentType, id: string, extra: CatalogExtra = {}): Promise<{ items: MetaPreview[]; consumed: number }> {
+  if(id==='tvdb.collections')return collectionsPage(ctx,Math.max(0,extra.skip??0));
+  if(/^tmdb\.collection\.\d+$/.test(id)) {
+    const page=await collectionMembers(ctx,`tmdbc:${id.split('.')[2]}`,Math.max(0,extra.skip??0));
+    return{items:await applyAgeCap(ctx,'movie',page.items),consumed:page.items.length};
+  }
   const dot = id.indexOf('.');
   const head = dot > 0 ? id.slice(0, dot) : id;
   const rest = dot > 0 ? id.slice(dot + 1) : '';
 
   let items: MetaPreview[];
-  if (head === 'titan' && rest === 'search') {
+  const custom=ctx.cfg.customCatalogs?.find(c=>c.type===type && id===`${c.provider}.custom.${c.id}`);
+  if(head==='recommendations'&&['movie','series','anime'].includes(rest)) {
+    items=await recommendationItems(ctx,rest as 'movie'|'series'|'anime',extra.skip??0);
+  } else if(custom?.provider==='merged') {
+    items=await mergedItems(custom.sources??[],Math.max(0,extra.skip??0),20,async(source,skip)=>catalogPage(ctx,source.type,source.id,{...extra,skip,genre:source.genre||extra.genre}));
+  } else if(custom && custom.provider!=='movielens') {
+    items=await discoverItems(ctx,custom,extra);
+  } else if (['tvdb','tvmaze','simkl','letterboxd','movielens','flixpatrol'].includes(head)||head==='trakt'&&!rest.startsWith('list.')) {
+    items=await sourceItems(ctx,type,id,extra)??[];
+  } else if (head === 'rill' && rest === 'search') {
     items = extra.search ? await unifiedSearch(ctx, type, extra.search, extra.skip ?? 0) : [];
   } else if (head === 'addon') {
     items = await addonItems(ctx, type, rest, extra);

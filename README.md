@@ -1,46 +1,116 @@
 # Rill
 
-A Cloudflare Worker providing Stremio metadata/catalogs and a Jellyfin-compatible direct-play server. The configuration UI is compact, dark and monochrome. Addon lists start empty; Cinemeta is opt-in.
+Rill is a single Cloudflare Worker that does two things:
 
-Cloudflare D1 stores playback history, separate viewer histories, sessions, refreshed OAuth credentials and queued tracker writes. The Cache API is only a disposable accelerator. Read [PORT_STATUS.md](PORT_STATUS.md) for verified coverage and remaining parity work; full parity is not yet certified.
+- **Stremio addon** serving metadata, search and catalogs from TMDB, TVDB, TVmaze, Trakt, Simkl, MDBList, Letterboxd, MovieLens, FlixPatrol, PublicMetaDB, MAL, AniList and Kitsu, plus your own custom and merged catalogs.
+- **Jellyfin-compatible server** so any Jellyfin client can browse those catalogs and direct-play the HTTP streams returned by your Stremio stream addons, with watch history, profiles and scrobbling to Trakt, Simkl, MDBList, MAL, AniList and PublicMetaDB.
+
+There is no server to run. Cloudflare D1 (serverless SQLite) stores history, profiles, sessions, refreshed OAuth credentials and the tracker delivery queue. The Worker Cache API is only a disposable accelerator.
+
+## Requirements
+
+- A free Cloudflare account.
+- A GitHub account (for dashboard deploys) or Node.js 20+ (for CLI deploys).
+- Optional API keys: TMDB (recommended), Gemini or OpenRouter (only if you want AI recommendations).
+
+## Deploy from the Cloudflare dashboard (no CLI)
+
+1. **Fork or push** this repository to your GitHub account.
+2. **Create the database.** In the Cloudflare dashboard open **Storage & Databases → D1 SQL Database → Create**, name it `rill`, and copy its **Database ID**.
+3. **Set the database ID.** Edit `wrangler.jsonc`, replace the placeholder `database_id` with the ID you copied, and commit the change.
+4. **Create the Worker.** Open **Workers & Pages → Create → Import a repository**, choose the repo, leave the build command empty and set the deploy command to:
+   ```
+   npm run deploy
+   ```
+   This applies the D1 migrations and deploys the Worker. Pushes to the default branch redeploy automatically.
+5. **Add secrets.** After the first deploy open the Worker's **Settings → Variables and Secrets** and add:
+
+   | Name | Required | Purpose |
+   | --- | --- | --- |
+   | `RILL_SECRET` | Recommended | Long random string used to sign Jellyfin login tokens. |
+   | `TMDB_KEY` | Optional | Server-wide TMDB API key used when a configuration has none. |
+
+   Then click **Deploy** once more so the secrets take effect.
+6. Open `https://rill.<your-subdomain>.workers.dev` to configure.
+
+## Deploy with the Wrangler CLI
+
+```bash
+npm install
+npx wrangler login
+npx wrangler d1 create rill
+```
+
+Paste the returned `database_id` into `wrangler.jsonc`, then:
+
+```bash
+npx wrangler secret put RILL_SECRET
+npm run deploy
+```
+
+Optional:
+
+```bash
+npx wrangler secret put TMDB_KEY
+```
+
+## Configure
+
+1. Open the Worker URL. Add your metadata keys, tracker accounts and Stremio stream addons, then enable the catalogs you want.
+2. **Stremio:** install the manifest link shown at the bottom of the page.
+3. **Jellyfin clients:** add the Worker URL as a server and sign in with the username and password from the Jellyfin section. Signing in activates that configuration's settings. Quick Connect is supported.
+
+Configuration links carry credentials. Share the Worker URL, never the install link.
 
 ## Local development
 
-Use Node.js 24:
-
-```sh
+```bash
 npm install
 npx wrangler d1 migrations apply DB --local
 npm run dev
 ```
 
-Configure providers and addons, then copy the Jellyfin server URL into your player. Signing in activates that installation's settings. New installations retain their identity across configuration edits. Existing compressed links remain supported.
+Put local secrets in a `.dev.vars` file (see `.dev.vars.example`). It is git-ignored.
 
-## Deployment (GitHub + Cloudflare, no CLI needed)
+## Free plan notes
 
-1. Push this repository to GitHub.
-2. In the Cloudflare dashboard open **Storage & Databases → D1**, click **Create database**, name it `rill`, and copy its **Database ID**.
-3. Paste that ID into `database_id` in `wrangler.jsonc` (replacing the zeros) and push the change.
-4. Open **Workers & Pages → Create → Import a repository** and pick this repo. Set the deploy command to `npm run deploy`. Leave the build command empty.
-5. After the first deploy open the Worker's **Settings → Variables and Secrets** and add a secret `TITAN_SECRET` with any long random string. `TMDB_KEY` is an optional server-wide metadata key.
+Rill is built to run on the Workers Free plan for a personal installation:
 
-`npm run deploy` applies the D1 migrations and then deploys the Worker, so every push to `main` updates both. Everything runs on the free plan: the Worker, D1 and the one-minute Cron Trigger that drains pending deliveries and synchronizes each account's tracker history every 30 minutes.
+- All scheduled work stays within D1's 50-statement limit per invocation. If you upgrade to Workers Paid, set the variable `D1_QUERY_BUDGET` to `1000`.
+- The one-minute cron trigger uses about 1,440 of the 100,000 daily free requests.
+- Heavy features can exceed the free CPU and request limits: cold merged catalogs, very large history imports and AI recommendation builds. Those may need Workers Paid.
 
-## Tracking
+See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
 
-- Trakt, Simkl and MDBList receive start, pause, resumed start and stop transitions. MAL/AniList receive completed watches and manual changes. PublicMetaDB receives stopped positions and watched changes.
-- Heartbeats retain the latest position without calling trackers. Incoming requests still count as Worker requests.
-- Reports are acknowledged after durable recording. Provider delivery runs afterward and retries independently of the player, ordered per service.
-- Failed deliveries stop after ten attempts and remain visible under **Scrobbling → Check delivery status**. Reconnect the affected service before retrying.
-- Profiles may share account history/tracking or keep independent local history with no tracker writes. Profiles can restrict catalogs and age ratings.
-- Playback redirects to HTTP stream URLs supplied by configured addons. The inspected upstream Jellyfin implementation also excludes transcoding, torrent playback and streams requiring custom HTTP headers.
+## Features
 
-Configuration URLs contain credentials and the installation capability. Refreshed Trakt/MAL credentials remain in D1, so routine rotation does not require replacing the install URL. Legacy storage-less deployments lack these guarantees and are explicitly identified by the status check.
+**Catalogs.** Add list links or IDs from any supported provider and enable the returned catalogs. Custom catalogs support provider filters or ordered merges of existing catalogs. Date filters accept expressions such as `today-7d`, `today-3m` and `today+1y`. Collections expose their member titles in both Stremio and Jellyfin.
 
-## Verification
+**Recommendations.** Opt-in Gemini or OpenRouter with your own model and key. Choose which viewing history to use, vote thresholds and ordering. Cached results are durable and exclude titles you have since watched. Calls to the model provider may incur their charges.
 
-```sh
-npm run typecheck
+**Tracking.**
+- Trakt, Simkl and MDBList receive start, pause, resume and stop. MAL and AniList receive completed watches and manual changes. PublicMetaDB receives stopped positions and watched changes.
+- Playback reports are stored durably first, then delivered to providers in order with retries. Failed deliveries stop after ten attempts and are listed under **Scrobbling → Check delivery status**.
+- Refreshed Trakt and MAL tokens are stored in D1, so token rotation never requires a new install link.
+
+**Profiles.** Each profile has its own login. Profiles can share the account's history and tracking, or keep an independent local history with no tracker writes. Profiles can restrict catalogs and set an age-rating cap.
+
+**Anime.** Episode mapping uses Anime-Lists ranges, offsets and explicit overrides, including specials, split and merged episodes, with MAL and AniList progress calculated per entry.
+
+**Playback.** Direct play of HTTP streams from your configured addons. Torrent streams, transcoding and streams that need custom HTTP headers are not supported.
+
+## Layout
+
+```
+src/addon      Stremio manifest, catalogs, search, discovery, collections, layouts, recommendations
+src/jellyfin   Jellyfin REST facade: auth, library, playback, sessions, people, segments
+src/meta       Metadata providers and anime mapping
+src/trackers   Trakt, Simkl, MDBList, MAL, AniList, PublicMetaDB
+src/storage    D1 access: history, deliveries, credentials, scheduled work, budget
+src/ui         Configuration page
+migrations     D1 schema
 ```
 
-Official Jellyfin Web 12.0 login, browsing, decoded video, pause/resume and stop were verified locally using a synthetic addon. Live tracker writes and other Jellyfin clients remain release checks.
+## License
+
+MIT. See [LICENSE](LICENSE).

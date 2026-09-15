@@ -31,9 +31,21 @@ export async function saveHistory(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | Resu
   await historyStatement(ctx, ev, mode)?.run();
 }
 
-function same(a: LocalRecord, b: { ids: LocalRecord['ids']; season?: number; episode?: number }, kind: string): boolean {
-  if (a.kind !== kind || (kind === 'episode' && (a.season !== b.season || a.episode !== b.episode))) return false;
-  return (['imdb','tmdb','tvdb','mal','anilist','kitsu','anidb'] as const).some(k => a.ids[k] !== undefined && a.ids[k] === b.ids[k]);
+type Identified={ids:LocalRecord['ids'];season?:number;episode?:number};
+function aliases(row:Identified,kind:string):string[] {
+  return Object.entries(row.ids).filter(([k,v])=>k!=='tmdbType'&&v!==undefined).map(([k,v])=>`${kind}:${k}:${v}:${kind==='episode'?`${row.season}:${row.episode}`:''}`);
+}
+/** Alias indexes avoid scanning the entire imported history for each local decision. */
+class Records<T extends Identified> {
+  rows=new Set<T>(); index=new Map<string,Set<T>>();
+  constructor(readonly kind:(row:T)=>string,rows:T[]=[]){for(const row of rows)this.add(row);}
+  add(row:T){this.rows.add(row);for(const key of aliases(row,this.kind(row))){const group=this.index.get(key)??new Set<T>();group.add(row);this.index.set(key,group);}}
+  remove(row:Identified,kind:string):LocalRecord['ids'] {
+    const found=new Set(aliases(row,kind).flatMap(k=>[...this.index.get(k)??[]]));
+    const ids={...row.ids};
+    for(const old of found){Object.assign(ids,old.ids,row.ids);this.rows.delete(old);for(const key of aliases(old,this.kind(old))){const group=this.index.get(key);group?.delete(old);if(!group?.size)this.index.delete(key);}}
+    return ids;
+  }
 }
 
 /** Local decisions, including explicit unwatch/clear, override stale provider reads. */
@@ -42,27 +54,28 @@ export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<Wat
   const rows = await ctx.env.DB.prepare('SELECT value FROM history WHERE scope=? ORDER BY updated').bind(ctx.historyScope ?? ctx.scope).all<{ value: string }>();
   const out = structuredClone(base);
   out.local=[];
+  const resume=new Records<ResumeEntry>(r=>r.kind,out.resume);
+  const movies=new Records<WatchSnapshot['movies'][number]>(()=>'movie',out.movies);
+  const episodes=new Records<WatchSnapshot['episodes'][number]>(()=>'episode',out.episodes);
   for (const row of rows.results) {
     const r = JSON.parse(row.value) as LocalRecord;
+    r.ids={...resume.remove(r,r.kind),...(r.kind==='movie'?movies.remove(r,'movie'):episodes.remove(r,'episode'))};
     out.local.push(r);
-    out.resume = out.resume.filter(e => !same(r,e,e.kind));
-    if ((r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100) out.resume.push({ ids:r.ids, kind:r.kind, season:r.season, episode:r.episode, progress:r.progress, positionMs:r.positionMs, runtimeMs:r.runtimeMs, at:r.at });
+    if ((r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100) resume.add({ ids:r.ids, kind:r.kind, season:r.season, episode:r.episode, progress:r.progress, positionMs:r.positionMs, runtimeMs:r.runtimeMs, at:r.at });
     if (r.kind === 'movie') {
-      out.movies = out.movies.filter(e => !same(r,e,'movie'));
-      if (r.watched) out.movies.push({ ids:r.ids, plays:1, lastAt:r.at });
+      if (r.watched) movies.add({ ids:r.ids, plays:1, lastAt:r.at });
     } else {
-      out.episodes = out.episodes.filter(e => !same(r,e,'episode'));
-      if (r.watched && r.season !== undefined && r.episode !== undefined) out.episodes.push({ ids:r.ids, season:r.season, episode:r.episode, plays:1, lastAt:r.at });
+      if (r.watched && r.season !== undefined && r.episode !== undefined) episodes.add({ ids:r.ids, season:r.season, episode:r.episode, plays:1, lastAt:r.at });
     }
   }
   // Rebuild show activity from actual remaining history, so unwatch doesn't leave stale Next Up.
-  out.shows = [];
+  out.movies=[...movies.rows];out.episodes=[...episodes.rows];out.resume=[...resume.rows];
+  const shows=new Records<WatchSnapshot['shows'][number]>(()=>'series');
   for (const e of [...out.episodes.map(e => ({...e,at:e.lastAt})), ...out.resume.filter(e => e.kind === 'episode')].sort((a,b) => a.at.localeCompare(b.at))) {
-    const found = out.shows.find(s => Object.entries(e.ids).some(([k,v]) => k !== 'tmdbType' && v && s.ids[k as keyof typeof s.ids] === v));
-    const value = { ids:e.ids, lastAt:e.at, lastSeason:e.season, lastEpisode:e.episode };
-    if (found) Object.assign(found,value); else out.shows.push(value);
+    const ids=shows.remove(e,'series');
+    shows.add({ ids, lastAt:e.at, lastSeason:e.season, lastEpisode:e.episode });
   }
   out.resume.sort((a,b) => b.at.localeCompare(a.at));
-  out.shows.sort((a,b) => b.lastAt.localeCompare(a.lastAt));
+  out.shows=[...shows.rows].sort((a,b) => b.lastAt.localeCompare(a.lastAt));
   return out;
 }

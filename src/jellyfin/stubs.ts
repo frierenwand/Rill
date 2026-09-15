@@ -35,7 +35,6 @@ const EMPTY_LIST_ROUTES = [
   '/items/:id/themevideos',
   '/items/:id/chapters',
   '/videos/:id/additionalparts',
-  '/mediasegments/:id',
   '/system/activitylog/entries',
   '/livetv/programs',
   '/livetv/recordings',
@@ -102,11 +101,22 @@ export function registerStubs(app: Hono<JfEnv>): void {
 
   app.get('/localization/options', (c) => c.json([{ Name: 'English', Value: 'en-US' }]));
 
-  app.get('/displaypreferences/:id', (c) => c.json(displayPreferences(c.req.param('id'))));
-  app.post('/displaypreferences/:id', (c) => c.body(null, 204));
+  app.get('/displaypreferences/:id', async (c) => {
+    const jf=c.get('jf'),ctx=jf.ctx,id=c.req.param('id'),client=jf.q('Client')??'';
+    const stored=ctx.env.DB ? await ctx.env.DB.prepare('SELECT value FROM preferences WHERE scope=? AND profile=? AND id=? AND client=?').bind(ctx.scope,ctx.profile?.id??'',id,client).first<{value:string}>():null;
+    return c.json({...displayPreferences(id),Client:client||'emby',...(stored?JSON.parse(stored.value):{}),Id:id});
+  });
+  app.post('/displaypreferences/:id', async (c) => {
+    const jf=c.get('jf'),ctx=jf.ctx;
+    if(!ctx.env.DB) return c.json({error:'Durable storage is required to save preferences'},503);
+    const value=JSON.stringify(jf.body);
+    if(new TextEncoder().encode(value).length>65536) return c.json({error:'Preferences are too large'},413);
+    await ctx.env.DB.prepare('INSERT INTO preferences(scope,profile,id,client,value) VALUES(?,?,?,?,?) ON CONFLICT(scope,profile,id,client) DO UPDATE SET value=excluded.value').bind(ctx.scope,ctx.profile?.id??'',c.req.param('id'),jf.q('Client')??'',value).run();
+    return c.body(null,204);
+  });
 
   app.get('/system/endpoint', (c) => c.json({ IsLocal: false, IsInNetwork: false }));
-  app.get('/system/configuration', (c) => c.json({ EnableMetrics: false, ServerName: c.get('jf').ctx.cfg.name || 'Titan' }));
+  app.get('/system/configuration', (c) => c.json({ EnableMetrics: false, ServerName: c.get('jf').ctx.cfg.name || 'Rill' }));
   app.get('/system/logs', (c) => c.json([]));
 
   app.get('/startup/configuration', (c) => c.json({ UICulture: 'en-US', MetadataCountryCode: 'US', PreferredMetadataLanguage: 'en' }));

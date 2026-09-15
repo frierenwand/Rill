@@ -1,5 +1,5 @@
 /**
- * Jellyfin ids are GUIDs; Stremio ids are strings. Titan has no table to map one
+ * Jellyfin ids are GUIDs; Stremio ids are strings. Rill has no table to map one
  * to the other, so every GUID it hands out is a self-describing 16-byte record:
  *
  *   byte 0      kind        1 movie, 2 series, 3 season, 4 episode, 5 view, 6 misc
@@ -27,8 +27,8 @@ export type GuidKind = 'movie' | 'series' | 'season' | 'episode' | 'view' | 'mis
 const KIND_CODE: Record<GuidKind, number> = { movie: 1, series: 2, season: 3, episode: 4, view: 5, misc: 6 };
 const KIND_OF: Record<number, GuidKind> = { 1: 'movie', 2: 'series', 3: 'season', 4: 'episode', 5: 'view', 6: 'misc' };
 
-const SOURCE_CODE: Record<string, number> = { imdb: 1, tmdb: 2, tvdb: 3, kitsu: 4, mal: 5, anilist: 6, anidb: 7 };
-const SOURCE_OF: Record<number, IdSource> = { 1: 'imdb', 2: 'tmdb', 3: 'tvdb', 4: 'kitsu', 5: 'mal', 6: 'anilist', 7: 'anidb' };
+const SOURCE_CODE: Record<string, number> = { imdb: 1, tmdb: 2, tvdb: 3, kitsu: 4, mal: 5, anilist: 6, anidb: 7, tvmaze:8,tvdbc:9,tmdbc:10 };
+const SOURCE_OF: Record<number, IdSource> = { 1: 'imdb', 2: 'tmdb', 3: 'tvdb', 4: 'kitsu', 5: 'mal', 6: 'anilist', 7: 'anidb',8:'tvmaze',9:'tvdbc',10:'tmdbc' };
 
 const FLAG_ANIME = 0x1;
 const NONE = 0xffff;
@@ -49,6 +49,8 @@ interface LabelBase {
   sub: string;
   hash: number;
   hint: string;
+  /** Preserve a UTF-8 prefix ending mid-codepoint when re-encoding an issued ID. */
+  hintBytes?: number[];
 }
 export interface ViewGuid extends LabelBase { kind: 'view' }
 export interface MiscGuid extends LabelBase { kind: 'misc' }
@@ -138,7 +140,7 @@ function encodeTitle(g: TitleGuid): string {
   return seal(b);
 }
 
-function packLabel(kind: 'view' | 'misc', sub: string, hash: number, hint: string): string {
+function packLabel(kind: 'view' | 'misc', sub: string, hash: number, hint: string, original?:number[]): string {
   const b = new Uint8Array(16);
   b[0] = KIND_CODE[kind];
   b[1] = kind === 'misc' ? MISC_SUB[sub] ?? 0 : 0;
@@ -146,7 +148,7 @@ function packLabel(kind: 'view' | 'misc', sub: string, hash: number, hint: strin
   b[3] = (hash >>> 16) & 0xff;
   b[4] = (hash >>> 8) & 0xff;
   b[5] = hash & 0xff;
-  const bytes = new TextEncoder().encode(hint.toLowerCase());
+  const bytes = original??new TextEncoder().encode(hint.toLowerCase());
   for (let i = 0; i < 8; i++) b[6 + i] = bytes[i] ?? 0;
   return seal(b);
 }
@@ -157,7 +159,7 @@ function encodeLabel(kind: 'view' | 'misc', sub: string, label: string): string 
 
 /** A decoded label guid re-encodes from its stored hash, not by re-hashing the truncated hint. */
 export function encodeGuid(g: Guid): string {
-  if (g.kind === 'view' || g.kind === 'misc') return packLabel(g.kind, g.sub, g.hash, g.hint);
+  if (g.kind === 'view' || g.kind === 'misc') return packLabel(g.kind, g.sub, g.hash, g.hint,g.hintBytes);
   return encodeTitle(g);
 }
 
@@ -175,8 +177,8 @@ export function decodeGuid(raw: unknown): Guid | null {
     let end = 8;
     while (end > 0 && hintBytes[end - 1] === 0) end--;
     const hint = new TextDecoder().decode(hintBytes.slice(0, end));
-    if (kind === 'misc') return { kind: 'misc', sub: MISC_SUB_OF[b[1]] ?? '', hash, hint };
-    return { kind: 'view', sub: '', hash, hint };
+    if (kind === 'misc') return { kind: 'misc', sub: MISC_SUB_OF[b[1]] ?? '', hash, hint,hintBytes:[...hintBytes] };
+    return { kind: 'view', sub: '', hash, hint,hintBytes:[...hintBytes] };
   }
 
   const source = SOURCE_OF[b[1] & 0x0f];

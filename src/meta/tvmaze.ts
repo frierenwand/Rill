@@ -40,6 +40,7 @@ export function stripHtml(s: string | null | undefined): string | undefined {
 
 /** Show by imdb or tvdb id. The lookup endpoint redirects to /shows/:id; fetch follows it. */
 export async function tvmazeLookup(ctx: Ctx, ids: IdBundle): Promise<TvmazeShow | null> {
+  if(ids.tvmaze)return tvmazeShow(ctx,ids.tvmaze);
   const query = ids.imdb ? `imdb=${ids.imdb}` : ids.tvdb ? `thetvdb=${ids.tvdb}` : null;
   if (!query) return null;
   const show = await memo<TvmazeShow | null>(`tvmaze:lookup:${query}`, TTL_SHOW, () => fetchJson<TvmazeShow>(`${API}/lookup/shows?${query}`, { ttl: 0, redirect: 'follow' }));
@@ -131,7 +132,7 @@ export async function tvmazeMeta(ctx: Ctx, ids: IdBundle, canonicalId: string, o
     status: show.status,
     network: show.network?.name || show.webChannel?.name || undefined,
     links: [...buildLinks({ imdb, tmdb: ids.tmdb, kind: 'tv', rating: base.imdbRating, genres: show.genres, cast }), { name: 'TVmaze', category: 'tvmaze', url: `https://www.tvmaze.com/shows/${show.id}` }],
-    ids: { imdb, tvdb: show.externals?.thetvdb ?? ids.tvdb, tmdb: ids.tmdb },
+    ids: { imdb, tvdb: show.externals?.thetvdb ?? ids.tvdb, tmdb: ids.tmdb, tvmaze:show.id },
     behaviorHints: { defaultVideoId: null, hasScheduledVideos: ongoing },
   };
   if (opts.withEpisodes !== false) {

@@ -442,6 +442,7 @@ export async function tmdbMeta(ctx: Ctx, kind: TmdbKind, tmdbId: number, canonic
     trailers: trailersOf(d, lang),
     links: buildLinks({ imdb, tmdb: d.id, kind, rating, genres, cast, director, writer }),
     ids: { imdb, tmdb: d.id, tvdb: d.external_ids?.tvdb_id ?? undefined },
+    seasonPosters:Object.fromEntries((d.seasons??[]).filter(s=>s.poster_path).map(s=>[s.season_number,`https://image.tmdb.org/t/p/w500${s.poster_path}`])),
   };
   if (!meta.trailers?.length) delete meta.trailers;
 

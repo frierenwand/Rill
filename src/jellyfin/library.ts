@@ -7,9 +7,12 @@
  * the watch snapshot for that request only.
  */
 import { catalogPage, enabledCatalogDefinitions, type CatalogDefinition } from '../addon/catalogs';
+import { aiQuery,aiSearch } from '../addon/ai';
 import { trackerTargets } from '../trackers/targets';
 import { externalMeta } from '../stremio/client';
 import { metaApi } from '../meta/index';
+import { tmdbList } from '../meta/tmdb';
+import { applyAgeCap } from '../addon/agecap';
 import { passesAgeCap } from '../meta/rating';
 import type { IdBundle } from '../meta/types';
 import { episodeId as stremioEpisodeId, type IdSource } from '../stremio/ids';
@@ -34,12 +37,13 @@ import {
   type TitleGuid,
 } from './ids';
 import type { JfRequest } from './request';
+import { rememberPeople } from './people';
 
 export const SHELF_LIMIT = 20;
 export const SHELF_CONCURRENCY = 4;
 const MAX_WINDOW_PAGES = 64;
 const WINDOW_HEADROOM = 6;
-const UPCOMING_DAYS = 14;
+const UPCOMING_DAYS = 90;
 
 /** The loose shape this module reads off a catalog definition. */
 interface CatalogShape {
@@ -70,7 +74,7 @@ export function collectionTypeOf(type: ContentType): 'movies' | 'tvshows' | null
   return null;
 }
 
-export type ItemType = 'Movie' | 'Series' | 'Episode' | 'Season';
+export type ItemType = 'Movie' | 'Series' | 'Episode' | 'Season' | 'BoxSet';
 
 function kindOfPreview(m: MetaPreview, catType: ContentType): 'movie' | 'series' {
   const t = m.type || catType;
@@ -89,7 +93,7 @@ export function bundleKeys(ids: IdBundle | Meta['ids'] | undefined): string[] {
     const n = Number(String(ids.imdb).replace(/^tt/i, ''));
     if (Number.isFinite(n)) out.push(key('imdb', n));
   }
-  for (const s of ['tmdb', 'tvdb', 'mal', 'anilist', 'kitsu', 'anidb'] as const) {
+  for (const s of ['tmdb', 'tvdb', 'tvmaze', 'mal', 'anilist', 'kitsu', 'anidb'] as const) {
     const v = ids[s];
     if (typeof v === 'number' && Number.isFinite(v)) out.push(key(s, v));
   }
@@ -100,7 +104,7 @@ export function bundleKeys(ids: IdBundle | Meta['ids'] | undefined): string[] {
 export function bundleOf(g: TitleGuid, meta?: Meta | null): IdBundle {
   const b: IdBundle = { ...(meta?.ids ?? {}) };
   if (g.source === 'imdb') b.imdb ??= `tt${String(g.num).padStart(7, '0')}`;
-  else if (g.source !== 'other') b[g.source] ??= g.num;
+  else if (g.source !== 'other'&&g.source!=='tvdbc'&&g.source!=='tmdbc') b[g.source] ??= g.num;
   if (g.kind === 'movie') b.tmdbType ??= 'movie';
   else b.tmdbType ??= 'tv';
   return b;
@@ -303,13 +307,13 @@ export class Library {
         defs = [];
       }
       const toggles = this.ctx.cfg.catalogs;
-      const order = new Map(toggles.map((t, i) => [t.id, i]));
+      const order = new Map(toggles.map((t, i) => [`${t.type}:${t.id}`, i]));
       const refs: CatalogRef[] = [];
       for (const raw of defs) {
         const d = raw as unknown as CatalogShape;
         if (!d?.id || !d.type) continue;
         if (this.ctx.profile?.catalogs?.length && !this.ctx.profile.catalogs.includes(d.id)) continue;
-        const toggle = toggles.find((t) => t.id === d.id);
+        const toggle = toggles.find((t) => t.id === d.id && t.type===d.type);
         const enabled = typeof d.enabled === 'boolean' ? d.enabled : toggle ? toggle.enabled : true;
         if (!enabled) continue;
         const extra = Array.isArray(d.extra) ? d.extra : [];
@@ -326,7 +330,7 @@ export class Library {
           hash: viewHash(d.type, d.id),
         });
       }
-      refs.sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+      refs.sort((a, b) => (order.get(`${a.type}:${a.id}`) ?? 1e9) - (order.get(`${b.type}:${b.id}`) ?? 1e9));
       return refs;
     })();
     return this.catalogsPromise;
@@ -417,7 +421,7 @@ export class Library {
     const id = encodeGuid(g);
     this.noteKeys(id, g, (m as Meta).ids);
     const item = titleItem(m, g, id, this.jf.who, { parentId });
-    if (g.kind === 'movie') item.MediaSources = [placeholderSource(id)];
+    if (g.kind === 'movie'&&item.Type!=='BoxSet') item.MediaSources = [placeholderSource(id)];
     return item;
   }
 
@@ -432,7 +436,7 @@ export class Library {
       opts.episodeCount = episodes.length;
     }
     const item = titleItem(meta, g, id, this.jf.who, opts);
-    if (g.kind === 'movie') item.MediaSources = [placeholderSource(id)];
+    if (g.kind === 'movie'&&item.Type!=='BoxSet') item.MediaSources = [placeholderSource(id)];
     return item;
   }
 
@@ -469,6 +473,7 @@ export class Library {
           if (!meta && type === 'anime') meta = await externalMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'series', stremioId).catch(() => null);
         }
         if (meta && !this.allowed(meta.certification)) return null;
+        if(meta)await rememberPeople(this.ctx,meta);
         return meta;
       })();
       this.metas.set(k, p);
@@ -640,7 +645,7 @@ export class Library {
   // ----- shelves -----
 
   /** Resolve a tracker id bundle to a series/movie guid via the meta agent's canonical id. */
-  private guidOfBundle(ids: IdBundle, kind: 'movie' | 'series'): TitleGuid | null {
+  guidOfBundle(ids: IdBundle, kind: 'movie' | 'series'): TitleGuid | null {
     let canonical: string | null = null;
     try {
       canonical = metaApi.canonicalId(ids, kind);
@@ -727,15 +732,27 @@ export class Library {
     for (const r of idx.snapshot.resume ?? []) if (r.kind === 'episode') followed.set(bundleKeys(r.ids)[0] ?? JSON.stringify(r.ids), r.ids);
     const now = Date.now();
     const horizon = now + UPCOMING_DAYS * 86_400_000;
-    const list = [...followed.values()].slice(0, SHELF_LIMIT);
+    const list = [...followed.values()].slice(0, 60);
+    const seen=new Set<string>();
     const episodes: Array<{ at: number; item: Dto }> = [];
     await mapLimit(list, SHELF_CONCURRENCY, async (ids) => {
       const g = this.guidOfBundle(ids, 'series');
       const show = g ? await this.show(g) : null;
       if (!show) return;
+      if(show.keys.some(k=>seen.has(k)))return;
+      show.keys.forEach(k=>seen.add(k));
       for (const e of show.episodes) {
         const at = Date.parse(e.video.released ?? '');
-        if (Number.isFinite(at) && at >= now && at <= horizon) episodes.push({ at, item: this.episodeItem(show, e) });
+        if (e.season>0 && e.episode===1 && Number.isFinite(at) && at >= now && at <= horizon) {episodes.push({ at, item: this.episodeItem(show, e) });break;}
+      }
+    });
+    const watchlists=(await this.catalogs()).filter(c=>c.type==='movie'&&/(?:[.:])watchlist(?:[.:]|$)/.test(c.id));
+    await mapLimit(watchlists,2,async cat=>{
+      const page=await this.window(cat,0,100);
+      for(const meta of page.items){
+        const item=this.previewItem(meta,cat,cat.viewId);
+        const at=Date.parse(String(item?.PremiereDate??''));
+        if(item&&item.Type==='Movie'&&Number.isFinite(at)&&at>=now&&at<=horizon&&!seen.has(String(item.Id))){seen.add(String(item.Id));episodes.push({at,item});}
       }
     });
     episodes.sort((a, b) => a.at - b.at);
@@ -749,22 +766,16 @@ export class Library {
     return this.decorate(built);
   }
 
-  /** Titles sharing the item's first genre from a catalog of the same type that filters by genre. */
+  /** Recommendations for this title, independently of the enabled home catalogs. */
   async similar(g: TitleGuid, limit: number): Promise<Dto[]> {
     const meta = await this.meta(g);
-    const genre = meta?.genres?.find((x) => typeof x === 'string' && x);
-    if (!meta || !genre) return [];
-    const wantType: ContentType = g.anime ? 'anime' : g.kind === 'movie' ? 'movie' : 'series';
-    const cats = await this.browsable();
-    const cat = cats.find((c) => c.type === wantType && c.genres.includes(genre)) ?? cats.find((c) => c.type === wantType && c.genres.length) ?? cats.find((c) => c.type === wantType);
-    if (!cat) return [];
-    const { items } = await this.window(cat, 0, limit + 1, cat.genres.includes(genre) ? { genre } : {});
-    const selfId = stremioIdOfGuid(g);
-    const built = items
-      .filter((m) => String(m.id) !== selfId)
-      .slice(0, limit)
-      .map((m) => this.previewItem(m, cat, null))
-      .filter((x): x is Dto => Boolean(x));
+    if (!meta?.ids?.tmdb) return [];
+    const kind=g.kind==='movie'?'movie':'tv';
+    const items=await applyAgeCap(this.ctx,kind==='movie'?'movie':'series',await tmdbList(this.ctx,kind,`/${kind}/${meta.ids.tmdb}/recommendations`,{language:this.ctx.cfg.language},1));
+    const built=items.slice(0,limit).map(m=> {
+      const guid=this.guidOfBundle({tmdb:Number(m.id.split(':')[1])},kind==='movie'?'movie':'series');
+      return guid?this.titleItemOf(m as Meta,guid):null;
+    }).filter((x):x is Dto=>x!==null);
     return this.decorate(built);
   }
 
@@ -774,6 +785,7 @@ export class Library {
    * by id and by name|year since the same title reaches us under several ids.
    */
   async search(term: string, wanted: Set<ItemType> | null, limit: number): Promise<Dto[]> {
+    const ai=aiQuery(this.ctx,term);
     const types: Array<{ type: ContentType; kind: 'movie' | 'series' }> = [];
     if (!wanted || wanted.has('Movie')) types.push({ type: 'movie', kind: 'movie' });
     if (!wanted || wanted.has('Series')) types.push({ type: 'series', kind: 'series' });
@@ -781,7 +793,7 @@ export class Library {
     const pages = await Promise.all(
       types.map(async (t) => {
         try {
-          return { t, items: (await metaApi.searchMeta(this.ctx, t.type, term, { limit })) ?? [] };
+          return { t, items: ai?await aiSearch(this.ctx,t.type,ai):((await metaApi.searchMeta(this.ctx, t.type, term, { limit })) ?? []) };
         } catch {
           return { t, items: [] as MetaPreview[] };
         }
@@ -811,11 +823,11 @@ export class Library {
 
 export function includeTypesOf(list: string[]): Set<ItemType> | null {
   const wanted = new Set<ItemType>();
-  for (const t of list) if (t === 'Movie' || t === 'Series' || t === 'Episode' || t === 'Season') wanted.add(t);
+  for (const t of list) if (t === 'Movie' || t === 'Series' || t === 'Episode' || t === 'Season'||t==='BoxSet') wanted.add(t);
   return wanted.size ? wanted : null;
 }
 
 export function filterByType(items: Dto[], wanted: Set<ItemType> | null): Dto[] {
   if (!wanted) return items;
-  return items.filter((i) => wanted.has(i.Type as ItemType));
+  return items.filter((i) => wanted.has(i.Type as ItemType)||i.Type==='BoxSet'&&wanted.has('Movie'));
 }

@@ -1,4 +1,4 @@
-/** Stremio addon protocol shapes, as Titan produces and consumes them. */
+/** Stremio addon protocol shapes, as Rill produces and consumes them. */
 export type ContentType = 'movie' | 'series' | 'anime' | 'channel' | 'tv';
 
 export interface ManifestCatalog {
@@ -58,6 +58,9 @@ export interface MetaPreview {
 }
 
 export interface Meta extends MetaPreview {
+  /** A browsable movie collection, rather than a playable title. */
+  collection?:boolean;
+  seasonPosters?:Record<number,string>;
   runtime?: string;      // "45 min"
   released?: string;     // ISO
   videos?: MetaVideo[];
@@ -69,10 +72,10 @@ export interface Meta extends MetaPreview {
   links?: MetaLink[];
   trailers?: Array<{ source: string; type: 'Trailer' | 'Clip' }>;
   awards?: string;
-  /** Titan extension: rating certification like 'PG-13' / 'TV-MA'. */
+  /** Rill extension: rating certification like 'PG-13' / 'TV-MA'. */
   certification?: string;
-  /** Titan extension: external ids we know for this title. */
-  ids?: { imdb?: string; tmdb?: number; tvdb?: number; mal?: number; anilist?: number; kitsu?: number; anidb?: number };
+  /** Rill extension: external ids we know for this title. */
+  ids?: { imdb?: string; tmdb?: number; tvdb?: number; tvmaze?:number; mal?: number; anilist?: number; kitsu?: number; anidb?: number };
   behaviorHints?: { defaultVideoId?: string | null; hasScheduledVideos?: boolean };
   status?: string;
   network?: string;

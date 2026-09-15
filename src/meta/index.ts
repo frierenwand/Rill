@@ -1,5 +1,5 @@
 /**
- * metaApi: the one place the rest of Titan asks for meta, search and id bridging.
+ * metaApi: the one place the rest of Rill asks for meta, search and id bridging.
  *
  * resolveMeta walks cfg.providers (primary first, the rest in a fixed order) and lets
  * later providers fill what the first one lacked: episodes, description, artwork,
@@ -22,6 +22,7 @@ import { artworkFromDetails, tmdbDetails, tmdbMeta, tmdbSearch, type TmdbKind } 
 import { artworkFromRecord, hasTvdb, tvdbMeta, tvdbRecord, tvdbSearch } from './tvdb';
 import { tvmazeAirDates, tvmazeMeta } from './tvmaze';
 import type { IdBundle, MetaApi } from './types';
+import { collectionMeta } from '../addon/collections';
 
 const PROVIDER_ORDER: MetaProvider[] = ['tmdb', 'tvdb', 'tvmaze'];
 const TTL_MOVIE = 12 * 3600;
@@ -38,6 +39,7 @@ function canonicalId(ids: IdBundle, type: ContentType): string | null {
   if (ids.kitsu) return `kitsu:${ids.kitsu}`;
   if (ids.anidb) return `anidb:${ids.anidb}`;
   if (ids.tvdb) return `tvdb:${ids.tvdb}`;
+  if (ids.tvmaze) return `tvmaze:${ids.tvmaze}`;
   void type;
   return null;
 }
@@ -51,7 +53,7 @@ function canServe(ctx: Ctx, provider: MetaProvider, type: ContentType, ids: IdBu
   switch (provider) {
     case 'tmdb': return !!ctx.tmdbKey && !!ids.tmdb;
     case 'tvdb': return hasTvdb(ctx) && !!ids.tvdb;
-    case 'tvmaze': return type !== 'movie' && !!(ids.imdb || ids.tvdb);
+    case 'tvmaze': return type !== 'movie' && !!(ids.imdb || ids.tvdb || ids.tvmaze);
     case 'cinemeta': return !!ids.imdb;
     default: return false;
   }
@@ -205,7 +207,7 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   meta.logo = art.logo ?? meta.logo;
 
   meta.id = parsed.title;
-  meta.ids = { imdb: ids.imdb, tmdb: ids.tmdb, tvdb: ids.tvdb, mal: ids.mal, anilist: ids.anilist, kitsu: ids.kitsu, anidb: ids.anidb };
+  meta.ids = { imdb: ids.imdb, tmdb: ids.tmdb, tvdb: ids.tvdb, tvmaze:ids.tvmaze, mal: ids.mal, anilist: ids.anilist, kitsu: ids.kitsu, anidb: ids.anidb };
   for (const k of Object.keys(meta.ids) as Array<keyof NonNullable<Meta['ids']>>) if (meta.ids[k] === undefined) delete meta.ids[k];
   if (type === 'movie') {
     meta.behaviorHints = { ...(meta.behaviorHints ?? {}), defaultVideoId: videoId, hasScheduledVideos: false };
@@ -218,6 +220,7 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
 }
 
 async function resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
+  if(/^(tvdbc|tmdbc):\d+$/.test(id))return collectionMeta(ctx,id);
   if (type === 'anime' || isAnimeId(id)) {
     const meta = await animeApi.animeMeta(ctx, id);
     return meta ? stripByAgeCap(ctx, meta) : null;
@@ -298,7 +301,7 @@ async function resolveIds(ctx: Ctx, id: string, type?: ContentType): Promise<IdB
   let ids = bundleFromStremioId(parsed.title);
   if (isAnimeId(parsed.title)) {
     ids = await animeApi.mapAnimeIds(ctx, ids);
-    if (ids.imdb || ids.tmdb || ids.tvdb) ids = await bridgeIds(ctx, ids, type ?? (ids.tmdbType === 'movie' ? 'movie' : 'series'));
+    if (ids.imdb || ids.tmdb || ids.tvdb || ids.tvmaze) ids = await bridgeIds(ctx, ids, type ?? (ids.tmdbType === 'movie' ? 'movie' : 'series'));
     return ids;
   }
   if (parsed.source === 'other') return ids;

@@ -1,8 +1,8 @@
 /**
- * The only "storage" Titan has is the Cloudflare Cache API: best-effort, per-colo,
+ * The only "storage" Rill has is the Cloudflare Cache API: best-effort, per-colo,
  * evictable at any time. Everything here must be safe to lose.
  */
-const NS = 'https://titan.cache.invalid/';
+const NS = 'https://rill.cache.invalid/';
 
 function keyUrl(key: string): string {
   return NS + encodeURIComponent(key);

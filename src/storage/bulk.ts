@@ -4,6 +4,7 @@ import { registerAccount } from './state';
 import { profileContext } from '../jellyfin/profiles';
 import { trackerApi } from '../trackers/index';
 import { saveHistory } from './history';
+import { hasDatabaseBudget, cleanupDatabase } from './budget';
 
 export async function queueBulk(ctx: Ctx, events: MarkEvent[]): Promise<void> {
   if (!ctx.env.DB || !events.length) return;
@@ -38,10 +39,11 @@ export async function advanceBulk(ctx: Ctx, limit=20): Promise<void> {
     const events=JSON.parse(row.events) as MarkEvent[];
     const end=Math.min(events.length,row.position+limit);
     for(let i=row.position;i<end;i++) {
+      if(!hasDatabaseBudget(db,4)) break;
       // Original timestamps ensure later explicit decisions win even before this batch runs.
       await saveHistory(scoped,events[i],'mark');
       await db.prepare('UPDATE bulk_actions SET position=?,lease_until=? WHERE id=? AND lease=?').bind(i+1,Date.now()+180_000,row.id,lease).run();
     }
-    if(end===events.length) await db.prepare("UPDATE bulk_actions SET status='done' WHERE id=? AND lease=?").bind(row.id,lease).run();
-  } finally { await db.prepare('UPDATE bulk_actions SET lease=NULL,lease_until=0 WHERE id=? AND lease=?').bind(row.id,lease).run(); }
+    await db.prepare("UPDATE bulk_actions SET status='done' WHERE id=? AND lease=? AND position>=?").bind(row.id,lease,events.length).run();
+  } finally { await cleanupDatabase(db).prepare('UPDATE bulk_actions SET lease=NULL,lease_until=0 WHERE id=? AND lease=?').bind(row.id,lease).run(); }
 }

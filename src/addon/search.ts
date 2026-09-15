@@ -9,6 +9,7 @@ import { parseStremioId } from '../stremio/ids';
 import { uniq } from '../util/concurrency';
 import { metaApi } from '../meta/index';
 import { animeApi } from '../meta/anime/index';
+import { aiQuery,aiSearch } from './ai';
 
 export const SEARCH_PAGE = 20;
 
@@ -88,6 +89,7 @@ async function lookupById(ctx: Ctx, type: ContentType, id: string): Promise<Meta
  * merged ranking stays stable across pages.
  */
 export async function unifiedSearch(ctx: Ctx, type: ContentType, rawQuery: string, skip = 0): Promise<MetaPreview[]> {
+  const request=aiQuery(ctx,rawQuery);if(request)return aiSearch(ctx,type,request,skip);
   const parsed = parseQuery(rawQuery);
   if (!parsed.text) return [];
   if (parsed.imdb) return skip > 0 ? [] : lookupById(ctx, type, parsed.imdb);

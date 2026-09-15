@@ -17,7 +17,7 @@ import { kitsuExternalIds, kitsuLookupByExternal } from './kitsu';
 import { malExternalIds } from './mal';
 import { animeKind, type AnimeKind } from './shared';
 
-/** AIOMetadata reads anime-list-full.json; the mini file carries the same fields minus whitespace. */
+/** The mini anime-list file carries the same fields as the full one, minus whitespace. */
 const FRIBB_URL = 'https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-mini.json';
 const INDEX_KEY = 'anime:fribb:index:v1';
 const INDEX_TTL = 24 * 3600;

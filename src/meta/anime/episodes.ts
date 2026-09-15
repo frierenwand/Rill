@@ -6,9 +6,7 @@
  * thumbnails / synopses, AniList: streaming thumbnails / future airing times); rows from every
  * provider that answered are merged per episode number.
  *
- * IMDb series ids (tt123:2:5) map to whole franchises in Fribb. Those are laid out season by
- * season: Fribb's `season.tvdb` pairs each MAL entry with a TVDB/IMDb season, and when Fribb
- * lacks season info the TV entries are paired one-to-one with seasons in order.
+ * Franchise IDs use authoritative TMDB/TVDB episodes or explicit Anime-Lists mappings.
  */
 import type { Ctx } from '../../context';
 import type { MetaVideo } from '../../stremio/types';
@@ -17,8 +15,12 @@ import { mapLimit } from '../../util/concurrency';
 import { anilistDetails, anilistEpisodeRows, type AlMedia } from './anilist';
 import { kitsuEpisodeRows, kitsuEpisodes, type KitsuAnimeAttrs } from './kitsu';
 import { malDetails, malEpisodeRows, malEpisodes, type JikanAnime } from './mal';
-import { sortFranchise, type AnimeMapping } from './mapping';
+import { type AnimeMapping } from './mapping';
 import { isoDate } from './shared';
+import { parseStremioId } from '../../stremio/ids';
+import { tvdbEpisodes, episodeToVideo } from '../tvdb';
+import { tmdbMeta } from '../tmdb';
+import { loadEpisodeMaps,toExternalEpisodes,type EpisodeMap,type EpisodeSpace } from './episode-map';
 
 export interface EpisodeRow {
   episode: number;
@@ -126,58 +128,43 @@ export async function gatherEpisodeRows(
   return order.map((n) => results.find((r) => r.name === n)?.rows || []).filter((r) => r.length > 0);
 }
 
-/** Lay Fribb franchise rows out as season groups. Returns [seasonNumber, entries in order][]. */
-export function seasonGroups(rows: AnimeMapping[]): Array<[number, AnimeMapping[]]> {
-  const sorted = sortFranchise(rows.filter((r) => r.kind !== 'MOVIE' && r.kind !== 'MUSIC'));
-  const groups = new Map<number, AnimeMapping[]>();
-  const withSeason = sorted.filter((r) => r.tvdbSeason !== undefined);
-  const without = sorted.filter((r) => r.tvdbSeason === undefined);
-  for (const r of withSeason) {
-    const s = r.tvdbSeason as number;
-    groups.set(s, [...(groups.get(s) || []), r]);
-  }
-  if (groups.size === 0) {
-    // One-to-one: nth TV entry becomes season n; OVAs/specials collect in season 0.
-    let n = 0;
-    for (const r of without) {
-      const s = r.kind === 'TV' || r.kind === 'ONA' ? ++n : 0;
-      groups.set(s, [...(groups.get(s) || []), r]);
-    }
-  } else {
-    // Entries Fribb could not place: TV ones become new seasons after the last known, others go to specials.
-    let next = Math.max(...groups.keys()) + 1;
-    for (const r of without) {
-      const s = r.kind === 'TV' ? next++ : 0;
-      groups.set(s, [...(groups.get(s) || []), r]);
-    }
-  }
-  return [...groups.entries()].sort((a, b) => a[0] - b[0]);
+/** Project entry-relative episodes using published mappings. Never invent a season
+ * from the order of MAL IDs: split cours and OVAs do not have that ordering. */
+export function projectAnimeVideos(titleId:string,entry:AnimeMapping,built:MetaVideo[],maps:EpisodeMap[],space:EpisodeSpace,externalId:number):MetaVideo[] {
+  if(!entry.anidb)return [];
+  return built.flatMap(v=>toExternalEpisodes(maps,space,{anidb:entry.anidb!,season:1,episode:v.episode!})
+    .filter(target=>target.id===externalId).map(target=>({...v,id:episodeId(titleId,target.season,target.episode),season:target.season,episode:target.episode,numbering:space,trackerAnime:undefined})));
 }
-
-const MAX_FRANCHISE_ENTRIES = 12;
 
 /**
  * Videos for an IMDb/TVDB-keyed series that spans several MAL entries. Episode numbers continue
  * across entries that share a season (split cours), ids are `tt123:season:episode`.
  */
 export async function franchiseEpisodes(ctx: Ctx, titleId: string, rows: AnimeMapping[], fallbackThumb?: string): Promise<BuiltEpisodes> {
-  const groups = seasonGroups(rows);
-  let budget = MAX_FRANCHISE_ENTRIES;
+  const parsed=parseStremioId(titleId);
+  const preferred=ctx.cfg.providers.series==='tvdb'?'tvdb':'tmdb';
+  const space:EpisodeSpace=parsed.source==='tmdb'?'tmdb':parsed.source==='tvdb'?'tvdb':rows.some(r=>r[preferred])?preferred:preferred==='tmdb'?'tvdb':'tmdb';
+  const externalId=parsed.source===space?parsed.num:rows.find(r=>r[space])?.[space];
+  if(!externalId)return {videos:[],hasFuture:false};
+  // The provider's own list is authoritative, including specials and missing anime mappings.
+  let official:MetaVideo[]=[];
+  if(space==='tvdb'&&ctx.cfg.keys.tvdb)official=(await tvdbEpisodes(ctx,externalId)).map(e=>({...episodeToVideo(titleId,e,fallbackThumb),numbering:'tvdb'}));
+  if(space==='tmdb'&&ctx.tmdbKey)official=(await tmdbMeta(ctx,'tv',externalId,titleId))?.videos?.map(v=>({...v,numbering:'tmdb'}))??[];
+  if(official.length) {
+    const dates=official.map(v=>v.released).filter((d):d is string=>!!d&&Number.isFinite(Date.parse(d)));
+    return {videos:official,hasFuture:dates.some(d=>Date.parse(d)>Date.now()),lastAired:dates.filter(d=>Date.parse(d)<=Date.now()).sort().at(-1)};
+  }
+  const maps=await loadEpisodeMaps(ctx);
   const videos: MetaVideo[] = [];
   let hasFuture = false;
   let lastAired: string | undefined;
-  for (const [season, entries] of groups) {
-    let offset = 0;
-    for (const entry of entries) {
-      if (budget-- <= 0) break;
-      const built = await singleEntryEpisodes(ctx, titleId, entry, season, offset, fallbackThumb);
-      videos.push(...built.videos);
-      offset += built.videos.length;
+  for (const entry of rows.filter(r=>r.kind!=='MOVIE'&&r.kind!=='MUSIC'&&r.anidb&&maps.some(m=>m.anidb===r.anidb&&m[space]===externalId))) {
+      const built = await singleEntryEpisodes(ctx, titleId, entry, 1, 0, fallbackThumb);
+      videos.push(...projectAnimeVideos(titleId,entry,built.videos,maps,space,externalId));
       hasFuture = hasFuture || built.hasFuture;
       if (built.lastAired && (!lastAired || built.lastAired > lastAired)) lastAired = built.lastAired;
-    }
   }
-  return { videos, hasFuture, lastAired };
+  return { videos:[...new Map(videos.map(v=>[v.id,v])).values()].sort((a,b)=>a.season!-b.season!||a.episode!-b.episode!), hasFuture, lastAired };
 }
 
 async function singleEntryEpisodes(ctx: Ctx, titleId: string, entry: AnimeMapping, season: number, offset: number, fallbackThumb?: string): Promise<BuiltEpisodes> {

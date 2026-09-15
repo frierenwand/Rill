@@ -1,15 +1,15 @@
 import type { Env } from './env';
-import type { TitanConfig } from './config/schema';
+import type { RillConfig } from './config/schema';
 import type { JellyfinProfile } from './config/schema';
 
 /** Everything a request handler needs. Built once per request in index.ts. */
 export interface Ctx {
-  cfg: TitanConfig;
+  cfg: RillConfig;
   env: Env;
   /** Encoded config token as it appeared in the URL (for building self-links). */
   cfgToken: string;
   accountConfigToken?: string;
-  /** Origin of this worker, e.g. https://titan.example.workers.dev */
+  /** Origin of this worker, e.g. https://rill.example.workers.dev */
   origin: string;
   /** Short stable hash of the config, used to scope caches per user. */
   scope: string;

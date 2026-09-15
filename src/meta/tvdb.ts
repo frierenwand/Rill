@@ -47,7 +47,7 @@ export interface TvdbRecord {
   translations?: { nameTranslations?: TvdbTranslationRow[]; overviewTranslations?: TvdbTranslationRow[] };
   latestNetwork?: { name?: string } | null; originalNetwork?: { name?: string } | null;
   companies?: unknown;
-  seasons?: Array<{ id: number; number: number; type?: { type?: string } }>;
+  seasons?: Array<{ id: number; number: number; image?:string; type?: { type?: string } }>;
   first_release?: { date?: string } | null;
   releases?: Array<{ country?: string; date?: string }>;
   contentRatings?: Array<{ name?: string; country?: string; contentType?: string }>;
@@ -330,6 +330,7 @@ export async function tvdbMeta(ctx: Ctx, kind: TvdbKind, id: number, canonicalId
     trailers: trailers.length ? trailers.slice(0, 6) : undefined,
     links,
     ids,
+    seasonPosters:Object.fromEntries((rec.seasons??[]).filter(s=>s.image&&(!s.type?.type||s.type.type==='official')).map(s=>[s.number,artworkUrl(s.image)!])),
   };
 
   if (kind === 'movie') {

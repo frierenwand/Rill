@@ -8,6 +8,7 @@
  */
 import { BRAND_LOGO } from '../brand';
 import { DEFAULT_CONFIG } from '../config/schema';
+import { LAYOUT_HTML,LAYOUT_SCRIPT } from './layouts';
 
 const LANGUAGES = [
   'en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES', 'es-MX', 'it-IT', 'pt-BR', 'pt-PT', 'nl-NL', 'sv-SE', 'da-DK', 'nb-NO',
@@ -37,32 +38,33 @@ const ANIME_OPTS: Array<[string, string]> = [['mal', 'MyAnimeList'], ['anilist',
 // ---------------------------------------------------------------------------------------------
 
 const CSS = `
-:root { --fg:#f1f1ed; --bg:#080808; --mute:#92928f; --line:#303030; --faint:#252525; --accent:#f1f1ed; color-scheme:dark; }
-* { box-sizing:border-box; }
+:root { --fg:#f3f3f3; --bg:#0a0a0a; --mute:#9d9d9d; --line:#2b2b2b; --faint:#1d1d1d; --accent:#eeeeee; color-scheme:dark; }
+* { box-sizing:border-box; letter-spacing:0!important; }
 [hidden] { display:none!important; }
 html,body { margin:0; min-height:100%; background:var(--bg); color:var(--fg); }
 body { font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; letter-spacing:-.015em; }
 main { max-width:960px; margin:auto; padding:0 28px 48px; }
-header { padding-top:26px; }
+header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--bg); }
 .brand-row { display:flex; justify-content:space-between; align-items:center; gap:24px; }
 .brand { display:flex; align-items:center; gap:9px; }
 .brand img { width:28px; height:28px; }
 .wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
 .header-actions { display:flex; align-items:center; gap:20px; }
 #draft-status { font-size:12px; color:var(--mute); }
-button { font:inherit; font-size:14px; border:1px solid #414141; border-radius:6px; background:#202020; color:var(--fg); padding:10px 16px; cursor:pointer; }
-button:hover { background:#303030; border-color:#686868; }
+button { appearance:none; font:inherit; font-size:13px; font-weight:550; border:1px solid #393939; border-radius:8px; background:#1e1e1e; color:var(--fg); padding:11px 17px; cursor:pointer; transition:background .18s,border-color .18s,box-shadow .18s,transform .18s; }
+button:hover { background:#2d2d2d; border-color:#5d5d5d; box-shadow:0 3px 12px #0003; }
+button:active:not(:disabled) { transform:translateY(1px); }
 button:disabled { opacity:.4; cursor:default; }
-#connect-nav { background:var(--fg); color:#0c0c0c; border:0; padding:9px 13px; border-radius:6px; font-weight:600; }
+#connect-nav { background:var(--accent); color:#141414; border:1px solid #ffffff; padding:10px 16px; border-radius:8px; font-weight:650; box-shadow:0 0 20px #eeeeee0b; }
 #connect-nav:after { content:'↗'; padding-left:12px; font-size:15px; }
-#connect-nav:hover { background:white; }
-.tabs { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-top:22px; padding:0 0 16px; border-bottom:1px solid var(--line); }
-.tabs button { flex:none; background:none; border:1px solid transparent; border-radius:6px; padding:7px 11px; color:#969693; }
+#connect-nav:hover { background:#ffffff; box-shadow:0 0 22px #eeeeee20; }
+.tabs { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-top:22px; padding:0 0 16px; border-bottom:0; }
+.tabs button { flex:none; background:none; border:1px solid transparent; border-radius:6px; padding:7px 11px; color:#969696; }
 .tabs button:hover { color:var(--fg); background:#171717; }
-.tabs button[aria-selected=true] { color:var(--fg); background:#202020; border-color:#414141; }
+.tabs button[aria-selected=true] { color:var(--accent); background:#eeeeee0b; border-color:#eeeeee29; }
 .workspace { padding-top:24px; }
 section { margin:0; }
-section + section { margin-top:32px; padding-top:32px; border-top:1px solid var(--line); }
+section + section { margin-top:36px; padding-top:16px; border-top:0; }
 h2 { font-size:22px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin:0 0 18px; }
 h2 small { display:none; }
 h3 { font-size:15px; font-weight:500; letter-spacing:-.2px; margin:24px 0 14px; }
@@ -73,13 +75,13 @@ label.t { display:block; font-size:14px; font-weight:500; margin-bottom:10px; }
 input[type=text],input[type=password],input[type=number],input[type=url],select,textarea { width:100%; min-width:0; min-height:38px; font:inherit; color:inherit; background:#0d0d0d; border:1px solid #383838; border-radius:6px; padding:8px 11px; margin:0; outline:none; appearance:none; }
 input::placeholder,textarea::placeholder { color:#717171; }
 input:hover,select:hover,textarea:hover { border-color:#606060; }
-input:focus,select:focus,textarea:focus { border-color:#b3b3af; }
-:focus-visible { outline:2px solid #c9c9c5; outline-offset:4px; }
+input:focus,select:focus,textarea:focus { border-color:#b3b3b3; }
+:focus-visible { outline:2px solid #c9c9c9; outline-offset:4px; }
 .sel { position:relative; }
 .sel:after { content:'⌄'; position:absolute; right:12px; top:6px; pointer-events:none; color:var(--mute); }
 select { padding-right:36px; }
 textarea { min-height:76px; resize:vertical; font-size:14px; line-height:1.6; }
-.two { display:grid; grid-template-columns:1fr 1fr; gap:0 18px; }
+.two { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 20px; }
 .row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; }
 .row > .f { flex:1; min-width:140px; }
 .hint,.note { font-size:14px; line-height:1.65; color:var(--mute); margin:6px 0 16px; max-width:740px; }
@@ -96,31 +98,34 @@ a { color:var(--fg); text-underline-offset:4px; }
 #s-age .f { grid-column:2; grid-row:1 / span 2; margin:0; }
 #s-age .f > label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 #s-age .note { margin:0; grid-column:1; max-width:420px; }
-#s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { background:#141414; border:1px solid #303030; border-radius:8px; padding:20px; }
-.list { border:1px solid #353535; border-radius:6px; margin:0 0 24px; overflow:hidden; }
-.item { display:flex; align-items:center; gap:14px; padding:10px 12px; border-bottom:1px solid #303030; background:#161616; }
+#s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; }
+.list { display:grid; gap:4px; border:0; border-radius:6px; margin:0 0 24px; overflow:hidden; }
+.item { display:flex; align-items:center; gap:14px; padding:10px 12px; border:0; border-radius:6px; background:#161616; }
 .item:last-child { border:0; }
 .item .n { flex:1; min-width:0; }
 .item .n small { display:block; font-size:12px; color:var(--mute); }
 .item.off .n { color:#808080; }
 .ud { display:flex; gap:4px; }
-.ud button { padding:3px 8px; color:#aaa; }
-input[type=checkbox] { accent-color:var(--fg); width:16px; height:16px; margin:0; cursor:pointer; flex:none; }
+.ud button { padding:3px; width:34px; height:34px; color:#ccc; flex:none; }
+input[type=checkbox] { appearance:none; width:34px; height:20px; border:1px solid #484848; border-radius:20px; background:#272727; margin:0; cursor:pointer; flex:none; position:relative; transition:background .18s,border-color .18s; }
+input[type=checkbox]:before { content:''; position:absolute; width:12px; height:12px; border-radius:50%; background:#a8a8a8; top:3px; left:3px; transition:transform .18s,background .18s; }
+input[type=checkbox]:checked { background:var(--accent); border-color:var(--accent); }
+input[type=checkbox]:checked:before { background:#191919; transform:translateX(14px); }
 .checks { display:flex; flex-wrap:wrap; gap:12px 24px; margin:0 0 24px; }
 .checks label { display:inline-flex; align-items:center; gap:9px; font-size:14px; cursor:pointer; }
-#scrobble { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+#scrobble { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 #scrobble label { border:1px solid #353535; border-radius:6px; background:#141414; padding:14px; }
-#scrobble label:has(:checked) { border-color:#aaa; background:#262626; }
+#scrobble label:has(:checked) { border-color:#eeeeee44; background:#eeeeee08; }
 .service-card { border:1px solid #343434; border-radius:8px; margin:12px 0; background:#141414; }
 .service-card summary { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; list-style:none; cursor:pointer; font-size:15px; }
 .service-card summary::-webkit-details-marker { display:none; }
 .service-card summary:after { content:'+'; color:#aaa; font-size:22px; font-weight:300; }
 .service-card[open] summary:after { content:'−'; }
-.service-card[open] summary { border-bottom:1px solid #303030; }
+.service-card[open] summary { border-bottom:0; }
 .svc { padding:18px; }
 #s-addons .section-content > .f { border:1px solid #343434; border-radius:8px; padding:18px; background:#141414; }
 #s-addons .b { display:flex; justify-content:flex-end; margin-top:12px; }
-.gname { font-size:14px; color:#a9a9a5; padding:18px 0 10px; }
+.gname { font-size:14px; color:#a9a9a9; padding:18px 0 10px; }
 .status,.probe { font-size:13px; color:var(--mute); margin:10px 0; white-space:pre-line; }
 .status:empty { display:none; }
 .status.on { color:var(--fg); }
@@ -131,7 +136,101 @@ input[type=checkbox] { accent-color:var(--fg); width:16px; height:16px; margin:0
 .out .b { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:12px; font-size:13px; }
 .mono,.code { font-family:ui-monospace,monospace; overflow-wrap:anywhere; }
 .code { font-size:26px; letter-spacing:.12em; }
+input[type=text],input[type=password],input[type=number],input[type=url],select { min-height:44px; }
+input:focus,select:focus,textarea:focus { box-shadow:0 0 0 3px #ffffff0c; }
+.hint,.note,.status,.probe,.item .n { overflow-wrap:anywhere; }
+.setting-row,#s-age { border-radius:8px; }
+.item { min-height:58px; }
+.item:hover { background:#1d1d1d; }
+.ud { flex:none; }
+.service-card summary { min-height:54px; gap:16px; }
+.service-card summary:hover { background:#1b1b1b; }
+.service-card summary:after { flex:none; width:16px; text-align:center; }
+#profiles .f { display:block; }
+#profiles .check { display:flex; align-items:center; gap:10px; margin:12px 0; }
+#profiles > .svc { border-top:1px solid var(--line); padding:20px 0; }
+#s-tracking .section-content > .b { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:22px; }
+.out .u { user-select:all; }
+.out .b > span { min-height:20px; }
+header { background:#0a0a0af5; backdrop-filter:blur(16px); }
+.workspace { padding-top:30px; }
+h2 { font-weight:600; }
+.setting-row,#s-age,.out,.service-card,#s-addons .section-content > .f { background:#131313; border-color:#2e2e2e; }
+.setting-row { padding:22px; gap:24px; }
+.setting-row:focus-within,#s-age:focus-within { border-color:#666666; }
+input[type=text],input[type=password],input[type=number],input[type=url],select,textarea { background:#0d0d0d; border-color:#323232; border-radius:8px; padding:12px 14px; font-size:14px; min-height:46px; }
+input:focus,select:focus,textarea:focus { border-color:#aaaaaa; box-shadow:0 0 0 3px #eeeeee0c; }
+:focus-visible { outline-color:var(--accent); }
+.list { border-color:#2e2e2e; border-radius:8px; }
+.item { background:#131313; border-color:#2a2a2a; padding:13px 15px; }
+.item:hover { background:#1d1d1d; }
+.ud { gap:2px; }
+.ud button { background:transparent; border-color:transparent; color:#999999; font-size:18px; }
+.ud button:hover:not(:disabled) { color:var(--accent); background:#eeeeee0b; border-color:#eeeeee29; }
+.ud button:disabled { opacity:.22; }
+.out .u { background:#0b0b0b; border-color:#292929; color:#b5b5b5; border-radius:6px; }
+.out .b [data-copy] { background:var(--accent); color:#141414; border-color:var(--accent); min-width:88px; }
+.service-card summary { padding:18px 20px; }
+.service-card summary:after { font-size:19px; color:var(--accent); }
+.service-card summary:hover { background:#202020; }
+#draft-status { font-size:11px; }
+#draft-status:before { content:''; display:inline-block; height:5px; width:5px; border-radius:50%; background:var(--accent); margin-right:8px; }
+.select-control { position:relative; min-width:0; }
+.select-control > select { display:none; }
+.sel:has(.select-control):after { display:none; }
+.select-trigger { width:100%; min-height:46px; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 14px; background:#0d0d0d; border-color:#323232; text-align:left; font-size:14px; font-weight:400; }
+.select-trigger:after { content:''; width:7px; height:7px; border-right:1.5px solid #a4a4a4; border-bottom:1.5px solid #a4a4a4; transform:rotate(45deg); margin:0 3px 4px 10px; flex:none; }
+.select-trigger[aria-expanded=true] { border-color:#aaaaaa; box-shadow:0 0 0 3px #eeeeee0c; }
+.select-menu { position:fixed; inset:auto; margin:0; padding:6px; border:1px solid #424242; border-radius:8px; background:#1b1b1b; color:var(--fg); box-shadow:0 18px 55px #0009; overflow:auto; z-index:20; }
+.select-menu [role=option] { display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left; background:transparent; border:0; border-radius:5px; padding:10px 12px; min-height:40px; font-weight:400; }
+.select-menu [role=option]:hover,.select-menu [role=option]:focus { background:#2e2e2e; outline:none; box-shadow:none; }
+.select-menu [aria-selected=true] { color:var(--accent); background:#eeeeee09; }
+.select-menu [aria-selected=true]:after { content:'✓'; margin-left:12px; }
+.select-menu,.out .u,textarea { scrollbar-width:thin; scrollbar-color:#494949 transparent; }
+.tabs button { position:relative; min-height:40px; border-radius:6px; font-weight:500; }
+.tabs button[aria-selected=true] { background:#242424; border-color:transparent; box-shadow:none; }
+#connect-nav { box-shadow:none; }
+#connect-nav:hover { box-shadow:none; }
+.setting-row,.out,.service-card { box-shadow:none; border-color:#222; }
+.setting-row { border-color:#282828; }
+.hint,.note { font-size:13px; line-height:1.75; }
+.service-card { transition:border-color .18s; }
+.service-card[open] { border-color:#484848; }
+.service-card summary:after { content:''; width:7px; height:7px; border-right:1.5px solid #aaa; border-bottom:1.5px solid #aaa; transform:rotate(45deg); margin:0 4px 4px 12px; transition:transform .18s; }
+.service-card[open] summary:after { content:''; transform:rotate(225deg); margin-bottom:0; }
+.select-trigger:after { transition:transform .18s; }
+.select-trigger[aria-expanded=true]:after { transform:rotate(225deg); margin-bottom:0; }
+.select-menu [role=option] { gap:12px; }
+.catalog-toolbar { display:flex; align-items:center; gap:16px; margin:22px 0 4px; }
+.catalog-toolbar input { flex:1; width:100%; min-width:0; }
+#catalog-count { color:var(--mute); font:12px ui-monospace,monospace; white-space:nowrap; }
+#catalog-empty { color:var(--mute); text-align:center; padding:36px 20px; }
+.item:focus-within { background:#202020; }
+.tabs button:hover { box-shadow:none; }
+.item .n { font-size:14px; }
+.item .n small { margin-top:3px; font-size:11px; }
+.ud button { width:36px; height:36px; border-radius:6px; }
+.ud button:hover:not(:disabled) { border-color:transparent; box-shadow:none; background:#ffffff0b; }
+input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { border-color:#292929; background:#111; }
+.setting-row:focus-within,#s-age:focus-within { border-color:#383838; }
+.out .u { border:0; padding:16px; line-height:1.8; }
+.service-card summary { font-weight:500; }
+.service-card .svc { padding-top:8px; }
+.profile-settings { margin:8px 0 28px; padding:0; }
+.profile-settings > summary,#profiles details > summary { display:flex; justify-content:space-between; align-items:center; gap:16px; list-style:none; cursor:pointer; min-height:48px; padding:12px 14px; background:#171717; border-radius:6px; font-size:14px; }
+.profile-settings > summary::-webkit-details-marker,#profiles details > summary::-webkit-details-marker { display:none; }
+.profile-settings > summary:after,#profiles details > summary:after { content:''; width:6px; height:6px; border-right:1.5px solid #999; border-bottom:1.5px solid #999; transform:rotate(45deg); margin-right:4px; flex:none; }
+.profile-settings[open] > summary:after,#profiles details[open] > summary:after { transform:rotate(225deg); }
+.profile-settings > .note { margin:14px 0; }
+#profiles > .svc { border:0; background:#111; border-radius:8px; padding:20px; margin:12px 0; }
+#profiles .check { font-size:13px; padding:6px 0; }
+#profile-add { margin-top:10px; }
+#s-jellyfin .section-content > .two { margin-bottom:8px; }
+@media(min-width:701px) { #s-tracking .two { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); } }
+@media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble label { padding:12px 9px; gap:7px; font-size:12px; } }
+@media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
 @media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } #draft-status { display:none; } #connect-nav { padding:10px 13px; font-size:13px; } #connect-nav:after { padding-left:10px; } .tabs { margin-top:20px; padding-bottom:14px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
 // ---------------------------------------------------------------------------------------------
@@ -144,10 +243,12 @@ function body(): string {
 <header>
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
-    ${[['general','General'],['meta','Metadata'],['catalogs','Catalogs'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}">${label}</button>`).join('')}
+    ${[['general','General'],['meta','Metadata'],['catalogs','Catalogs'],['collections','Collections'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}">${label}</button>`).join('')}
   </nav>
 </header>
 <div class="workspace"><div id="panels">
+
+${LAYOUT_HTML}
 
 <section id="s-general">
   <h2><small>1</small>General</h2>
@@ -186,7 +287,9 @@ function body(): string {
 <section id="s-catalogs">
   <h2><small>3</small>Catalogs</h2>
   <p class="note">Choose catalogs and arrange their order in your apps.</p>
+  <div class="catalog-toolbar"><input type="text" id="catalog-filter" aria-label="Filter catalogs" placeholder="Search catalogs" autocomplete="off" spellcheck="false"><span id="catalog-count" role="status"></span></div>
   <div id="catalogs"></div>
+  <p id="catalog-empty" hidden>No matching catalogs.</p>
   <p class="status" id="cat-status"></p>
   <h3>Your lists</h3>
   <div class="two">
@@ -194,7 +297,43 @@ function body(): string {
     <div class="f"><label class="t" for="l-trakt">Trakt list ids</label><textarea id="l-trakt" data-lines="lists.trakt" placeholder="user/list-slug, one per line" spellcheck="false"></textarea><p class="hint">Requires a Trakt client ID.</p></div>
     <div class="f"><label class="t" for="l-pmdb">PublicMetaDB list IDs</label><textarea id="l-pmdb" data-lines="lists.publicmetadb" placeholder="one per line" spellcheck="false"></textarea></div>
     <div class="f"><label class="t" for="l-pmdb-picks">PublicMetaDB pick IDs</label><textarea id="l-pmdb-picks" data-lines="lists.publicmetadbPicks" placeholder="one per line" spellcheck="false"></textarea></div>
+    <div class="f"><label class="t" for="l-tmdb-collections">TMDB collections</label><textarea id="l-tmdb-collections" data-lines="lists.tmdbCollections" placeholder="Collection links or IDs, one per line"></textarea></div>
+    <div class="f"><label class="t" for="l-tvdb">TVDB lists</label><textarea id="l-tvdb" data-lines="lists.tvdb" placeholder="List links or IDs, one per line" spellcheck="false"></textarea></div>
+    <div class="f"><label class="t" for="l-letterboxd">Letterboxd lists and watchlists</label><textarea id="l-letterboxd" data-lines="lists.letterboxd" placeholder="List or watchlist links, one per line" spellcheck="false"></textarea></div>
+    <div class="f"><label class="t" for="l-flixpatrol">FlixPatrol regions</label><textarea id="l-flixpatrol" data-lines="lists.flixpatrol" placeholder="global&#10;romania&#10;united-states" spellcheck="false"></textarea><p class="hint">One region per line. Available charts appear above.</p></div>
   </div>
+  <h3>MovieLens</h3>
+  <div class="two">
+    <div class="f"><label class="t" for="ml-user">Username</label><input id="ml-user" data-k="movieLens.username" autocomplete="off"></div>
+    <div class="f"><label class="t" for="ml-pass">Password</label><input id="ml-pass" type="password" data-k="movieLens.password" autocomplete="off"></div>
+    <label class="check"><input type="checkbox" data-k="movieLens.syncRatings">Import ratings daily from connected Trakt, Simkl and MDBList accounts</label>
+    <div class="b"><button type="button" id="ml-sync">Import ratings now</button><button type="button" id="ml-status">Check last import</button></div>
+    <div class="f"><label class="t" for="ml-csv">Import an IMDb ratings CSV</label><input id="ml-csv" type="file" accept=".csv,text/csv"></div>
+    <span id="ml-result" class="hint" role="status"></span>
+  </div>
+  <h3>Custom catalogs</h3>
+  <p class="note">Build discovery lists or combine existing catalogs in the order you choose.</p>
+  <div id="custom-catalogs"></div>
+  <button type="button" id="add-custom-catalog">Add catalog</button>
+  <h3>Recommendations</h3>
+  <p class="note">Optional AI recommendations use your viewing history with the provider you choose. Provider charges apply when a taste profile or recommendation list is generated.</p>
+  <label class="check"><input type="checkbox" data-k="recommendations.enabled">Enable recommendations</label>
+  <label class="check"><input type="checkbox" data-k="recommendations.aiSearch">Enable AI search with the prefix “ai:”</label>
+  <p class="hint">For example: ai: thoughtful science fiction about first contact. Each uncached request uses your chosen AI provider.</p>
+  <div class="two">
+    <div class="f"><label class="t" for="rec-provider">Provider</label><select id="rec-provider" data-k="recommendations.provider"><option value="gemini">Gemini</option><option value="openrouter">OpenRouter</option></select></div>
+    <div class="f"><label class="t" for="rec-sources">Viewing history</label><select id="rec-sources" data-k="recommendations.sources"><option value="both">Simkl and MDBList</option><option value="simkl">Simkl</option><option value="mdblist">MDBList</option><option value="primary">Primary tracker</option></select><p class="hint">Local playback history is included. Independent profiles use only their own history.</p></div>
+    <div class="f"><label class="t" for="rec-key">API key</label><input id="rec-key" type="password" data-k="recommendations.apiKey" autocomplete="off"></div>
+    <div class="f"><label class="t" for="rec-model">Model</label><input id="rec-model" data-k="recommendations.model" placeholder="Your provider's model name"></div>
+    <div class="f"><label class="t" for="rec-reasoning">Reasoning effort</label><select id="rec-reasoning" data-k="recommendations.reasoning"><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+    <div class="f"><label class="t" for="rec-order">Order</label><select id="rec-order" data-k="recommendations.order"><option value="balanced">Balance rating and audience</option><option value="suggested">Suggested order</option><option value="popular">Most popular</option><option value="acclaimed">Highest rated</option></select></div>
+    <div class="f"><label class="t" for="rec-hours">Refresh</label><select id="rec-hours" data-k="recommendations.refreshHours"><option value="6">Every 6 hours</option><option value="12">Every 12 hours</option><option value="24">Daily</option></select></div>
+    <div class="f"><label class="t" for="rec-votes">Minimum votes</label><input id="rec-votes" type="number" min="0" data-k="recommendations.minVotes"></div>
+    <div class="f"><label class="t" for="rec-stalled">Unfinished titles</label><select id="rec-stalled" data-k="recommendations.stalledWeight"><option value="ignore">Ignore inactivity</option><option value="note">Treat inactivity neutrally</option><option value="mild">Weak sign of disinterest</option><option value="dislike">Treat inactivity as dislike</option></select></div>
+    <div class="f"><label class="t" for="rec-days">Days before considering a title inactive</label><input id="rec-days" type="number" min="7" data-k="recommendations.staleDays"></div>
+  </div>
+  <label class="check"><input type="checkbox" data-k="recommendations.webSearch">Search for recent releases</label>
+  <div class="b"><button type="button" id="prepare-recommendations">Prepare recommendations</button><button type="button" id="rebuild-recommendations">Rebuild from history</button><button type="button" id="check-recommendations">Check progress</button><span id="rec-status" class="hint" role="status"></span></div>
 </section>
 
 <section id="s-addons">
@@ -316,7 +455,7 @@ function body(): string {
     <div class="f"><label class="t" for="jf-pass">Password</label><input type="password" id="jf-pass" data-k="jellyfin.password" autocomplete="off"></div>
     <div class="f"><label class="t" for="jf-max">Max sources per title</label><input type="number" id="jf-max" data-k="jellyfin.maxSources" min="1" max="200"></div>
   </div>
-  <details class="svc"><summary>Profiles</summary><p class="note">Profiles use the same password. Share your watch history or keep it separate.</p><div id="profiles"></div><button type="button" id="profile-add">Add profile</button></details>
+  <details class="profile-settings"><summary>Profiles</summary><p class="note">Profiles use the same password. Share your watch history or keep it separate.</p><div id="profiles"></div><button type="button" id="profile-add">Add profile</button></details>
   <label class="t">Home screen rows</label>
   <div class="list" data-order="jellyfin.home" data-options="resume,nextup,latest,upcoming"></div>
 </section>
@@ -346,8 +485,8 @@ const JS = String.raw`
 (function () {
   'use strict';
   var DEFAULTS = __DEFAULTS__;
-  var LS_CFG = 'titan.draft.v1';
-  var LS_UI = 'titan.ui.v1';
+  var LS_CFG = 'rill.draft.v1';
+  var LS_UI = 'rill.ui.v1';
   var ORIGIN = location.origin;
   var LABELS = {
     tmdb: 'TMDB', fanart: 'Fanart.tv', tvdb: 'TVDB', rpdb: 'RPDB', metahub: 'Metahub',
@@ -367,7 +506,7 @@ const JS = String.raw`
   });
   document.querySelector('#s-general .section-content').appendChild(document.getElementById('s-age'));
   // Group existing controls without recreating inputs or losing their values.
-  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
+  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], collections:['collections'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
   Object.keys(groups).forEach(function(key) {
     var panel = document.createElement('div');
     panel.id = 'panel-' + key;
@@ -395,7 +534,7 @@ const JS = String.raw`
       tab.setAttribute('aria-selected', String(active));
       tab.tabIndex = active ? 0 : -1;
       document.getElementById('panel-' + tab.dataset.tab).hidden = !active;
-      if (active && focus) tab.focus();
+      if (active && focus) { tab.focus(); tab.scrollIntoView({block:'nearest',inline:'nearest'}); }
     });
   }
   all('[data-tab]').forEach(function(tab, index, tabs) {
@@ -423,7 +562,7 @@ const JS = String.raw`
     return out;
   }
   function lsGet(key) { try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
-  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); $('draft-status').textContent = 'Saved on this device'; } catch (e) { $('draft-status').textContent = 'Device storage unavailable'; } }
   function ssGet(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } }
   function ssSet(key, val) { try { sessionStorage.setItem(key, val); } catch (e) {} }
 
@@ -480,7 +619,7 @@ const JS = String.raw`
   // ---- change pipeline ----------------------------------------------------------------------------
   var encTimer = null, catTimer = null, lastCatKey = '';
   function catalogKey() {
-    return JSON.stringify([cfg.keys, cfg.addons, cfg.lists, cfg.providers, cfg.language, cfg.ageCap, trackerFingerprint()]);
+    return JSON.stringify([cfg.keys, cfg.addons, cfg.lists, cfg.customCatalogs, cfg.movieLens, cfg.recommendations, cfg.providers, cfg.language, cfg.ageCap, trackerFingerprint()]);
   }
   function trackerFingerprint() {
     var t = cfg.trackers;
@@ -528,6 +667,8 @@ const JS = String.raw`
       if (r.error && !(r.catalogs && r.catalogs.length)) { $('cat-status').textContent = r.error; return; }
       catDefs = Array.isArray(r.catalogs) ? r.catalogs : [];
       renderProfiles();
+      if(!$('custom-catalogs').contains(document.activeElement)) renderCustomCatalogs();
+      if(typeof layoutDraft!=='undefined'&&!$('layout-editor').contains(document.activeElement))renderLayout();
       $('cat-status').textContent = catDefs.length ? '' : 'No catalogs available with the current settings.';
       reconcileCatalogs();
       renderCatalogs();
@@ -538,16 +679,16 @@ const JS = String.raw`
   function reconcileCatalogs() {
     var known = {};
     catDefs.forEach(function (d) { known[catKey(d)] = d; });
-    var kept = cfg.catalogs.filter(function (c) { return known[catKey(c)]; });
+    var kept = cfg.catalogs.slice();
     var have = {};
-    kept.forEach(function (c) { have[catKey(c)] = true; c.name = known[catKey(c)].name; });
+    kept.forEach(function (c) { have[catKey(c)] = true; if(known[catKey(c)] && !c.name) c.name = known[catKey(c)].name; });
     catDefs.forEach(function (d) { if (!have[catKey(d)]) kept.push({ id: d.id, type: d.type, enabled: true, name: d.name }); });
     cfg.catalogs = kept;
   }
   function renderCatalogs() {
     var root = $('catalogs');
     clear(root);
-    if (!catDefs.length) return;
+    if (!catDefs.length) { filterCatalogs(); return; }
     var defs = {};
     catDefs.forEach(function (d) { defs[catKey(d)] = d; });
     var groups = [], byName = {};
@@ -563,21 +704,89 @@ const JS = String.raw`
       var list = el('div', { class: 'list' });
       idxs.forEach(function (idx, pos) {
         var c = cfg.catalogs[idx], d = defs[catKey(c)];
-        var cb = el('input', { type: 'checkbox' });
+        var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + d.name });
         cb.checked = !!c.enabled;
         cb.addEventListener('change', function () { c.enabled = cb.checked; row.className = 'item' + (c.enabled ? '' : ' off'); changed(); });
         var sub = d.type + (d.needs ? ' · needs ' + (Array.isArray(d.needs) ? d.needs.join(', ') : d.needs) : '');
         var name = el('div', { class: 'n' }, [document.createTextNode(d.name), el('small', { text: sub })]);
-        var up = el('button', { type: 'button', text: 'up', disabled: pos === 0, onclick: function () { swapCatalog(idxs[pos], idxs[pos - 1]); } });
-        var dn = el('button', { type: 'button', text: 'down', disabled: pos === idxs.length - 1, onclick: function () { swapCatalog(idxs[pos], idxs[pos + 1]); } });
+        var up = el('button', { type: 'button', text: '↑', title: 'Move ' + d.name + ' up', 'aria-label': 'Move ' + d.name + ' up', disabled: pos === 0, onclick: function () { swapCatalog(idxs[pos], idxs[pos - 1]); } });
+        var dn = el('button', { type: 'button', text: '↓', title: 'Move ' + d.name + ' down', 'aria-label': 'Move ' + d.name + ' down', disabled: pos === idxs.length - 1, onclick: function () { swapCatalog(idxs[pos], idxs[pos + 1]); } });
         var row = el('div', { class: 'item' + (c.enabled ? '' : ' off') }, [cb, name, el('div', { class: 'ud' }, [up, dn])]);
         list.appendChild(row);
       });
       box.appendChild(list);
       root.appendChild(box);
     });
+    filterCatalogs();
   }
+  function filterCatalogs() {
+    var query = $('catalog-filter').value.trim().toLowerCase();
+    var total = 0, visible = 0;
+    all('#catalogs .group').forEach(function(group) {
+      var matches = 0;
+      all('.item', group).forEach(function(row) {
+        var text = group.querySelector('.gname').textContent + ' ' + row.querySelector('.n').textContent;
+        row.hidden = !text.toLowerCase().includes(query);
+        total++; if (!row.hidden) { visible++; matches++; }
+      });
+      group.hidden = matches === 0;
+    });
+    $('catalog-count').textContent = query ? visible + ' / ' + total : total + ' catalogs';
+    $('catalog-empty').hidden = !query || visible > 0 || total === 0;
+  }
+  $('catalog-filter').addEventListener('input', filterCatalogs);
+  function renderCustomCatalogs() {
+    var root=$('custom-catalogs');clear(root);
+    (cfg.customCatalogs || []).forEach(function(c,index) {
+      var box=el('div',{class:'group'});
+      function field(label,key,options) {
+        var input=options?el('select'):el('input',{type:'text'});
+        if(options) options.forEach(function(o){input.appendChild(el('option',{value:o[0],text:o[1]}));});
+        input.value=c[key] || '';
+        input.setAttribute('aria-label',label);
+        input.addEventListener(options?'change':'input',function(){c[key]=input.value;if(key==='provider'){c.params={};c.sources=[];}if(key==='provider'||key==='type')renderCustomCatalogs();changed();});
+        box.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:label}),input]));
+      }
+      field('Name','name');
+      field('Source','provider',[['tmdb','TMDB'],['tvdb','TVDB'],['mal','MyAnimeList'],['anilist','AniList'],['movielens','MovieLens'],['simkl','Simkl'],['merged','Combine catalogs']]);
+      field('Media','type',[['movie','Movies'],['series','Series'],['anime','Anime']]);
+      c.params=c.params || {};
+      if(c.provider==='merged') {
+        var select=el('select',{'aria-label':'Catalog to add'});
+        select.appendChild(el('option',{value:'',text:'Choose a catalog'}));
+        catDefs.filter(function(d){return d.id.indexOf('merged.')!==0&&!(d.extra || []).some(function(e){return e.name==='search'&&e.isRequired;});}).forEach(function(d){select.appendChild(el('option',{value:d.type+'|'+d.id,text:d.name+' ('+d.type+')'}));});
+        select.addEventListener('change',function(){if(!select.value)return;var parts=select.value.split('|');c.sources=c.sources || [];if(!c.sources.some(function(s){return s.id===parts[1]&&s.type===parts[0];}))c.sources.push({type:parts[0],id:parts[1]});renderCustomCatalogs();changed();});
+        box.appendChild(select);
+        (c.sources || []).forEach(function(s,i){var def=catDefs.find(function(d){return d.id===s.id&&d.type===s.type;});var genre=el('input',{type:'text','aria-label':'Source genre or filter',value:s.genre||'',placeholder:'Optional genre or filter value'});genre.addEventListener('input',function(){s.genre=genre.value;changed();});box.appendChild(genre);box.appendChild(el('div',{class:'b'},[el('span',{text:(i+1)+'. '+(def?def.name:s.id)}),el('button',{type:'button',text:'Up',onclick:function(){move(c.sources,i,-1);renderCustomCatalogs();changed();}}),el('button',{type:'button',text:'Remove',onclick:function(){c.sources.splice(i,1);renderCustomCatalogs();changed();}})]));});
+      } else {
+        var prompt=el('input',{type:'text','aria-label':'Describe this catalog',placeholder:'Describe the movies or series you want'}),aiStatus=el('span',{class:'hint',role:'status'});
+        var generateButton=el('button',{type:'button',text:'Generate filters with AI',onclick:async function(){if(!prompt.value.trim())return;generateButton.disabled=true;aiStatus.textContent='Generating filters…';var provider=c.provider,type=c.type;try{var r=await api('/api/catalogs/generate',{config:cfg,query:prompt.value,provider:provider,type:type});if(r.error){aiStatus.textContent=r.error;return;}if(c.provider!==provider||c.type!==type||!cfg.customCatalogs.includes(c)){aiStatus.textContent='Catalog changed. Generate again with the new settings.';return;}c.params=r.catalog.params;c.name=r.catalog.name;renderCustomCatalogs();changed();}finally{generateButton.disabled=false;}}});
+        box.appendChild(el('div',{class:'f'},[prompt,generateButton,aiStatus]));
+        var fields={simkl:[['Genre','genre'],['Format','type'],['Country','country'],['Network','network'],['Year','year'],['Sort','sort']],tmdb:[['Sort','sort_by'],['Genres','with_genres'],['Released from','primary_release_date.gte'],['Released until','primary_release_date.lte'],['Minimum rating','vote_average.gte'],['Minimum votes','vote_count.gte'],['Language','with_original_language'],['Country','with_origin_country'],['Streaming providers','with_watch_providers'],['Streaming region','watch_region'],['Keywords','with_keywords'],['Networks','with_networks']],tvdb:[['Country','country'],['Language','lang'],['Genre','genre'],['Year','year'],['Sort','sort'],['Direction','sortType'],['Status','status']],mal:[['Search','q'],['Genres','genres'],['Status','status'],['Format','type'],['Minimum score','min_score'],['From date','start_date'],['Until date','end_date'],['Sort','order_by'],['Direction','sort']],anilist:[['Search','search'],['Genres','genre_in'],['Excluded genres','genre_not_in'],['Tags','tag_in'],['Format','format'],['Status','status'],['Season','season'],['Year','seasonYear'],['Sort','sort'],['Minimum score','averageScore_greater']],movielens:[['Sort','sortBy'],['Direction','sortDirection'],['From year','minYear'],['Until year','maxYear'],['Minimum popularity','minPop'],['Tags','tag'],['Genre','genre']]};
+        if(c.provider==='tmdb'&&c.type!=='movie')fields.tmdb=fields.tmdb.map(function(f){return [f[0],f[1].replace('primary_release_date','first_air_date')];});
+        Object.keys(c.params).forEach(function(key){if(!(fields[c.provider]||[]).some(function(f){return f[1]===key;}))fields[c.provider].push([key,key]);});
+        (fields[c.provider] || []).forEach(function(f){var input=el('input',{type:'text','aria-label':f[0],value:c.params[f[1]] || ''});input.addEventListener('input',function(){if(input.value)c.params[f[1]]=input.value;else delete c.params[f[1]];changed();});box.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:f[0]}),input]));});
+      }
+      box.appendChild(el('button',{type:'button',text:'Remove catalog',onclick:function(){cfg.customCatalogs.splice(index,1);renderCustomCatalogs();changed();}}));
+      root.appendChild(box);
+    });
+  }
+  $('add-custom-catalog').addEventListener('click',function(){cfg.customCatalogs=cfg.customCatalogs || [];cfg.customCatalogs.push({id:crypto.randomUUID(),name:'My catalog',provider:'tmdb',type:'movie',params:{}});renderCustomCatalogs();changed();});
+  var recommendationPoll;
+  function recommendationProgress(r){
+    clearTimeout(recommendationPoll);var job=r.job;
+    $('rec-status').textContent=r.error||(!job?'No generation recorded yet.':job.status==='failed'?job.error:job.status==='done'?(Object.values(job.counts).some(function(n){return n>0;})?'Recommendations are ready.':'No matches yet. Add viewing history or lower the minimum votes.'):'Preparing recommendations: '+job.position+' of 3 sections. You can close this page.');
+    if(job&&job.status==='pending')recommendationPoll=setTimeout(function(){api('/api/recommendations/status',{config:cfg,id:job.id}).then(recommendationProgress);},5000);
+  }
+  ['prepare','rebuild'].forEach(function(action){$(action+'-recommendations').addEventListener('click',function(){var button=this;button.disabled=true;$('rec-status').textContent='Queuing recommendations…';api('/api/recommendations/generate',{config:cfg,rebuild:action==='rebuild'}).then(recommendationProgress).finally(function(){button.disabled=false;});});});
+  $('check-recommendations').addEventListener('click',function(){api('/api/recommendations/status',cfg).then(recommendationProgress);});
+  function movieLensResult(r){var s=r.status||{};$('ml-result').textContent=r.error||s.error||(s.checkedAt?'Last checked '+new Date(s.checkedAt).toLocaleString()+'. ':'')+(s.successCount!==undefined?s.successCount+' imported, '+s.alreadyRatedCount+' already rated, '+s.errorCount+' rejected.':s.checkedAt?'No changed ratings.':'No import recorded yet.');}
+  ['sync','status'].forEach(function(action){$('ml-'+action).addEventListener('click',function(){var button=this;button.disabled=true;$('ml-result').textContent=action==='sync'?'Importing ratings…':'Checking…';api('/api/movielens/'+action,cfg).then(movieLensResult).finally(function(){button.disabled=false;});});});
+  $('ml-csv').addEventListener('change',async function(){var file=this.files[0];if(!file)return;if(file.size>5000000){$('ml-result').textContent='Choose a file smaller than 5 MB.';return;}this.disabled=true;try{movieLensResult(await api('/api/movielens/import',{config:cfg,csv:await file.text()}));}finally{this.disabled=false;this.value='';}});
+  renderCustomCatalogs();
   function swapCatalog(a, b) { var t = cfg.catalogs[a]; cfg.catalogs[a] = cfg.catalogs[b]; cfg.catalogs[b] = t; renderCatalogs(); changed(); }
+
+  ${LAYOUT_SCRIPT}
 
   // ---- ordered pick lists ---------------------------------------------------------------------------
   function renderOrder(box) {
@@ -588,15 +797,15 @@ const JS = String.raw`
     clear(box);
     chosen.concat(rest).forEach(function (v, i) {
       var on = i < chosen.length;
-      var cb = el('input', { type: 'checkbox' });
+      var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (LABELS[v] || v) });
       cb.checked = on;
       cb.addEventListener('change', function () {
         var arr = chosen.slice();
         if (cb.checked) arr.push(v); else arr.splice(arr.indexOf(v), 1);
         set(path, arr); renderOrder(box); changed();
       });
-      var up = el('button', { type: 'button', text: 'up', disabled: !on || i === 0, onclick: function () { set(path, move(chosen.slice(), i, -1)); renderOrder(box); changed(); } });
-      var dn = el('button', { type: 'button', text: 'down', disabled: !on || i === chosen.length - 1, onclick: function () { set(path, move(chosen.slice(), i, 1)); renderOrder(box); changed(); } });
+      var up = el('button', { type: 'button', text: '↑', title: 'Move up', 'aria-label': 'Move ' + (LABELS[v] || v) + ' up', disabled: !on || i === 0, onclick: function () { set(path, move(chosen.slice(), i, -1)); renderOrder(box); changed(); } });
+      var dn = el('button', { type: 'button', text: '↓', title: 'Move down', 'aria-label': 'Move ' + (LABELS[v] || v) + ' down', disabled: !on || i === chosen.length - 1, onclick: function () { set(path, move(chosen.slice(), i, 1)); renderOrder(box); changed(); } });
       box.appendChild(el('div', { class: 'item' + (on ? '' : ' off') }, [cb, el('div', { class: 'n', text: LABELS[v] || v }), el('div', { class: 'ud' }, [up, dn])]));
     });
   }
@@ -611,6 +820,7 @@ const JS = String.raw`
     all('[data-lines]').forEach(function (n) { n.value = (get(n.getAttribute('data-lines')) || []).join('\n'); });
     all('[data-ui]').forEach(function (n) { n.value = get(n.getAttribute('data-ui'), ui) || ''; });
     all('[data-order]').forEach(renderOrder);
+    enhanceSelects();
   }
   function bindInputs() {
     all('[data-k]').forEach(function (n) {
@@ -793,7 +1003,7 @@ const JS = String.raw`
   }
   $('mal-open').addEventListener('click', function () {
     var id = ui.mal.clientId; if (!id) return;
-    var v = malVerifier(); ssSet('titan.mal.verifier', v);
+    var v = malVerifier(); ssSet('rill.mal.verifier', v);
     var url = 'https://myanimelist.net/v1/oauth2/authorize?response_type=code&client_id=' + encodeURIComponent(id) + '&code_challenge=' + v + '&code_challenge_method=plain';
     if (ui.mal.redirectUri) url += '&redirect_uri=' + encodeURIComponent(ui.mal.redirectUri);
     $('mal-url').textContent = url;
@@ -801,7 +1011,7 @@ const JS = String.raw`
     window.open(url, '_blank', 'noopener');
   });
   $('mal-exchange').addEventListener('click', function () {
-    var code = $('mal-code').value.trim(), v = ssGet('titan.mal.verifier');
+    var code = $('mal-code').value.trim(), v = ssGet('rill.mal.verifier');
     if (!code) { status('mal', 'Paste the code first.'); return; }
     if (!v) { status('mal', 'Open the authorisation page from this tab first; the verifier belongs to it.'); return; }
     try { if (code.indexOf('code=') >= 0) code = new URL(code).searchParams.get('code') || code; } catch (e) {}
@@ -921,6 +1131,7 @@ const JS = String.raw`
       box.appendChild(el('button',{type:'button',text:'Remove profile',onclick:function(){cfg.jellyfin.profiles.splice(index,1);renderProfiles();changed();}}));
       root.appendChild(box);
     });
+    enhanceSelects();
   }
   $('profile-add').addEventListener('click',function(){
     cfg.jellyfin.profiles=cfg.jellyfin.profiles || [];
@@ -929,12 +1140,100 @@ const JS = String.raw`
   });
 
   // ---- boot --------------------------------------------------------------------------------------------
+  var activePicker = null;
+  var pickerId = 0;
+  function closePicker(focus) {
+    if (!activePicker) return;
+    var picker = activePicker;
+    activePicker = null;
+    picker.menu.hidePopover();
+    picker.trigger.setAttribute('aria-expanded', 'false');
+    if (focus) picker.trigger.focus();
+  }
+  document.addEventListener('pointerdown', function(e) {
+    if (activePicker && !activePicker.menu.contains(e.target) && !activePicker.trigger.contains(e.target)) closePicker(false);
+  });
+  window.addEventListener('resize', function() { closePicker(false); });
+  window.addEventListener('hashchange', function() { closePicker(false); });
+  document.addEventListener('scroll', function(e) {
+    if (activePicker && !activePicker.menu.contains(e.target)) closePicker(false);
+  }, true);
+
+  // Keep native selects as the data source for existing config and profile bindings.
+  function enhanceSelects() {
+    if (!('showPopover' in HTMLElement.prototype)) return;
+    all('select').forEach(function(select) {
+      if (select._picker) { select._picker.sync(); return; }
+      var label = Array.from(select.labels || []).map(function(l) { return l.textContent.trim(); }).join(' ') || 'Choose an option';
+      var menu = el('div', {class:'select-menu',popover:'manual',role:'listbox',id:'picker-' + (++pickerId),'aria-label':label});
+      var trigger = el('button', {type:'button',class:'select-trigger',role:'combobox','aria-label':label,'aria-haspopup':'listbox','aria-expanded':'false','aria-controls':menu.id});
+      var wrapper = el('div', {class:'select-control'});
+      select.parentNode.insertBefore(wrapper, select);
+      wrapper.appendChild(select); wrapper.appendChild(trigger); wrapper.appendChild(menu);
+      var picker = {menu:menu,trigger:trigger,sync:function() {
+        trigger.textContent = select.selectedOptions[0] ? select.selectedOptions[0].textContent : 'Choose';
+        trigger.disabled = select.disabled;
+      }};
+      select._picker = picker;
+      function choose(index) {
+        select.selectedIndex = index;
+        picker.sync(); closePicker(true);
+        select.dispatchEvent(new Event('input', {bubbles:true}));
+        select.dispatchEvent(new Event('change', {bubbles:true}));
+      }
+      function open() {
+        if (activePicker === picker) { closePicker(true); return; }
+        closePicker(false); clear(menu);
+        Array.from(select.options).forEach(function(option,index) {
+          menu.appendChild(el('button', {type:'button',role:'option',tabindex:'-1',text:option.textContent,'aria-label':option.textContent,'aria-selected':String(option.selected),disabled:option.disabled,onclick:function() { choose(index); }}));
+        });
+        activePicker = picker;
+        trigger.setAttribute('aria-expanded', 'true');
+        var rect = trigger.getBoundingClientRect();
+        var below = innerHeight - rect.bottom - 12;
+        var above = rect.top - 12;
+        var height = Math.min(280, Math.max(below, above));
+        menu.style.width = Math.min(rect.width, innerWidth - 24) + 'px';
+        menu.style.maxHeight = height + 'px';
+        menu.style.left = Math.max(12, Math.min(rect.left, innerWidth - rect.width - 12)) + 'px';
+        menu.style.top = below >= Math.min(280, select.options.length * 40 + 14) || below >= above ? (rect.bottom + 6) + 'px' : 'auto';
+        menu.style.bottom = menu.style.top === 'auto' ? (innerHeight - rect.top + 6) + 'px' : 'auto';
+        menu.showPopover();
+        var selected = menu.querySelector('[aria-selected=true]:not(:disabled)') || menu.querySelector('[role=option]:not(:disabled)');
+        if (selected) { selected.focus({preventScroll:true}); selected.scrollIntoView({block:'nearest'}); }
+      }
+      trigger.addEventListener('click', open);
+      trigger.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
+      });
+      var search = '', searchTimer;
+      menu.addEventListener('keydown', function(e) {
+        var choices = all('[role=option]:not(:disabled)', menu);
+        var index = choices.indexOf(document.activeElement);
+        var next = e.key === 'ArrowDown' ? (index + 1) % choices.length : e.key === 'ArrowUp' ? (index + choices.length - 1) % choices.length : e.key === 'Home' ? 0 : e.key === 'End' ? choices.length - 1 : -1;
+        if (next >= 0) { e.preventDefault(); choices[next].focus(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closePicker(true); }
+        else if (e.key === 'Tab') { closePicker(true); }
+        else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault(); search += e.key.toLowerCase(); clearTimeout(searchTimer);
+          searchTimer = setTimeout(function() { search = ''; }, 600);
+          var match = choices.find(function(choice) { return choice.textContent.toLowerCase().startsWith(search); });
+          if (match) match.focus();
+        }
+      });
+      select.addEventListener('change', picker.sync);
+      picker.sync();
+    });
+  }
+
   function renderAll() {
     updateSummary();
     fillInputs();
     renderTrackerStates();
     renderCatalogs();
     renderProfiles();
+    renderCustomCatalogs();
+    enhanceSelects();
     renderInstall();
   }
   bindInputs();

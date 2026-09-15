@@ -5,6 +5,7 @@ import { sha256 } from '../util/bytes';
 import { registerAccount } from './state';
 import { historyStatement } from './history';
 import { trackerTargets } from '../trackers/targets';
+import { hasDatabaseBudget, cleanupDatabase, DatabaseBudgetExceeded } from './budget';
 
 type Operation = 'scrobble' | 'mark' | 'clear';
 type Event = ScrobbleEvent | MarkEvent | ResumeEntry;
@@ -35,10 +36,11 @@ export async function enqueue(ctx: Ctx, operation: Operation, event: Event, targ
 }
 
 /** A lease serializes writes per account/service across requests and Worker locations. */
-export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, limit = 12): Promise<void> {
+export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, limit = 2): Promise<void> {
   const db = ctx.env.DB;
   if (!db) return;
   for (let n = 0; n < limit; n++) {
+    if(!hasDatabaseBudget(db,18)) return;
     const now = Date.now(), lease = crypto.randomUUID();
     const job = await db.prepare(`UPDATE deliveries SET lease=?,lease_until=?,attempts=attempts+1 WHERE id=(
       SELECT d.id FROM deliveries d WHERE d.scope=? AND d.status='pending' AND d.due<=? AND d.lease_until<=?
@@ -58,6 +60,7 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
         else {
           const events = await trackerTargets(ctx,event as ScrobbleEvent | MarkEvent,job.service);
           for (let i = 0; i < events.length; i++) {
+            if(!hasDatabaseBudget(db,15)) throw new DatabaseBudgetExceeded();
             const ack = `delivery:${job.id}:${i}`;
             if (await db.prepare('SELECT key FROM state WHERE key=?').bind(ack).first()) continue;
             // Extend the lease before each split episode. Provider calls have a shorter timeout.
@@ -73,9 +76,13 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
       }
       await db.prepare('UPDATE deliveries SET status=?,lease=NULL,lease_until=0 WHERE id=? AND lease=?')
         .bind(stale ? 'superseded' : 'done',job.id,lease).run();
-    } catch {
+    } catch(error) {
+      if(error instanceof DatabaseBudgetExceeded) {
+        await cleanupDatabase(db).prepare('UPDATE deliveries SET attempts=MAX(0,attempts-1),lease=NULL,lease_until=0 WHERE id=? AND lease=?').bind(job.id,lease).run();
+        return;
+      }
       // Keep failures inspectable. No provider URLs, credentials or response bodies are logged.
-      await db.prepare('UPDATE deliveries SET status=?,due=?,lease=NULL,lease_until=0 WHERE id=? AND lease=?')
+      await cleanupDatabase(db).prepare('UPDATE deliveries SET status=?,due=?,lease=NULL,lease_until=0 WHERE id=? AND lease=?')
         .bind(job.attempts >= 10 ? 'failed' : 'pending',Date.now()+Math.min(6*3600_000,30_000*2**(job.attempts-1)),job.id,lease).run();
       console.warn('Tracking delivery pending', { service:job.service, attempt:job.attempts });
     }

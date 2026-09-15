@@ -15,7 +15,7 @@ export const PRODUCT_NAME = 'Jellyfin Server';
 export type Dto = Record<string, unknown>;
 
 export function serverName(ctx: Ctx): string {
-  return ctx.cfg.name?.trim() || 'Titan';
+  return ctx.cfg.name?.trim() || 'Rill';
 }
 
 /** "1h 45min", "45 min", "120" (minutes) -> ticks, or null. */
@@ -53,7 +53,7 @@ export function systemInfo(ctx: Ctx, who: Identity, base: string): Dto {
   return {
     ...publicSystemInfo(ctx, who, base),
     OperatingSystemDisplayName: 'Linux',
-    PackageName: 'titan',
+    PackageName: 'rill',
     HasPendingRestart: false,
     IsShuttingDown: false,
     SupportsLibraryMonitor: false,
@@ -323,9 +323,9 @@ export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, wh
     Id: id,
     ServerId: who.serverId,
     Etag: id,
-    Type: isMovie ? 'Movie' : 'Series',
+    Type: full.collection ? 'BoxSet' : isMovie ? 'Movie' : 'Series',
     MediaType: isMovie ? 'Video' : 'Unknown',
-    IsFolder: !isMovie,
+    IsFolder: full.collection||!isMovie,
     ParentId: opts.parentId ?? null,
     Overview: meta.description || null,
     ProductionYear: yearOf(meta),
@@ -571,7 +571,7 @@ export function streamLabel(stream: Stream): string {
 
 /** Stable id for a media source: the URL is what the client plays. */
 export async function mediaSourceId(url: string): Promise<string> {
-  return (await sha256(`titan:msid:${url}`)).slice(0, 32);
+  return (await sha256(`rill:msid:${url}`)).slice(0, 32);
 }
 
 export interface MediaSourceInput {

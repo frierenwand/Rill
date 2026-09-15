@@ -28,7 +28,7 @@ export function isSeriesKind(kind: AnimeKind): boolean {
   return kind !== 'MOVIE';
 }
 
-/** MAL rating strings ("R+ - Mild Nudity") to the certification vocabulary the rest of Titan uses. */
+/** MAL rating strings ("R+ - Mild Nudity") to the certification vocabulary the rest of Rill uses. */
 export function certFromMalRating(rating: string | null | undefined): string | undefined {
   if (!rating) return undefined;
   const head = rating.split(' - ')[0].trim().toUpperCase();

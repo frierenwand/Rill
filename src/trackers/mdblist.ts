@@ -53,14 +53,17 @@ export const mdblistTracker: Tracker = {
     const history = async (kind: 'movie' | 'episode') => {
       const rows: Row[] = [];
       let cursor = '';
-      for (let page = 0; page < 10; page++) {
+      const seen = new Set<string>();
+      for (let page = 0; page < 100; page++) {
         const data = await read<{ movies?: Row[]; episodes?: Row[]; pagination?: { next_cursor?: string } }>(`/sync/watched?mediatype=${kind}&limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
         rows.push(...(kind === 'movie' ? data.movies ?? [] : data.episodes ?? []));
         const next = data.pagination?.next_cursor;
-        if (!next || next === cursor) break;
+        if (!next) return rows;
+        if (seen.has(next) || next === cursor) throw new Error('MDBList repeated a history cursor');
+        seen.add(next);
         cursor = next;
       }
-      return rows;
+      throw new Error('MDBList history exceeds the import limit; previous history was retained');
     };
     const [movies, episodes, playback] = await Promise.all([history('movie'), history('episode'), read<Row[]>('/sync/playback')]);
     for (const r of movies) if (r.movie) out.movies.push({ ids: r.movie.ids, plays: 1, lastAt: isoOrNow(r.last_watched_at) });

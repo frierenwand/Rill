@@ -103,7 +103,7 @@ export async function externalSubtitles(ctx: Ctx, type: ContentType, id: string,
   return uniq(results.flat(), (s) => s.url);
 }
 
-/** Catalogs exposed by the user's external meta addons, for aggregation into Titan's manifest. */
+/** Catalogs exposed by the user's external meta addons, for aggregation into Rill's manifest. */
 export async function externalCatalogs(ctx: Ctx): Promise<Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }>> {
   const out: Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }> = [];
   for (const url of ctx.cfg.addons.meta) {

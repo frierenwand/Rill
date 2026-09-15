@@ -1,10 +1,11 @@
 {
-  "name": "titan",
+  "name": "rill",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "migrate": "wrangler d1 migrations apply DB --remote",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
@@ -15,5 +16,7 @@
     "@cloudflare/workers-types": "^5.0.0",
     "typescript": "^5.6.0",
     "wrangler": "^4.0.0"
-  }
+  },
+  "description": "Cloudflare Worker: Stremio metadata/catalog addon and Jellyfin-compatible direct-play server with tracker scrobbling.",
+  "license": "MIT"
 }

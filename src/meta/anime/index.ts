@@ -137,7 +137,7 @@ async function buildFranchiseMeta(ctx: Ctx, titleId: string, ids: IdBundle, rows
 async function animeMeta(ctx: Ctx, id: string): Promise<Meta | null> {
   const parsed = parseStremioId(id);
   const titleId = parsed.title;
-  const key = `anime:meta:v2:${ctx.lang}:${ctx.cfg.providers.anime}:${ctx.cfg.search.includeAdult ? 'a' : 's'}:${titleId}`;
+  const key = `anime:meta:v3:${ctx.lang}:${ctx.cfg.providers.anime}:${ctx.cfg.providers.series}:${ctx.tmdbKey?'t':''}:${ctx.cfg.keys.tvdb?'v':''}:${ctx.cfg.search.includeAdult ? 'a' : 's'}:${titleId}`;
   return memo<Meta | null>(key, META_TTL, async () => {
     if (parsed.source === 'mal' || parsed.source === 'anilist' || parsed.source === 'kitsu' || parsed.source === 'anidb') {
       const seed: IdBundle = { [parsed.source]: parsed.num } as IdBundle;

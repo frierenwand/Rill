@@ -1,13 +1,21 @@
 import type { Ctx } from '../context';
 import type { MalAuth, TraktAuth } from '../config/schema';
 import { sendRequest } from '../trackers/common';
+import { cleanupDatabase } from './budget';
 
 type Service = 'trakt' | 'mal';
 type Auth = TraktAuth | MalAuth;
 const expires = (a: Auth) => a.expiresAt ? (a.expiresAt < 1e12 ? a.expiresAt * 1000 : a.expiresAt) : Infinity;
 
 /** Every refresh reads the durable pair, takes a lease and saves both replacements. */
-export async function credentials<T extends Auth>(ctx: Ctx, service: Service, initial: T): Promise<T> {
+const reads=new WeakMap<Ctx,Map<Service,Promise<Auth>>>();
+export function credentials<T extends Auth>(ctx:Ctx,service:Service,initial:T):Promise<T> {
+  let services=reads.get(ctx);if(!services){services=new Map();reads.set(ctx,services);}
+  let task=services.get(service);
+  if(!task){task=loadCredentials(ctx,service,initial);services.set(service,task);task.catch(()=>services!.delete(service));}
+  return task as Promise<T>;
+}
+async function loadCredentials<T extends Auth>(ctx: Ctx, service: Service, initial: T): Promise<T> {
   const db = ctx.env.DB;
   if (!db) return initial;
   await db.prepare('INSERT INTO credentials(scope,service,value) VALUES(?,?,?) ON CONFLICT(scope,service) DO NOTHING')
@@ -41,7 +49,7 @@ export async function credentials<T extends Auth>(ctx: Ctx, service: Service, in
     if (!saved.meta.changes) throw new Error('Credential refresh lease lost');
     return updated;
   } catch (error) {
-    await db.prepare('UPDATE credentials SET lease=NULL,lease_until=0 WHERE scope=? AND service=? AND lease=?').bind(ctx.scope,service,lease).run();
+    await cleanupDatabase(db).prepare('UPDATE credentials SET lease=NULL,lease_until=0 WHERE scope=? AND service=? AND lease=?').bind(ctx.scope,service,lease).run();
     throw error;
   }
 }

@@ -33,6 +33,12 @@ import { qBool, qInt, qList, type JfEnv, type JfRequest } from './request';
 import { onPlaying, onProgress, onStopped, reportOf, setPlayed, updateUserData } from './sessions';
 import { handleJellyfinSocket } from './socket';
 import { EMPTY_LIST, registerStubs } from './stubs';
+import { segments } from './segments';
+import { sha256 } from '../util/bytes';
+import { personFor,creditsFor } from './people';
+import { applyAgeCap } from '../addon/agecap';
+import type { Meta } from '../stremio/types';
+import { collectionMembers } from '../addon/collections';
 
 export { handleJellyfinSocket } from './socket';
 
@@ -219,7 +225,7 @@ inner.get('/system/info', (c) => {
   const jf = c.get('jf');
   return reply(c, systemInfo(jf.ctx, jf.who, jf.base));
 });
-inner.all('/system/ping', (c) => c.json(c.get('jf').ctx.cfg.name || 'Titan'));
+inner.all('/system/ping', (c) => c.json(c.get('jf').ctx.cfg.name || 'Rill'));
 
 inner.get('/quickconnect/enabled', (c) => c.json(true));
 inner.post('/quickconnect/initiate', async (c) => {
@@ -437,6 +443,19 @@ async function listItems(c: C): Promise<Response> {
   const term = (jf.q('SearchTerm') ?? '').trim();
 
   if (filters.includes('IsFavorite') || nothingSurvives(jf)) return reply(c, listOf([], 0, start));
+  const personId=qList(jf,'PersonIds')[0];
+  if(personId) {
+    const guid=decodeGuid(personId);
+    const person=guid?.kind==='misc'?await personFor(jf.ctx,guid):null;
+    if(!person)return reply(c,listOf([],0,start));
+    const previews=await creditsFor(jf.ctx,person.id);
+    const safe=[...await applyAgeCap(jf.ctx,'movie',previews.filter(m=>m.type==='movie')),...await applyAgeCap(jf.ctx,'series',previews.filter(m=>m.type==='series'))];
+    const items=filterByType(safe.map(m=>{
+      const g=L.guidOfBundle({tmdb:Number(m.id.split(':')[1])},m.type==='movie'?'movie':'series');
+      return g?L.titleItemOf(m as Meta,g):null;
+    }).filter((x):x is Dto=>x!==null),wanted);
+    return reply(c,listOf(await L.decorate(sortWithin(items,sortBy,descending).slice(start,start+limit)),items.length,start));
+  }
 
   // Particular items by id, not a listing.
   const ids = qList(jf, 'Ids');
@@ -491,6 +510,13 @@ async function listItems(c: C): Promise<Response> {
 
   const parent = decodeGuid(parentRaw);
   if (!parent) return reply(c, listOf([], 0, start));
+  if(parent.kind==='movie'&&(parent.source==='tvdbc'||parent.source==='tmdbc')) {
+    const members=await collectionMembers(jf.ctx,`${parent.source}:${parent.num}`,start,limit);
+    const safe=await applyAgeCap(jf.ctx,'movie',members.items);
+    const fake={id:'collection',type:'movie',viewId:plainGuid(parentRaw)} as CatalogRef;
+    const items=safe.map(m=>L.previewItem(m,fake,fake.viewId)).filter((m):m is Dto=>!!m);
+    return reply(c,listOf(await L.decorate(filterByType(items,wanted)),members.total,start));
+  }
 
   if (parent.kind === 'series' || parent.kind === 'season') {
     const found = await childrenOf(L, jf, parent, wanted);
@@ -522,7 +548,11 @@ async function singleItem(L: Library, id: string, withSources: boolean): Promise
     const cat = await L.viewOf(g);
     return cat ? collectionFolder(cat.viewId, L.jf.who, cat.name, collectionTypeOf(cat.type)) : null;
   }
-  if (g.kind === 'misc') return g.sub === 'genre' ? genreDto(await L.genreNameOf(g), L.jf.who) : null;
+  if (g.kind === 'misc') {
+    if(g.sub==='genre')return genreDto(await L.genreNameOf(g),L.jf.who);
+    const person=await personFor(L.ctx,g);
+    return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday??null,EndDate:person.deathday??null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ImageTags:person.profile_path?{Primary:'p'}:{},IsFolder:false}:null;
+  }
 
   if (g.kind === 'movie' || g.kind === 'series') {
     const meta = await L.meta(g);
@@ -579,6 +609,16 @@ async function singleItemHandler(c: C): Promise<Response> {
 
 // Fixed paths (stubs, filters, latest, resume) must be registered before /items/:id.
 registerStubs(inner);
+inner.get('/mediasegments/:id',async c=> {
+  const jf=c.get('jf'),id=c.req.param('id'),g=decodeGuid(id);
+  if(!g || g.kind!=='movie' && g.kind!=='episode') return reply(c,listOf([],0,0));
+  const meta=await lib(c).meta(g);
+  if(!meta) return reply(c,listOf([],0,0));
+  const wanted=qList(jf,'IncludeSegmentTypes');
+  const found=await segments(jf.ctx,meta.ids??{},g.kind,g.season,g.episode);
+  const items=await Promise.all(found.filter(s=>!wanted.length||wanted.includes(s.type)).map(async s=>({Id:(await sha256(`${id}:${s.type}`)).slice(0,32),ItemId:id,Type:s.type,StartTicks:Math.round(s.startMs*10000),EndTicks:Math.round(s.endMs*10000)})));
+  return reply(c,listOf(items,items.length,0));
+});
 inner.get('/items/filters', filtersHandler);
 inner.get('/items/filters2', filtersHandler);
 inner.get('/items/latest', latestHandler);

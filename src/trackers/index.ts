@@ -1,4 +1,4 @@
-import { stateGet, statePut } from '../storage/state';
+import { loadSnapshot, saveSnapshot } from '../storage/snapshots';
 /**
  * Tracker facade. One primary tracker answers resume + watched state; every
  * sink (primary + scrobbleTo) receives writes. The snapshot is memoised for a
@@ -88,10 +88,10 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const base = await memo<WatchSnapshot>(snapshotKey(ctx,t),SNAPSHOT_TTL_S,async () => {
     try {
       const fresh = await t.snapshot(ctx);
-      if (ctx.env.DB) await statePut(ctx,durableKey,fresh,365*86400);
+      if (ctx.env.DB) await saveSnapshot(ctx,durableKey,fresh);
       return fresh;
     } catch (error) {
-      const stored = ctx.env.DB ? await stateGet<WatchSnapshot>(ctx,durableKey) : null;
+      const stored = ctx.env.DB ? await loadSnapshot(ctx,durableKey) : null;
       if (stored) return stored;
       throw error;
     }
@@ -178,7 +178,7 @@ export const trackerApi: TrackerApi = {
   invalidate,
 };
 
-export async function drainTracking(ctx: Ctx): Promise<void> { await drain(ctx,REGISTRY); }
+export async function drainTracking(ctx: Ctx,limit=2): Promise<void> { await drain(ctx,REGISTRY,limit); }
 
 export function catalogTrackers(ctx: Ctx): Tracker[] {
   if (ctx.profile && !ctx.profile.sharesHistory) return [];

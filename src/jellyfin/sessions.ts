@@ -11,6 +11,8 @@ import { saveHistory } from '../storage/history';
 import { runtimeTicks, ticksToMs, userData, type Dto } from './dto';
 import { decodeGuid, plainGuid, type TitleGuid } from './ids';
 import { bundleOf, type Library } from './library';
+import { collectionMembers } from '../addon/collections';
+import { parseStremioId } from '../stremio/ids';
 
 const POSITION_TTL = 6 * 60 * 60;
 const RETRY_DELAY_MS = 30_000;
@@ -183,6 +185,24 @@ export async function setPlayed(lib: Library, itemId: string, watched: boolean):
   const g = decodeGuid(id);
   const state = userData(id, { played: watched, lastPlayed: watched ? new Date().toISOString() : undefined });
   if (!g || g.kind === 'view' || g.kind === 'misc') return state;
+  if (g.source === 'tvdbc' || g.source === 'tmdbc') {
+    const members = await collectionMembers(lib.ctx, `${g.source}:${g.num}`, 0, 1000);
+    if (members.total > 1000) throw new Error('Collection is too large to mark in one action');
+    const events: MarkEvent[] = [];
+    for (const item of members.items) {
+      const parsed = parseStremioId(item.id);
+      if (parsed.source==='other'||parsed.source==='tmdbc'||parsed.source==='tvdbc') throw new Error('Collection contains an unrecognized movie ID');
+      const meta = await metaApi.resolveMeta(lib.ctx, 'movie', item.id);
+      if (meta?.released && Date.parse(meta.released) > Date.now()) continue;
+      const ids = meta?.ids;
+      if (!ids || !Object.values(ids).some(Boolean)) throw new Error('Collection movie IDs are unavailable');
+      events.push({ids, kind:'movie', watched});
+    }
+    if (lib.ctx.env.DB) await queueBulk(lib.ctx, events);
+    else await mapLimit(events, 1, event => trackerApi.mark(lib.ctx, event));
+    await trackerApi.invalidate(lib.ctx);
+    return state;
+  }
   const meta = await lib.meta(g);
   const ids = bundleOf(g, meta);
   if (g.kind !== 'movie' && !['mal', 'anilist', 'kitsu', 'anidb'].includes(g.source)) {

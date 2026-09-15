@@ -9,6 +9,7 @@ import { externalMeta, externalStreams, externalSubtitles } from '../stremio/cli
 import { metaApi } from '../meta/index';
 import { buildManifest } from './manifest';
 import { catalogItems, type CatalogExtra } from './catalogs';
+import { collectionMembers } from './collections';
 
 export { listCatalogDefinitions, catalogItems } from './catalogs';
 export type { CatalogDefinition, CatalogExtra } from './catalogs';
@@ -116,6 +117,11 @@ addonRouter.get('/meta/:type/:id', async (c) => {
   if (!meta) {
     try { meta = await externalMeta(ctx, type, id); } catch { meta = null; }
   }
+  if(meta?.collection) {
+    const members=await collectionMembers(ctx,id,0,1000);
+    if(members.total>1000)throw new Error('Collection is too large for one metadata response');
+    meta.videos=members.items.map(m=>({id:m.id,title:m.name,thumbnail:m.poster,released:(m as Meta).released}));
+  }
   return json({ meta: meta ?? null }, meta ? MAX_AGE.meta : MAX_AGE.empty);
 });
 
@@ -123,7 +129,7 @@ addonRouter.get('/stream/:type/:id', async (c) => {
   const ctx = c.get('ctx');
   const type = stremioType(c.req.param('type'));
   const id = bare(c.req.param('id'));
-  // Titan serves no streams of its own; it aggregates the user's stream addons.
+  // Rill serves no streams of its own; it aggregates the user's stream addons.
   // Subtitles ride along only when a subtitle addon is configured, so this stays one round.
   const [streams, subtitles] = await Promise.all([
     externalStreams(ctx, type, id).catch(() => [] as Stream[]),

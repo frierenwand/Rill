@@ -38,6 +38,7 @@ export async function resolveSources(lib: Library, g: TitleGuid, itemId: string)
   const show = g.kind === 'episode' ? await lib.show(g) : null;
   const meta = g.kind === 'movie' ? await lib.meta(g) : show?.meta ?? null;
   if (g.kind === 'movie' && !meta) return empty;
+  if(meta?.collection)return empty;
   const streamType = lib.streamTypeOf(g);
   const streamId = lib.streamIdOf(show, g);
 
@@ -110,9 +111,16 @@ export async function subtitleResponse(sources: Dto[], sourceId: string, index: 
   const url = sub?.DeliveryUrl ? subtitleUrlOf(sub) : null;
   if (!url) return new Response('Subtitle not found', { status: 404 });
   try {
-    const upstream = await fetch(url, { headers: { accept: '*/*' } });
+    const upstream = await fetch(url, { headers: { accept: '*/*' },signal:AbortSignal.timeout(15000) });
     if (!upstream.ok) return new Response('Subtitle unavailable', { status: 502 });
-    const type = subtitleContentType(subtitleFormat(url) || fmt);
+    const original=subtitleFormat(url),requested=fmt.replace(/^.*\./,'').toLowerCase();
+    const type = subtitleContentType(requested || original);
+    if(requested==='vtt'&&original==='srt') {
+      const text=(await upstream.text()).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+      const vtt='WEBVTT\n\n'+text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
+      return new Response(vtt,{headers:{'content-type':type,'cache-control':'public, max-age=3600'}});
+    }
+    if(requested&&requested!==original){await upstream.body?.cancel();return new Response('Unsupported subtitle conversion',{status:400});}
     return new Response(upstream.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'public, max-age=3600' } });
   } catch {
     return new Response('Subtitle unavailable', { status: 502 });

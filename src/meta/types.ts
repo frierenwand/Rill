@@ -14,6 +14,7 @@ export interface IdBundle {
   imdb?: string;
   tmdb?: number;
   tvdb?: number;
+  tvmaze?: number;
   mal?: number;
   anilist?: number;
   kitsu?: number;

@@ -67,9 +67,9 @@ export function tokenOf(req: Request): string {
 }
 
 async function signingSecret(ctx: Ctx): Promise<string> {
-  const fromEnv = ctx.env?.TITAN_SECRET?.trim();
+  const fromEnv = ctx.env?.RILL_SECRET?.trim();
   if (fromEnv) return fromEnv;
-  return sha256(`titan:${ctx.cfg.jellyfin.username}:${ctx.cfg.jellyfin.password}`);
+  return sha256(`rill:${ctx.cfg.jellyfin.username}:${ctx.cfg.jellyfin.password}`);
 }
 
 export async function mintToken(ctx: Ctx, userId: string, deviceId: string): Promise<string> {
@@ -116,8 +116,8 @@ export interface Identity {
 }
 
 export async function identityOf(ctx: Ctx): Promise<Identity> {
-  const [server, user] = await Promise.all([sha256(`titan:jellyfin:server:${ctx.scope}`), sha256(`titan:jellyfin:user:${ctx.scope}`)]);
-  return { serverId: server.slice(0,32), userId:ctx.profile ? (await sha256(`titan:jellyfin:profile:${ctx.scope}:${ctx.profile.id}`)).slice(0,32) : user.slice(0,32) };
+  const [server, user] = await Promise.all([sha256(`rill:jellyfin:server:${ctx.scope}`), sha256(`rill:jellyfin:user:${ctx.scope}`)]);
+  return { serverId: server.slice(0,32), userId:ctx.profile ? (await sha256(`rill:jellyfin:profile:${ctx.scope}:${ctx.profile.id}`)).slice(0,32) : user.slice(0,32) };
 }
 
 // ---------- Quick Connect ----------

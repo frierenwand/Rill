@@ -49,6 +49,7 @@ export function stremioIdOf(ids: IdBundle): string | null {
   if (ids.anilist) return `anilist:${ids.anilist}`;
   if (ids.kitsu) return `kitsu:${ids.kitsu}`;
   if (ids.anidb) return `anidb:${ids.anidb}`;
+  if (ids.tvmaze) return `tvmaze:${ids.tvmaze}`;
   return null;
 }
 
