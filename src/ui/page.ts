@@ -51,12 +51,12 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .header-actions { display:flex; align-items:center; gap:14px; }
 .account { position:relative; }
 .account:empty { display:none; }
-.chip { display:inline-flex; align-items:center; gap:9px; padding:5px 12px 5px 5px; border:1px solid var(--line); border-radius:999px; background:#101010; color:var(--fg); font-size:13px; font-weight:500; line-height:1; }
+.chip { display:inline-flex; align-items:center; gap:9px; padding:5px 12px 5px 5px; border:1px solid var(--line); border-radius:9px; background:#101010; color:var(--fg); font-size:13px; font-weight:500; line-height:1; }
 .chip:hover, .chip[aria-expanded=true] { background:#181818; border-color:#3a3a3a; }
 .chip .chev { color:var(--mute); font-size:10px; margin-left:-2px; }
 .chip.cta { padding:8px 14px; color:var(--mute); }
 .chip.cta:hover { color:var(--fg); }
-.avatar { width:26px; height:26px; border-radius:50%; background:var(--accent); color:#111; font-weight:700; font-size:12px; display:inline-grid; place-items:center; letter-spacing:0; }
+.avatar { width:26px; height:26px; border-radius:6px; background:var(--accent); color:#111; font-weight:700; font-size:12px; display:inline-grid; place-items:center; letter-spacing:0; }
 .avatar.big { width:36px; height:36px; font-size:15px; }
 .popover { position:absolute; right:0; top:calc(100% + 10px); min-width:250px; background:#131313; border:1px solid var(--line); border-radius:14px; padding:8px; box-shadow:0 24px 60px #000c; z-index:30; }
 .popover[hidden] { display:none; }
@@ -73,7 +73,7 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 #drawer[hidden], #drawer-backdrop[hidden] { display:none; }
 .drawer-head { display:flex; justify-content:space-between; align-items:center; }
 .drawer-head .wordmark { font-size:22px; font-weight:600; letter-spacing:-.8px; }
-#drawer-close { width:36px; height:36px; border-radius:50%; border:1px solid var(--line); background:#151515; color:var(--fg); font-size:13px; }
+#drawer-close { width:36px; height:36px; border-radius:9px; border:1px solid var(--line); background:#151515; color:var(--fg); font-size:13px; }
 #drawer-account { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:14px; background:#121212; }
 #drawer-account:empty { display:none; }
 #drawer-account .meta { flex:1; min-width:0; }
@@ -90,8 +90,7 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#101010; }
 .seg button { padding:9px 14px; background:none; border:0; color:var(--mute); font-size:13px; }
 .seg button[aria-pressed=true] { background:#222; color:var(--fg); }
-.drawer-foot { margin-top:auto; }
-#drawer-connect { width:100%; background:var(--accent); color:#141414; border:1px solid #fff; padding:13px 16px; border-radius:11px; font-weight:650; font-size:14px; }
+
 .tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
 .tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
 .tabs-row .mode { flex:none; }
@@ -167,7 +166,7 @@ a { color:var(--fg); text-underline-offset:4px; }
 .ud { display:flex; gap:4px; }
 .ud button { padding:3px; width:34px; height:34px; color:#ccc; flex:none; }
 input[type=checkbox] { appearance:none; width:34px; height:20px; border:1px solid #484848; border-radius:20px; background:#272727; margin:0; cursor:pointer; flex:none; position:relative; transition:background .18s,border-color .18s; }
-input[type=checkbox]:before { content:''; position:absolute; width:12px; height:12px; border-radius:50%; background:#a8a8a8; top:3px; left:3px; transition:transform .18s,background .18s; }
+input[type=checkbox]:before { content:''; position:absolute; width:12px; height:12px; border-radius:3px; background:#a8a8a8; top:3px; left:3px; transition:transform .18s,background .18s; }
 input[type=checkbox]:checked { background:var(--accent); border-color:var(--accent); }
 input[type=checkbox]:checked:before { background:#191919; transform:translateX(14px); }
 .checks { display:flex; flex-wrap:wrap; gap:12px 24px; margin:0 0 24px; }
@@ -233,7 +232,7 @@ input:focus,select:focus,textarea:focus { border-color:#aaaaaa; box-shadow:0 0 0
 .service-card summary:after { font-size:19px; color:var(--accent); }
 .service-card summary:hover { background:#202020; }
 #draft-status { font-size:11px; }
-#draft-status:not(:empty):before { content:''; display:inline-block; height:5px; width:5px; border-radius:50%; background:var(--accent); margin-right:8px; }
+#draft-status:not(:empty):before { content:''; display:inline-block; height:5px; width:5px; border-radius:1.5px; background:var(--accent); margin-right:8px; }
 .select-control { position:relative; min-width:0; }
 .select-control > select { display:none; }
 .sel:has(.select-control):after { display:none; }
@@ -315,7 +314,6 @@ function body(): string {
   <div id="drawer-account"></div>
   <nav id="drawer-nav" class="drawer-nav" aria-label="Sections"></nav>
   <div class="drawer-mode"><span class="t">Mode</span><div class="seg" role="group" aria-label="Settings mode"><button type="button" data-mode="simple" aria-pressed="false">Simple</button><button type="button" data-mode="advanced" aria-pressed="false">Advanced</button></div></div>
-  <div class="drawer-foot"><button type="button" id="drawer-connect">Connect apps ↗</button></div>
 </aside>
 <div class="workspace"><div id="panels">
 
@@ -760,7 +758,6 @@ const JS = String.raw`
       var pop = el('div', { class: 'popover', role: 'menu', hidden: true });
       function openPop(open) { pop.hidden = !open; chip.setAttribute('aria-expanded', String(open)); if (open) { clear(pop);
         pop.appendChild(el('div', { class: 'pop-user' }, [el('span', { class: 'avatar big', 'aria-hidden': 'true', text: initial(account.username) }), el('div', {}, [el('strong', { text: account.username }), el('small', { text: statusText() })])]));
-        pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Connect apps', onclick: function () { openPop(false); location.hash = 'install'; selectTab('install', true); } }));
         pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Log out', onclick: function () { openPop(false); logout(); } })); } }
       chip.addEventListener('click', function (e) { e.stopPropagation(); openPop(pop.hidden); });
       activePop = { pop: pop, chip: chip, host: host, close: function () { openPop(false); } };
@@ -803,7 +800,6 @@ const JS = String.raw`
   $('drawer-close').addEventListener('click', closeDrawer);
   backdrop.addEventListener('click', closeDrawer);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !drawer.hidden) closeDrawer(); });
-  $('drawer-connect').addEventListener('click', function () { closeDrawer(); location.hash = 'install'; selectTab('install', true); window.scrollTo({ top: 0 }); });
   all('.seg [data-mode]').forEach(function (b) { b.addEventListener('click', function () { cfg.advanced = b.dataset.mode === 'advanced'; changed(); applyMode(); renderDrawerNav(); }); });
   function saveRemote() {
     return api('/api/account/save', { config: cfg }).then(function (r) {
