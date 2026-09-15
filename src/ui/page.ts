@@ -94,6 +94,13 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
 .tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
 .tabs-row .mode { flex:none; }
+#setup-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; overflow:auto; }
+#setup-gate[hidden] { display:none; }
+#setup-form { width:100%; max-width:380px; }
+#setup-form .brand { margin-bottom:18px; }
+#setup-form h2 { margin-bottom:8px; }
+#setup-form input { width:100%; }
+#setup-submit { width:100%; background:var(--accent); color:#141414; border:1px solid #ffffff; padding:11px 16px; border-radius:8px; font-weight:650; margin-top:4px; }
 #login-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
 #login-gate[hidden] { display:none; }
 #login-form { width:100%; max-width:360px; }
@@ -293,6 +300,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 function body(): string {
   return `
 <main>
+<div id="setup-gate" hidden><form id="setup-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><h2>Create your account</h2><p class="note">One account protects this page and signs you in from Jellyfin apps. Your settings are stored on your Worker and follow you to every device.</p><div class="f"><label class="t" for="setup-user">Username</label><input type="text" id="setup-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="setup-pass">Password</label><input type="password" id="setup-pass" name="password" autocomplete="new-password" minlength="8" required><p class="hint">At least 8 characters.</p></div><div class="f"><label class="t" for="setup-pass2">Confirm password</label><input type="password" id="setup-pass2" autocomplete="new-password" minlength="8" required></div><button type="submit" id="setup-submit">Create account</button><p class="status" id="setup-status" role="alert"></p><p class="hint"><button class="q" type="button" id="setup-skip">Continue without an account</button> Settings then stay in this browser only.</p></form></div>
 <div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
@@ -766,7 +774,26 @@ const JS = String.raw`
     }
     $('login-gate').hidden = !(account.exists && !account.signedIn);
     if (!$('login-gate').hidden) $('login-user').focus();
+    var firstRun = account.durable && !account.exists && !account.skippedSetup;
+    $('setup-gate').hidden = !firstRun;
+    if (firstRun) { $('setup-user').value = $('setup-user').value || (cfg.jellyfin.username !== 'rill' ? cfg.jellyfin.username : ''); $('setup-user').focus(); }
   }
+  $('setup-skip').addEventListener('click', function () { account.skippedSetup = true; renderAccount(); });
+  $('setup-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var status = $('setup-status'), user = $('setup-user').value.trim(), pass = $('setup-pass').value;
+    if (!/^[a-z0-9._-]{1,32}$/i.test(user)) { status.textContent = 'Username: letters, numbers, dot, dash or underscore.'; return; }
+    if (pass.length < 8) { status.textContent = 'Use at least 8 characters.'; return; }
+    if (pass !== $('setup-pass2').value) { status.textContent = 'Passwords do not match.'; return; }
+    status.textContent = 'Creating…';
+    cfg.jellyfin.username = user; cfg.jellyfin.password = pass;
+    saveRemote().then(function (r) {
+      if (r.error) { status.textContent = r.error; return; }
+      status.textContent = ''; $('setup-pass').value = ''; $('setup-pass2').value = '';
+      account.exists = true; account.signedIn = true; account.username = r.username || user;
+      fillInputs(); renderInstall(); renderAccount(); $('draft-status').textContent = 'Saved to your server';
+    });
+  });
 
   // ---- mobile drawer --------------------------------------------------------------------------------
   var drawer = $('drawer'), backdrop = $('drawer-backdrop'), drawerTimer = null;
