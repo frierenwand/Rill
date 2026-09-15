@@ -1,0 +1,943 @@
+import { profileContext, profileUsers } from './profiles';
+import { revokeToken } from './auth';
+import { registerAccount } from '../storage/state';
+/**
+ * The Jellyfin REST facade. Mounted by the integrator at `/:cfg/jellyfin`.
+ *
+ * Clients mix `/Users/Me` and `/users/me`, prefix paths with `/emby`, put the
+ * token in four different places and send ids with or without dashes. The
+ * outer router normalises all of that once and dispatches to an inner router
+ * whose routes are registered in lowercase.
+ */
+import { Hono, type Context } from 'hono';
+import type { Ctx } from '../context';
+import {
+  approveQuickConnect,
+  claimQuickConnect,
+  clientInfoOf,
+  credentialsMatch,
+  identityOf,
+  mintToken,
+  quickConnectDto,
+  readQuickConnect,
+  startQuickConnect,
+  tokenOf,
+  verifyToken,
+} from './auth';
+import { collectionFolder, genreDto, listOf, publicSystemInfo, sessionDto, systemInfo, userDto, type Dto } from './dto';
+import { dashGuid, decodeGuid, encodeGuid, genreIdOf, parentSeriesOf, plainGuid, type LabelGuid, type TitleGuid } from './ids';
+import { imageUrlFor, redirectTo } from './images';
+import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type Show } from './library';
+import { pickSource, playbackInfo, resolveSources, subtitleResponse } from './playback';
+import { qBool, qInt, qList, type JfEnv, type JfRequest } from './request';
+import { onPlaying, onProgress, onStopped, reportOf, setPlayed, updateUserData } from './sessions';
+import { handleJellyfinSocket } from './socket';
+import { EMPTY_LIST, registerStubs } from './stubs';
+
+export { handleJellyfinSocket } from './socket';
+
+// ---------------------------------------------------------------------------
+// Outer router: normalisation, CORS, request state, dispatch
+// ---------------------------------------------------------------------------
+
+export const jellyfinRouter = new Hono<{ Variables: { ctx: Ctx } }>();
+
+const inner = new Hono<JfEnv>();
+const state = new WeakMap<Request, JfRequest>();
+
+const CORS: Record<string, string> = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-credentials': 'true',
+  'access-control-allow-headers': '*',
+  'access-control-expose-headers': '*',
+  'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+};
+
+async function readBody(req: Request): Promise<Record<string, unknown>> {
+  if (req.method === 'GET' || req.method === 'HEAD') return {};
+  const type = (req.headers.get('content-type') || '').toLowerCase();
+  try {
+    const text = await req.text();
+    if (!text) return {};
+    if (type.includes('json') || text.trim().startsWith('{')) {
+      const parsed = JSON.parse(text);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    }
+    if (type.includes('form-urlencoded')) return Object.fromEntries(new URLSearchParams(text).entries());
+  } catch {
+    /* an unreadable body is an empty one */
+  }
+  return {};
+}
+
+jellyfinRouter.all('/*', async (c) => {
+  let ctx = c.get('ctx');
+  const raw = c.req.raw;
+  const url = new URL(raw.url);
+  if (raw.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+
+  // Everything after `/jellyfin`, with an `/emby` prefix stripped, lower-cased for routing.
+  const full = url.pathname;
+  const cut = full.toLowerCase().indexOf('/jellyfin');
+  const prefix = cut >= 0 ? full.slice(0, cut + '/jellyfin'.length) : '';
+  let sub = cut >= 0 ? full.slice(cut + '/jellyfin'.length) : full;
+  if (!sub.startsWith('/')) sub = `/${sub}`;
+  sub = sub.replace(/^\/emby(?=\/|$)/i, '') || '/';
+
+  const params = new Map<string, string>();
+  url.searchParams.forEach((v, k) => {
+    if (!params.has(k.toLowerCase())) params.set(k.toLowerCase(), v);
+  });
+
+  const body = await readBody(raw);
+  const token = tokenOf(raw);
+  const claims = token ? await verifyToken(ctx,token) : null;
+  const scoped = profileContext(ctx,claims?.p);
+  if (!scoped) return new Response('Unknown profile',{status:401});
+  ctx = scoped;
+  const who = await identityOf(ctx);
+  if (claims && claims.u !== who.userId) return new Response('Invalid user',{status:401});
+
+  const jf: JfRequest = {
+    ctx,
+    who,
+    client: clientInfoOf(raw),
+    claims,
+    base: `${ctx.origin}${prefix}`,
+    rawPath: sub,
+    q: (name) => params.get(name.toLowerCase()),
+    body,
+  };
+
+  if (jf.client.deviceId === 'unknown' && claims?.d) jf.client.deviceId = claims.d;
+
+  const routed = new Request(`${url.origin}${sub.toLowerCase()}${url.search}`, { method: raw.method, headers: raw.headers });
+  state.set(routed, jf);
+
+  let exec: Parameters<typeof inner.fetch>[2];
+  try {
+    exec = c.executionCtx as unknown as Parameters<typeof inner.fetch>[2];
+  } catch {
+    exec = undefined;
+  }
+  if (exec) ctx.defer = work => exec!.waitUntil(work.catch(() => console.warn('Background tracking failed')));
+  const res = await inner.fetch(routed, c.env, exec);
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS)) headers.set(k, v);
+  // A 101 must be passed through untouched or the socket never opens.
+  if (res.status === 101) return res;
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers, ...(res.webSocket ? { webSocket: res.webSocket } : {}) });
+});
+
+// ---------------------------------------------------------------------------
+// Inner router plumbing
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type C = Context<JfEnv, any, any>;
+
+inner.use('*', async (c, next) => {
+  const jf = state.get(c.req.raw);
+  if (!jf) return c.json({ Message: 'Request state missing' }, 500);
+  c.set('jf', jf);
+  c.set('ctx', jf.ctx);
+  await next();
+});
+
+/** Routes that must answer before there is a token: handshake, sign-in, artwork, and the socket. */
+const PUBLIC = [
+  /^\/system\/info\/public$/,
+  /^\/system\/ping$/,
+  /^\/quickconnect\/(enabled|initiate|connect)$/,
+  /^\/users\/(authenticatebyname|authenticatewithquickconnect|public)$/,
+  /^\/branding\//,
+  /^\/(items|users)\/[^/]+\/images\//,
+  /^\/sessions\/logout$/,
+  /^\/socket$/,
+  /^\/embywebsocket$/,
+  /^\/videos\/[^/]+\/[^/]+\/subtitles\//,
+  /^\/videos\/[^/]+\/(stream|original)(\.|\/|$)/,
+];
+
+inner.use('*', async (c, next) => {
+  const jf = c.get('jf');
+  const path = new URL(c.req.url).pathname;
+  if (!jf.claims && !PUBLIC.some((re) => re.test(path))) return c.json({ Message: 'Unauthorized' }, 401);
+  const requestedUser = /^\/users\/([0-9a-f-]{32,36})(?:\/|$)/i.exec(path)?.[1] || jf.q('userid');
+  if (jf.claims && requestedUser && !path.includes('/images/') && plainGuid(requestedUser) !== jf.who.userId) return c.json({Message:'User does not match session'},403);
+  await next();
+});
+
+/** Dash 32-hex ids in id-shaped fields: the official SDKs parse them as UUIDs and refuse the bare form. */
+const ID_FIELD = /^(Id|ItemId|ParentId|SeriesId|SeasonId|UserId|ServerId|Key|DisplayPreferencesId|MediaSourceId|PlaylistItemId|OwnerId|Parent(Backdrop|Logo|Thumb|Primary|Art)ItemId|PrimaryImageItemId|BackdropImageItemId|ChannelId|AlbumId)$/;
+function dashIds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dashIds);
+  if (!value || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === 'string' && (ID_FIELD.test(k) || k.endsWith('Ids')) && /^[0-9a-f]{32}$/i.test(v)) out[k] = dashGuid(v.toLowerCase());
+    else if (Array.isArray(v) && k.endsWith('Ids')) out[k] = v.map((x) => (typeof x === 'string' && /^[0-9a-f]{32}$/i.test(x) ? dashGuid(x.toLowerCase()) : x));
+    else out[k] = dashIds(v);
+  }
+  return out;
+}
+
+function reply(c: C, body: unknown, status = 200): Response {
+  return c.json(dashIds(body) as never, status as never);
+}
+
+function lib(c: C): Library {
+  return new Library(c.get('jf'));
+}
+
+/** Acknowledge now, act after the response. Playback must never wait on a tracker. */
+function defer(c: C, work: () => Promise<unknown>): void {
+  const p = work().catch(() => { console.warn('Playback update failed before completion'); });
+  try {
+    c.executionCtx.waitUntil(p);
+  } catch {
+    /* no execution context (tests): the promise still runs */
+  }
+}
+
+function itemGuid(c: C, name = 'id'): { id: string; g: ReturnType<typeof decodeGuid> } {
+  const id = plainGuid(c.req.param(name));
+  return { id, g: decodeGuid(id) };
+}
+
+const notFound = (c: C) => reply(c, { Message: 'Item not found' }, 404);
+
+// ---------------------------------------------------------------------------
+// Handshake and authentication
+// ---------------------------------------------------------------------------
+
+inner.get('/system/info/public', (c) => {
+  const jf = c.get('jf');
+  return reply(c, publicSystemInfo(jf.ctx, jf.who, jf.base));
+});
+inner.get('/system/info', (c) => {
+  const jf = c.get('jf');
+  return reply(c, systemInfo(jf.ctx, jf.who, jf.base));
+});
+inner.all('/system/ping', (c) => c.json(c.get('jf').ctx.cfg.name || 'Titan'));
+
+inner.get('/quickconnect/enabled', (c) => c.json(true));
+inner.post('/quickconnect/initiate', async (c) => {
+  const jf = c.get('jf');
+  return reply(c, quickConnectDto(await startQuickConnect(jf.ctx, jf.client)));
+});
+inner.get('/quickconnect/connect', async (c) => {
+  const jf = c.get('jf');
+  const rec = await readQuickConnect(jf.ctx, String(jf.q('secret') ?? ''));
+  return rec ? reply(c, quickConnectDto(rec)) : reply(c, { Message: 'Unknown quick connect secret' }, 404);
+});
+inner.post('/quickconnect/authorize', async (c) => {
+  const jf = c.get('jf');
+  const rec = await approveQuickConnect(jf.ctx, String(jf.q('code') ?? jf.body.Code ?? ''));
+  return rec ? c.json(true) : reply(c, { Message: 'Unknown quick connect code' }, 404);
+});
+
+async function signIn(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  await registerAccount(jf.ctx,true);
+  const token = await mintToken(jf.ctx, jf.who.userId, jf.client.deviceId);
+  return reply(c, {
+    User: userDto(jf.ctx, jf.who),
+    SessionInfo: sessionDto(jf.ctx, jf.who, jf.client),
+    AccessToken: token,
+    ServerId: jf.who.serverId,
+  });
+}
+
+inner.post('/users/authenticatebyname', async (c) => {
+  const jf = c.get('jf');
+  const username = jf.body.Username ?? jf.body.username;
+  const password = jf.body.Pw ?? jf.body.pw ?? jf.body.Password ?? jf.body.password ?? '';
+  const profile = jf.ctx.cfg.jellyfin.profiles?.find(p => p.name.toLowerCase() === String(username ?? '').trim().toLowerCase());
+  const loginCtx = profile ? {...jf.ctx,cfg:{...jf.ctx.cfg,jellyfin:{...jf.ctx.cfg.jellyfin,username:profile.name}}} : jf.ctx;
+  if (!credentialsMatch(loginCtx, username, password)) return reply(c, { Message: 'Invalid username or password' }, 401);
+  jf.ctx = profileContext(jf.ctx,profile?.id)!;
+  jf.who = await identityOf(jf.ctx);
+  return signIn(c);
+});
+
+inner.post('/users/authenticatewithquickconnect', async (c) => {
+  const jf = c.get('jf');
+  const rec = await claimQuickConnect(jf.ctx, String(jf.body.Secret ?? jf.body.secret ?? ''));
+  if (!rec) return reply(c, { Message: 'Quick connect request is not approved' }, 401);
+  const scoped = profileContext(jf.ctx,rec.profileId);
+  if (!scoped) return reply(c,{Message:'Unknown profile'},401);
+  jf.ctx = scoped; jf.who = await identityOf(scoped);
+  return signIn(c);
+});
+
+inner.post('/sessions/logout', async (c) => {
+  await revokeToken(c.get('jf').ctx, tokenOf(c.req.raw));
+  return c.body(null,204);
+});
+
+inner.get('/tracking/status', async c => {
+  const ctx=c.get('jf').ctx;
+  if (!ctx.env.DB) return c.json({durable:false,pending:0,failed:0,services:[]});
+  if (ctx.profile && !ctx.profile.sharesHistory) return c.json({durable:true,pending:0,failed:0,services:[]});
+  const rows=await ctx.env.DB.prepare("SELECT service,status,count(*) AS count FROM deliveries WHERE scope=? AND status IN ('pending','failed') GROUP BY service,status").bind(ctx.scope).all<{service:string;status:string;count:number}>();
+  const bulk=await ctx.env.DB.prepare("SELECT COALESCE(SUM(json_array_length(events)-position),0) AS remaining FROM bulk_actions WHERE scope=? AND status='pending'").bind(ctx.scope).first<{remaining:number}>();
+  return c.json({durable:true,pending:(bulk?.remaining ?? 0)+rows.results.filter(r=>r.status==='pending').reduce((s,r)=>s+r.count,0),failed:rows.results.filter(r=>r.status==='failed').reduce((s,r)=>s+r.count,0),services:rows.results});
+});
+
+inner.post('/tracking/retry', async c => {
+  const ctx=c.get('jf').ctx;
+  if (!ctx.env.DB) return c.json({Message:'Durable storage is not configured'},409);
+  if (ctx.profile && !ctx.profile.sharesHistory) return c.json({Message:'Profile has independent history'},403);
+  const result=await ctx.env.DB.prepare("UPDATE deliveries SET status='pending',attempts=0,due=?,lease=NULL,lease_until=0 WHERE scope=? AND status='failed'").bind(Date.now(),ctx.scope).run();
+  return c.json({queued:result.meta.changes});
+});
+
+inner.get('/users/public', async (c) => reply(c,(await profileUsers(c.get('jf').ctx)).map(p => userDto(p.ctx,p.who))));
+inner.get('/users/me', (c) => {
+  const jf = c.get('jf');
+  return reply(c, userDto(jf.ctx, jf.who));
+});
+inner.get('/users', async (c) => reply(c,(await profileUsers(c.get('jf').ctx)).map(p => userDto(p.ctx,p.who))));
+inner.post('/users/:uid/configuration', (c) => c.body(null, 204));
+inner.post('/users/:uid/policy', (c) => c.body(null, 204));
+inner.post('/users/configuration', (c) => c.body(null, 204));
+
+inner.get('/sessions', (c) => {
+  const jf = c.get('jf');
+  return reply(c, [sessionDto(jf.ctx, jf.who, jf.client)]);
+});
+inner.post('/sessions/capabilities', (c) => c.body(null, 204));
+inner.post('/sessions/capabilities/full', (c) => c.body(null, 204));
+inner.post('/sessions/viewing', (c) => c.body(null, 204));
+
+inner.get('/socket', (c) => handleJellyfinSocket(c.get('jf').ctx, c.req.raw));
+inner.get('/embywebsocket', (c) => handleJellyfinSocket(c.get('jf').ctx, c.req.raw));
+
+// ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+async function viewsHandler(c: C): Promise<Response> {
+  const views = await lib(c).views();
+  return reply(c, listOf(views, views.length, 0));
+}
+inner.get('/users/:uid/views', viewsHandler);
+inner.get('/userviews', viewsHandler);
+inner.get('/library/mediafolders', viewsHandler);
+
+// Part of at least one client's startup; a 404 here is fatal.
+inner.get('/library/virtualfolders', async (c) => {
+  const views = await lib(c).views();
+  return reply(
+    c,
+    views.map((v) => ({
+      Name: v.Name,
+      Locations: [v.Path],
+      CollectionType: v.CollectionType ?? null,
+      LibraryOptions: { Enabled: true, EnableRealtimeMonitor: false, PathInfos: [] },
+      ItemId: v.Id,
+      PrimaryImageItemId: v.Id,
+      RefreshStatus: 'Idle',
+    })),
+  );
+});
+
+async function groupingHandler(c: C): Promise<Response> {
+  const views = await lib(c).views();
+  return reply(c, views.map((v) => ({ Name: v.Name, Id: v.Id })));
+}
+inner.get('/userviews/groupingoptions', groupingHandler);
+inner.get('/users/:uid/groupingoptions', groupingHandler);
+
+// ---------------------------------------------------------------------------
+// Items
+// ---------------------------------------------------------------------------
+
+function sortWithin(items: Dto[], sortBy: string[], descending: boolean): Dto[] {
+  const key = sortBy[0] ?? '';
+  const num = (v: unknown) => (typeof v === 'number' ? v : Number.NEGATIVE_INFINITY);
+  const cmp: ((a: Dto, b: Dto) => number) | null =
+    key === 'SortName' || key === 'Name'
+      ? (a, b) => String(a.SortName ?? a.Name ?? '').localeCompare(String(b.SortName ?? b.Name ?? ''))
+      : key === 'ProductionYear' || key === 'PremiereDate' || key === 'DateCreated'
+        ? (a, b) => Date.parse(String(a.PremiereDate ?? '')) - Date.parse(String(b.PremiereDate ?? ''))
+        : key === 'CommunityRating'
+          ? (a, b) => num(a.CommunityRating) - num(b.CommunityRating)
+          : key === 'Runtime'
+            ? (a, b) => num(a.RunTimeTicks) - num(b.RunTimeTicks)
+            : key === 'IndexNumber' || key === 'ParentIndexNumber'
+              ? (a, b) => num(a.ParentIndexNumber) - num(b.ParentIndexNumber) || num(a.IndexNumber) - num(b.IndexNumber)
+              : key === 'Random'
+                ? () => Math.random() - 0.5
+                : null;
+  if (!cmp) return items;
+  const sorted = [...items].sort(cmp);
+  return descending && key !== 'Random' ? sorted.reverse() : sorted;
+}
+
+function applyFilters(items: Dto[], filters: string[]): Dto[] {
+  let out = items;
+  const ud = (i: Dto) => (i.UserData ?? {}) as Dto;
+  if (filters.includes('IsPlayed')) out = out.filter((i) => ud(i).Played === true);
+  if (filters.includes('IsUnplayed')) out = out.filter((i) => ud(i).Played !== true);
+  if (filters.includes('IsResumable')) out = out.filter((i) => Number(ud(i).PlaybackPositionTicks ?? 0) > 0);
+  if (filters.includes('IsFavorite')) out = [];
+  return out;
+}
+
+/**
+ * A client builds one shelf per kind by ruling out the kinds another shelf
+ * owns. When that leaves nothing this server publishes, the shelf wants to be
+ * empty rather than showing the same titles under the wrong heading. Only
+ * movies and episodes are Video; a series is a folder.
+ */
+function nothingSurvives(jf: JfRequest): boolean {
+  const excluded = new Set(qList(jf, 'ExcludeItemTypes'));
+  const media = new Set(qList(jf, 'MediaTypes'));
+  if (!excluded.size && !media.size) return false;
+  return !(['Movie', 'Series', 'Episode'] as const).some((kind) => {
+    if (excluded.has(kind)) return false;
+    if (!media.size) return true;
+    return media.has(kind === 'Series' ? 'Unknown' : 'Video');
+  });
+}
+
+async function genreExtra(L: Library, jf: JfRequest): Promise<string | undefined> {
+  const names = qList(jf, 'Genres').length ? qList(jf, 'Genres') : qList(jf, 'Genre');
+  if (names.length) return names[0];
+  for (const raw of qList(jf, 'GenreIds')) {
+    const g = decodeGuid(raw);
+    if (g && g.kind === 'misc' && g.sub === 'genre') return L.genreNameOf(g);
+  }
+  return undefined;
+}
+
+/** Series or season children: seasons for a series, episodes for a season (or a recursive Episode query). */
+async function childrenOf(L: Library, jf: JfRequest, g: TitleGuid, wanted: Set<ItemType> | null): Promise<{ items: Dto[]; shows: Map<string, Show> } | null> {
+  const show = await L.show(g);
+  if (!show) return null;
+  const wantsEpisodes = g.kind === 'season' || (qBool(jf, 'Recursive', false) && (!wanted || wanted.has('Episode')));
+  const items = wantsEpisodes ? L.episodeItems(show, g.kind === 'season' ? g.season : undefined) : L.seasonItems(show);
+  const shows = new Map([[show.id, show]]);
+  await L.decorate(items, shows);
+  return { items, shows };
+}
+
+async function listItems(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const L = lib(c);
+  const start = Math.max(0, qInt(jf, 'StartIndex', 0));
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 100)), 500);
+  const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
+  const filters = qList(jf, 'Filters');
+  const sortBy = qList(jf, 'SortBy');
+  const descending = (jf.q('SortOrder') ?? '').toLowerCase() === 'descending';
+  const parentRaw = jf.q('ParentId');
+  const term = (jf.q('SearchTerm') ?? '').trim();
+
+  if (filters.includes('IsFavorite') || nothingSurvives(jf)) return reply(c, listOf([], 0, start));
+
+  // Particular items by id, not a listing.
+  const ids = qList(jf, 'Ids');
+  if (ids.length) {
+    const items: Dto[] = [];
+    for (const raw of ids.slice(0, 50)) {
+      const item = await singleItem(L, plainGuid(raw), false);
+      if (item) items.push(item);
+    }
+    return reply(c, listOf(items, items.length, 0));
+  }
+
+  if (term) {
+    const found = await L.search(term, wanted, start + limit);
+    return reply(c, listOf(found.slice(start, start + limit), found.length, start));
+  }
+
+  if (!parentRaw) {
+    if (!qBool(jf, 'Recursive', false)) {
+      const views = await L.views();
+      return reply(c, listOf(views.slice(start, start + limit), views.length, start));
+    }
+    // A cross-library listing walks the catalogs of the wanted kind in order
+    // with one running offset, so paging does not restart at every boundary.
+    const genre = await genreExtra(L, jf);
+    const pool = (await L.browsable()).filter((cat) => {
+      if (!wanted) return true;
+      const ct = collectionTypeOf(cat.type);
+      return ct === 'movies' ? wanted.has('Movie') : ct === 'tvshows' ? wanted.has('Series') : true;
+    });
+    const collected: Dto[] = [];
+    let offset = 0;
+    let more = false;
+    for (const cat of pool) {
+      if (collected.length >= limit) break;
+      const localStart = Math.max(0, start - offset);
+      const need = limit - collected.length;
+      const page = await L.window(cat, localStart, need, genre ? { genre } : {});
+      for (const m of page.items) {
+        const item = L.previewItem(m, cat, cat.viewId);
+        if (item && collected.length < limit) collected.push(item);
+      }
+      offset += localStart + page.items.length;
+      if (page.hasMore) {
+        more = true;
+        if (collected.length >= limit) break;
+      }
+    }
+    const items = sortWithin(applyFilters(await L.decorate(filterByType(collected, wanted)), filters), sortBy, descending);
+    return reply(c, listOf(items, more ? start + items.length + limit : start + items.length, start));
+  }
+
+  const parent = decodeGuid(parentRaw);
+  if (!parent) return reply(c, listOf([], 0, start));
+
+  if (parent.kind === 'series' || parent.kind === 'season') {
+    const found = await childrenOf(L, jf, parent, wanted);
+    if (!found) return reply(c, listOf([], 0, start));
+    let items = applyFilters(found.items, filters);
+    if (sortBy.length) items = sortWithin(items, sortBy, descending);
+    return reply(c, listOf(items.slice(start, start + limit), items.length, start));
+  }
+
+  if (parent.kind === 'movie' || parent.kind === 'episode') return reply(c, listOf([], 0, start));
+
+  const cat = await L.viewOf(parent as LabelGuid);
+  if (!cat) return reply(c, listOf([], 0, start));
+  const genre = await genreExtra(L, jf);
+  const page = await L.window(cat, start, limit, genre ? { genre } : {});
+  const built = page.items.map((m) => L.previewItem(m, cat, cat.viewId)).filter((x): x is Dto => Boolean(x));
+  const items = sortWithin(applyFilters(await L.decorate(filterByType(built, wanted)), filters), sortBy, descending);
+  // Catalogs report no total, so one page of lookahead keeps the client asking
+  // until a short window tells the truth.
+  const total = page.hasMore && items.length > 0 ? start + items.length + limit : start + items.length;
+  return reply(c, listOf(items, total, start));
+}
+
+/** Build one item by guid, with MediaSources attached when asked for through Fields. */
+async function singleItem(L: Library, id: string, withSources: boolean): Promise<Dto | null> {
+  const g = decodeGuid(id);
+  if (!g) return null;
+  if (g.kind === 'view') {
+    const cat = await L.viewOf(g);
+    return cat ? collectionFolder(cat.viewId, L.jf.who, cat.name, collectionTypeOf(cat.type)) : null;
+  }
+  if (g.kind === 'misc') return g.sub === 'genre' ? genreDto(await L.genreNameOf(g), L.jf.who) : null;
+
+  if (g.kind === 'movie' || g.kind === 'series') {
+    const meta = await L.meta(g);
+    if (!meta) return null;
+    const item = L.titleItemOf(meta, g);
+    const shows = new Map<string, Show>();
+    if (g.kind === 'series') {
+      const show = await L.show(g);
+      if (show) shows.set(show.id, show);
+    }
+    if (withSources && g.kind === 'movie') await attachSources(L, item, g, id);
+    await L.decorate([item], shows);
+    return item;
+  }
+
+  const show = await L.show(g);
+  if (!show) return null;
+  const shows = new Map([[show.id, show]]);
+  if (g.kind === 'season') {
+    const item = L.seasonItems(show).find((s) => s.IndexNumber === g.season);
+    if (!item) return null;
+    await L.decorate([item], shows);
+    return item;
+  }
+  const ep = L.findEpisode(show, g);
+  if (!ep) return null;
+  const item = L.episodeItem(show, ep);
+  if (withSources) await attachSources(L, item, g, id);
+  await L.decorate([item], shows);
+  return item;
+}
+
+/**
+ * A client that asks for MediaSources in Fields reads them straight off the
+ * item and reports "no file" without ever calling PlaybackInfo when absent.
+ * Only ever resolved for a single item, never a list.
+ */
+async function attachSources(L: Library, item: Dto, g: TitleGuid, id: string): Promise<void> {
+  const { sources } = await resolveSources(L, g, id);
+  if (!sources.length) return;
+  item.MediaSources = sources;
+  item.MediaStreams = sources[0].MediaStreams;
+  item.Container = sources[0].Container;
+  if (sources.length > 1) item.MediaSourceCount = sources.length;
+}
+
+async function singleItemHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const { id } = itemGuid(c);
+  const withSources = qList(jf, 'Fields').includes('MediaSources');
+  const item = await singleItem(lib(c), id, withSources);
+  return item ? reply(c, item) : notFound(c);
+}
+
+// Fixed paths (stubs, filters, latest, resume) must be registered before /items/:id.
+registerStubs(inner);
+inner.get('/items/filters', filtersHandler);
+inner.get('/items/filters2', filtersHandler);
+inner.get('/items/latest', latestHandler);
+inner.get('/users/:uid/items/latest', latestHandler);
+inner.get('/useritems/resume', resumeHandler);
+inner.get('/users/:uid/items/resume', resumeHandler);
+
+inner.get('/items', listItems);
+inner.get('/users/:uid/items', listItems);
+inner.get('/items/:id', singleItemHandler);
+inner.get('/users/:uid/items/:id', singleItemHandler);
+inner.get('/users/:uid', (c) => {
+  const jf = c.get('jf');
+  return reply(c, userDto(jf.ctx, jf.who));
+});
+
+// ---------------------------------------------------------------------------
+// Shelves
+// ---------------------------------------------------------------------------
+
+/** A bare array, not a list: some clients build their whole home from this. */
+async function latestHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const L = lib(c);
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
+  const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
+  const parent = decodeGuid(jf.q('ParentId'));
+  let cats: CatalogRef[] = [];
+  if (parent && parent.kind === 'view') {
+    const cat = await L.viewOf(parent);
+    if (cat) cats = [cat];
+  } else if (!parent) {
+    // No parent: the first catalog of each wanted kind, so the home page has something.
+    const all = await L.browsable();
+    const movies = all.find((x) => x.type === 'movie');
+    const shows = all.find((x) => x.type === 'series' || x.type === 'anime');
+    cats = [movies, shows].filter((x): x is CatalogRef => Boolean(x) && (!wanted || wanted.has(x!.type === 'movie' ? 'Movie' : 'Series')));
+  }
+  const items: Dto[] = [];
+  for (const cat of cats) items.push(...(await L.latest(cat, limit)));
+  return reply(c, filterByType(items, wanted).slice(0, limit));
+}
+
+async function resumeHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const start = Math.max(0, qInt(jf, 'StartIndex', 0));
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
+  const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
+  const { items, total } = await lib(c).resumeShelf(start, limit);
+  return reply(c, listOf(filterByType(items, wanted), total, start));
+}
+
+inner.get('/shows/nextup', async (c) => {
+  const jf = c.get('jf');
+  const start = Math.max(0, qInt(jf, 'StartIndex', 0));
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
+  // The client's recency cutoff is deliberately ignored: the tracker's own
+  // view of what is in progress is what people expect to see.
+  const { items, total } = await lib(c).nextUpShelf(start, limit, {
+    includeResumable: qBool(jf, 'EnableResumable', true),
+    includeRewatching: qBool(jf, 'EnableRewatching', false),
+  });
+  return reply(c, listOf(items, total, start));
+});
+
+inner.get('/shows/upcoming', async (c) => {
+  const jf = c.get('jf');
+  const start = Math.max(0, qInt(jf, 'StartIndex', 0));
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
+  const { items, total } = await lib(c).upcomingShelf(start, limit);
+  return reply(c, listOf(items, total, start));
+});
+
+// ---------------------------------------------------------------------------
+// Seasons, episodes, similar, ancestors
+// ---------------------------------------------------------------------------
+
+inner.get('/shows/:id/seasons', async (c) => {
+  const { g } = itemGuid(c);
+  if (!g || g.kind !== 'series') return reply(c, EMPTY_LIST);
+  const L = lib(c);
+  const show = await L.show(g);
+  if (!show) return reply(c, EMPTY_LIST);
+  const items = await L.decorate(L.seasonItems(show), new Map([[show.id, show]]));
+  return reply(c, listOf(items, items.length, 0));
+});
+
+inner.get('/shows/:id/episodes', async (c) => {
+  const jf = c.get('jf');
+  const { g } = itemGuid(c);
+  if (!g || (g.kind !== 'series' && g.kind !== 'season')) return reply(c, EMPTY_LIST);
+  const L = lib(c);
+  const show = await L.show(g);
+  if (!show) return reply(c, EMPTY_LIST);
+  let season: number | undefined = g.kind === 'season' ? g.season : undefined;
+  const rawSeason = jf.q('Season');
+  if (rawSeason !== undefined && /^\d+$/.test(rawSeason)) season = Number(rawSeason);
+  else {
+    const sg = decodeGuid(jf.q('SeasonId'));
+    if (sg && sg.kind === 'season') season = sg.season;
+  }
+  let items = await L.decorate(L.episodeItems(show, season), new Map([[show.id, show]]));
+  items = applyFilters(items, qList(jf, 'Filters'));
+  const start = Math.max(0, qInt(jf, 'StartIndex', 0));
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', items.length || 1)), 1000);
+  return reply(c, listOf(items.slice(start, start + limit), items.length, start));
+});
+
+async function similarHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const { g } = itemGuid(c);
+  if (!g || g.kind === 'view' || g.kind === 'misc') return reply(c, EMPTY_LIST);
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 12)), 50);
+  const title = g.kind === 'movie' || g.kind === 'series' ? g : parentSeriesOf(g);
+  const items = await lib(c).similar(title, limit);
+  return reply(c, listOf(items, items.length, 0));
+}
+inner.get('/items/:id/similar', similarHandler);
+inner.get('/movies/:id/similar', similarHandler);
+inner.get('/shows/:id/similar', similarHandler);
+
+// Walked for a breadcrumb when a client opens an item: a season names its
+// series, an episode names both.
+inner.get('/items/:id/ancestors', async (c) => {
+  const { g } = itemGuid(c);
+  if (!g || (g.kind !== 'episode' && g.kind !== 'season')) return reply(c, []);
+  const L = lib(c);
+  const show = await L.show(g);
+  if (!show) return reply(c, []);
+  const chain: Dto[] = [];
+  if (g.kind === 'episode') {
+    const season = L.seasonItems(show).find((s) => s.IndexNumber === (g.season ?? 1));
+    if (season) chain.push(season);
+  }
+  chain.push(L.titleItemOf(show.meta, show.guid));
+  return reply(c, chain);
+});
+
+// ---------------------------------------------------------------------------
+// Genres, filters, search
+// ---------------------------------------------------------------------------
+
+async function genresFor(L: Library, jf: JfRequest): Promise<string[]> {
+  const parent = decodeGuid(jf.q('ParentId'));
+  const cats = await L.browsable();
+  if (parent && parent.kind === 'view') {
+    const cat = await L.viewOf(parent);
+    return cat ? cat.genres : [];
+  }
+  const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
+  const all = new Set<string>();
+  for (const cat of cats) {
+    const ct = collectionTypeOf(cat.type);
+    if (wanted && !(ct === 'movies' ? wanted.has('Movie') : wanted.has('Series'))) continue;
+    for (const g of cat.genres) all.add(g);
+  }
+  return [...all].sort();
+}
+
+inner.get('/genres', async (c) => {
+  const jf = c.get('jf');
+  const genres = await genresFor(lib(c), jf);
+  const items = genres.map((name) => genreDto(name, jf.who));
+  return reply(c, listOf(items, items.length, 0));
+});
+
+// Looked up by name; an unknown name still answers with a genre so a stale link renders.
+inner.get('/genres/:name', async (c) => {
+  const jf = c.get('jf');
+  const segment = jf.rawPath.split('/').filter(Boolean)[1] ?? c.req.param('name');
+  const name = decodeURIComponent(segment);
+  const genres = await genresFor(lib(c), { ...jf, q: () => undefined });
+  const match = genres.find((g) => g.toLowerCase() === name.toLowerCase()) ?? name;
+  return reply(c, genreDto(match, jf.who));
+});
+
+async function filtersHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const genres = await genresFor(lib(c), jf);
+  return reply(c, {
+    Genres: genres,
+    Tags: [],
+    OfficialRatings: [],
+    Years: [],
+    GenreItems: genres.map((name) => ({ Name: name, Id: genreIdOf(name), ServerId: jf.who.serverId })),
+  });
+}
+
+inner.get('/search/hints', async (c) => {
+  const jf = c.get('jf');
+  const term = (jf.q('SearchTerm') ?? '').trim();
+  const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 50);
+  if (!term) return reply(c, { SearchHints: [], TotalRecordCount: 0 });
+  const items = (await lib(c).search(term, includeTypesOf(qList(jf, 'IncludeItemTypes')), limit)).slice(0, limit);
+  return reply(c, {
+    SearchHints: items.map((i) => ({
+      ItemId: i.Id,
+      Id: i.Id,
+      Name: i.Name,
+      Type: i.Type,
+      MediaType: i.MediaType ?? 'Video',
+      ProductionYear: i.ProductionYear,
+      PrimaryImageTag: (i.ImageTags as Dto | undefined)?.Primary,
+      BackdropImageTag: (i.BackdropImageTags as string[] | undefined)?.[0],
+      BackdropImageItemId: i.Id,
+      PrimaryImageAspectRatio: i.PrimaryImageAspectRatio,
+      RunTimeTicks: i.RunTimeTicks,
+    })),
+    TotalRecordCount: items.length,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playback
+// ---------------------------------------------------------------------------
+
+async function playbackHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const { id, g } = itemGuid(c);
+  if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return reply(c, { MediaSources: [], PlaySessionId: '', ErrorCode: 'NotAllowed' }, 404);
+  const { sources } = await resolveSources(lib(c), g, id);
+  const wanted = jf.q('MediaSourceId') ?? (typeof jf.body.MediaSourceId === 'string' ? jf.body.MediaSourceId : undefined);
+  return reply(c, playbackInfo(sources, wanted, id));
+}
+inner.get('/items/:id/playbackinfo', playbackHandler);
+inner.post('/items/:id/playbackinfo', playbackHandler);
+inner.get('/items/:id/mediasources', async (c) => {
+  const { id, g } = itemGuid(c);
+  if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return reply(c, []);
+  const { sources } = await resolveSources(lib(c), g, id);
+  return reply(c, sources);
+});
+
+/**
+ * Some clients never fetch the URL a MediaSource carries: they ask the server
+ * for the video and expect to be sent on. Streams are re-resolved (from the
+ * short stream cache when possible) and matched by the hashed source id.
+ */
+async function videoHandler(c: C): Promise<Response> {
+  const jf = c.get('jf');
+  const { id, g } = itemGuid(c);
+  if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return notFound(c);
+  const { sources } = await resolveSources(lib(c), g, id);
+  const chosen = pickSource(sources, jf.q('MediaSourceId'), id);
+  if (!chosen || typeof chosen.Path !== 'string') return reply(c, { Message: chosen === null && sources.length ? 'Media source not found' : 'No playable stream' }, 404);
+  return new Response(null, { status: 302, headers: { location: chosen.Path, 'cache-control': 'no-store' } });
+}
+// `stream`, `stream.mkv`, `original.mp4`, `stream/anything.mkv`: a dotted
+// segment is matched as one param and checked by hand, since a route pattern
+// cannot split a segment on the dot.
+const VIDEO_FILE = /^(stream|original)(\.[a-z0-9]+)?$/i;
+const videoFileHandler = (c: C) => (VIDEO_FILE.test(c.req.param('file') ?? '') ? videoHandler(c) : c.notFound());
+for (const path of ['/videos/:id/:file', '/videos/:id/stream/:filename']) {
+  inner.get(path, path.endsWith(':file') ? videoFileHandler : videoHandler);
+  inner.on('HEAD', path, path.endsWith(':file') ? videoFileHandler : videoHandler);
+}
+
+async function subtitleHandler(c: C): Promise<Response> {
+  const { id, g } = itemGuid(c);
+  if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return notFound(c);
+  const { sources } = await resolveSources(lib(c), g, id);
+  const index = parseInt(c.req.param('index') ?? '', 10);
+  if (!Number.isFinite(index)) return notFound(c);
+  const fmt = /\.([a-z0-9]+)$/i.exec(c.req.param('file') ?? '')?.[1] ?? 'srt';
+  return subtitleResponse(sources, c.req.param('msid') ?? '', index, fmt);
+}
+inner.get('/videos/:id/:msid/subtitles/:index/:file', subtitleHandler);
+inner.get('/videos/:id/:msid/subtitles/:index/:start/:file', subtitleHandler);
+
+// ---------------------------------------------------------------------------
+// Playstate
+// ---------------------------------------------------------------------------
+
+function report(c: C, paramName?: string) {
+  const jf = c.get('jf');
+  const paused = jf.q('IsPaused')?.toLowerCase();
+  return reportOf({
+    ...jf.body,
+    PositionTicks: jf.body.PositionTicks ?? jf.body.positionTicks ?? jf.q('PositionTicks'),
+    IsPaused: jf.body.IsPaused ?? jf.body.isPaused ?? (paused === 'true' ? true : paused === 'false' ? false : undefined),
+    PlaySessionId: jf.body.PlaySessionId ?? jf.body.playSessionId ?? jf.q('PlaySessionId'),
+    RunTimeTicks: jf.body.RunTimeTicks ?? jf.body.runTimeTicks ?? jf.q('RunTimeTicks'),
+  }, paramName ? c.req.param(paramName) : undefined);
+}
+
+inner.post('/sessions/playing', async (c) => {
+  const r = report(c);
+  if (r) { if (c.get('jf').ctx.env.DB) await onPlaying(lib(c),r); else defer(c, () => onPlaying(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.post('/playingitems/:id', async (c) => {
+  const r = report(c, 'id');
+  if (r) { if (c.get('jf').ctx.env.DB) await onPlaying(lib(c),r); else defer(c, () => onPlaying(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.post('/sessions/playing/progress', async (c) => {
+  const r = report(c);
+  if (r) { if (c.get('jf').ctx.env.DB) await onProgress(lib(c),r); else defer(c, () => onProgress(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.post('/playingitems/:id/progress', async (c) => {
+  const r = report(c, 'id');
+  if (r) { if (c.get('jf').ctx.env.DB) await onProgress(lib(c),r); else defer(c, () => onProgress(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.post('/sessions/playing/stopped', async (c) => {
+  const r = report(c);
+  if (r) { if (c.get('jf').ctx.env.DB) await onStopped(lib(c),r); else defer(c, () => onStopped(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.delete('/playingitems/:id', async (c) => {
+  const r = report(c, 'id');
+  if (r) { if (c.get('jf').ctx.env.DB) await onStopped(lib(c),r); else defer(c, () => onStopped(lib(c),r)); }
+  return c.body(null, 204);
+});
+inner.post('/sessions/playing/ping', (c) => c.body(null, 204));
+
+// A client reads the new state back out of this response rather than trusting
+// a bare acknowledgement; an empty body reads as "unsupported".
+const markPlayed = (watched: boolean) => async (c: C) => reply(c, await setPlayed(lib(c), c.req.param('id') ?? '', watched));
+inner.post('/users/:uid/playeditems/:id', markPlayed(true));
+inner.delete('/users/:uid/playeditems/:id', markPlayed(false));
+inner.post('/userplayeditems/:id', markPlayed(true));
+inner.delete('/userplayeditems/:id', markPlayed(false));
+
+const userDataHandler = async (c: C) => reply(c, await updateUserData(lib(c), c.req.param('id') ?? '', c.get('jf').body));
+inner.post('/items/:id/userdata', userDataHandler);
+inner.post('/useritems/:id/userdata', userDataHandler);
+inner.post('/users/:uid/items/:id/userdata', userDataHandler);
+
+// ---------------------------------------------------------------------------
+// Images
+// ---------------------------------------------------------------------------
+
+async function imageHandler(c: C): Promise<Response> {
+  const url = await imageUrlFor(lib(c), plainGuid(c.req.param('id')), c.req.param('type') ?? 'primary');
+  return url ? redirectTo(url) : c.body(null, 404);
+}
+inner.get('/items/:id/images/:type', imageHandler);
+inner.get('/items/:id/images/:type/:index', imageHandler);
+inner.on('HEAD', '/items/:id/images/:type', imageHandler);
+async function profileImage(c: C): Promise<Response> {
+  const profile = (await profileUsers(c.get('jf').ctx)).find(p => p.who.userId === plainGuid(c.req.param('uid')));
+  const url = profile?.ctx.profile?.avatar;
+  return url ? c.redirect(url,302) : c.body(null,404);
+}
+inner.get('/users/:uid/images/:type',profileImage);
+inner.get('/users/:uid/images/:type/:index',profileImage);
+
+// ---------------------------------------------------------------------------
+// Stubs and fallthrough
+// ---------------------------------------------------------------------------
+
+inner.notFound((c) => c.json({ Message: `Unsupported Jellyfin endpoint: ${c.req.method} ${c.get('jf')?.rawPath ?? ''}` }, 404));
+inner.onError((err, c) => c.json({ Message: err instanceof Error ? err.message : 'Internal error' }, 500));
+
+/** Guid an item id decodes to, exposed for the integrator's diagnostics. */
+export function describeJellyfinId(raw: string): ReturnType<typeof decodeGuid> {
+  return decodeGuid(raw);
+}
+
+export { encodeGuid as encodeJellyfinId };

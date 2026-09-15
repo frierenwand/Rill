@@ -1,0 +1,76 @@
+{
+  "tag": "ghcr.io/cedya77/aiometadata:jellyfin",
+  "digest": "sha256:6496d0c4a67ff37cfa982f2168271a5e04848ba93e001b322926e032af8b62ff",
+  "platformDigest": "sha256:d52a28037ea6b5fd8dab5906e2efe7fbbc253ff6990aef7281252887ab4789cb",
+  "labels": {},
+  "created": "2026-09-11T20:00:21.427369569Z",
+  "sourceCommit": "ad78577397f550a749439e61d2c17cbb7bd15ca9",
+  "verifiedAddonLayer": "sha256:963c1a6567cec5760e9bc0285bce543147bd8b17daa12833af0fd846c484a0cb",
+  "files": [
+    {
+      "path": "lib/jellyfin/playstate.ts",
+      "matchesSource": true,
+      "sha256": "6276e49820e6ba26a6a58fd4cb2a230fc84bf719b84bbea130c1f0207b5c84ef"
+    },
+    {
+      "path": "lib/jellyfin/index.ts",
+      "matchesSource": true,
+      "sha256": "42f2e85577cb63e874417b1c0103c6fcccb96f93e44470fc3e5db534c63b4902"
+    },
+    {
+      "path": "lib/jellyfin/streams.ts",
+      "matchesSource": true,
+      "sha256": "5c4333e9982e89ca038a3e1d94f37205fb2112352e6b1ecdc028aab545d9fd31"
+    },
+    {
+      "path": "lib/jellyfin/profiles.ts",
+      "matchesSource": true,
+      "sha256": "ac2a69903bf213f05482d8ca0cdd173e864a0639a756f394232d98aa78b7c6c7"
+    },
+    {
+      "path": "lib/jellyfin/playstateSync.ts",
+      "matchesSource": true,
+      "sha256": "8db8ac7520c2e46ae7192f61f7e181bf9f0dd03cd62e316d1323341aa5c47029"
+    },
+    {
+      "path": "lib/jellyfin/tokens.ts",
+      "matchesSource": true,
+      "sha256": "dbcb1e951d290b58e2dd8da02e66d10f15e153dfb19dc61ec70c00a636eae97d"
+    },
+    {
+      "path": "lib/anime-list-mapper.js",
+      "matchesSource": true,
+      "sha256": "4a61fbb3031e2fcd06680bde5edb8ec5843a93bbb1a2bbb5c643898755742bef"
+    },
+    {
+      "path": "lib/id-mapper.js",
+      "matchesSource": true,
+      "sha256": "21c39b18687241bb47973fcce744aa64c8e4dab7817c907c63466b7150c61923"
+    },
+    {
+      "path": "lib/playbackHandler.ts",
+      "matchesSource": true,
+      "sha256": "675b06ed891c396cb2daf59a78eb3eeb6bbfe3b0dafc8e652ce92f46fdd71583"
+    },
+    {
+      "path": "utils/traktUtils.ts",
+      "matchesSource": true,
+      "sha256": "593a50866985ca09ff3ba1d686cef7deedde1b0bdf9cb8bf304bc2acbb2cfba2"
+    },
+    {
+      "path": "utils/simklUtils.ts",
+      "matchesSource": true,
+      "sha256": "f848343065af9ed5d864db76a294f2a1dfd8e3a806fd2e69713a7fa8f362c5c5"
+    },
+    {
+      "path": "utils/mdblistUtils.ts",
+      "matchesSource": true,
+      "sha256": "86fffe4ae2aa513872a1597526463b8e23161d5177f941cae1895fd97f1ba052"
+    },
+    {
+      "path": "utils/publicmetadbUtils.ts",
+      "matchesSource": true,
+      "sha256": "da9c832f8e9e2180087e7dde985924135874ee324c045ebb0c7e26553b775f95"
+    }
+  ]
+}

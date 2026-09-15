@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "titan",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Replace database_id with the ID of the D1 database you create in the Cloudflare dashboard.
+  "d1_databases": [{ "binding": "DB", "database_name": "rill", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "migrations" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true },
+  // TITAN_SECRET (recommended) and TMDB_KEY (optional) are set as secrets in the
+  // Cloudflare dashboard under Settings -> Variables and Secrets. Do not put them here.
+  "vars": {}
+}

@@ -1,0 +1,53 @@
+/**
+ * Stremio manifest for a user's config. Every catalog listed here is one the
+ * user enabled (or a default set when they never touched the picker).
+ */
+import { BRAND_LOGO, BRAND_NAME } from '../brand';
+import type { Ctx } from '../context';
+import type { Manifest, ManifestCatalog } from '../stremio/types';
+import { enabledCatalogDefinitions, type CatalogDefinition } from './catalogs';
+
+export const ADDON_ID = 'community.titan';
+export const ADDON_VERSION = '0.1.0';
+
+/** Every id family Titan can answer meta for. */
+export const ID_PREFIXES = ['tt', 'tmdb:', 'tvdb:', 'kitsu:', 'mal:', 'anilist:', 'anidb:'];
+
+/** Inline logo so clients never need a second request to render the addon tile. */
+export const LOGO_DATA_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BRAND_LOGO)}`;
+
+export function catalogToManifestEntry(def: CatalogDefinition): ManifestCatalog {
+  const entry: ManifestCatalog = { type: def.type, id: def.id, name: def.name };
+  if (def.extra?.length) {
+    entry.extra = def.extra;
+    entry.extraSupported = def.extra.map((e) => e.name);
+    const required = def.extra.filter((e) => e.isRequired).map((e) => e.name);
+    if (required.length) entry.extraRequired = required;
+  }
+  if (def.genres?.length) entry.genres = def.genres;
+  return entry;
+}
+
+export async function buildManifest(ctx: Ctx): Promise<Manifest> {
+  const defs = await enabledCatalogDefinitions(ctx);
+  const catalogs = defs.map(catalogToManifestEntry);
+  const types = Array.from(new Set<string>(['movie', 'series', 'anime', ...catalogs.map((c) => c.type)]));
+  const name = ctx.cfg.name?.trim() || BRAND_NAME;
+  return {
+    id: ADDON_ID,
+    version: ADDON_VERSION,
+    name,
+    description: `${name}: metadata, catalogs, personal lists and search for Stremio, backed by TMDB, TVDB, MAL, AniList, Kitsu, Trakt, Simkl and MDBList.`,
+    logo: LOGO_DATA_URI,
+    resources: [
+      'catalog',
+      { name: 'meta', types: ['movie', 'series', 'anime'], idPrefixes: ID_PREFIXES },
+      { name: 'stream', types: ['movie', 'series', 'anime'], idPrefixes: ID_PREFIXES },
+      { name: 'subtitles', types: ['movie', 'series', 'anime'], idPrefixes: ID_PREFIXES },
+    ],
+    types,
+    idPrefixes: ID_PREFIXES,
+    catalogs,
+    behaviorHints: { configurable: true, configurationRequired: false, adult: ctx.cfg.search.includeAdult === true },
+  };
+}

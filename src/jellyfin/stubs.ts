@@ -1,0 +1,133 @@
+/**
+ * Surfaces stock clients probe that mean nothing here. Empty answers keep them
+ * quiet; a genuinely unknown route still falls through to a 404, never a 401,
+ * which some clients read as "log me out".
+ *
+ * Paths are lowercase: the router lower-cases every request path before
+ * matching, because clients mix `/Users/Me` and `/users/me` freely.
+ */
+import type { Hono } from 'hono';
+import type { JfEnv } from './request';
+
+export const EMPTY_LIST = { Items: [] as unknown[], TotalRecordCount: 0, StartIndex: 0 };
+
+const EMPTY_LIST_ROUTES = [
+  '/years',
+  '/studios',
+  '/persons',
+  '/artists',
+  '/artists/albumartists',
+  '/musicgenres',
+  '/channels',
+  '/playlists',
+  '/collections',
+  '/trailers',
+  '/items/suggestions',
+  '/users/:uid/suggestions',
+  '/items/:id/intros',
+  '/users/:uid/items/intros',
+  '/users/:uid/items/:id/intros',
+  '/items/:id/specialfeatures',
+  '/users/:uid/items/:id/specialfeatures',
+  '/items/:id/localtrailers',
+  '/users/:uid/items/:id/localtrailers',
+  '/items/:id/themesongs',
+  '/items/:id/themevideos',
+  '/items/:id/chapters',
+  '/videos/:id/additionalparts',
+  '/mediasegments/:id',
+  '/system/activitylog/entries',
+  '/livetv/programs',
+  '/livetv/recordings',
+  '/livetv/timers',
+  '/livetv/seriestimers',
+  '/livetv/channels',
+  '/livetv/programs/recommended',
+  '/livetv/recordings/folders',
+];
+
+const EMPTY_ARRAY_ROUTES = [
+  '/plugins',
+  '/scheduledtasks',
+  '/packages',
+  '/repositories',
+  '/devices',
+  '/notifications/types',
+  '/notifications/services',
+  '/auth/keys',
+  '/auth/passwordresetproviders',
+  '/auth/providers',
+  '/environment/drives',
+  '/library/physicalpaths',
+  '/sessions/syncplay/list',
+  '/syncplay/list',
+  '/localization/cultures',
+  '/localization/countries',
+  '/localization/parentalratings',
+];
+
+export function displayPreferences(id: string): Record<string, unknown> {
+  return {
+    Id: id,
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    RememberIndexing: false,
+    RememberSorting: false,
+    PrimaryImageHeight: 250,
+    PrimaryImageWidth: 250,
+    ScrollDirection: 'Horizontal',
+    ShowBackdrop: true,
+    ShowSidebar: false,
+    Client: 'emby',
+    CustomPrefs: {},
+  };
+}
+
+export function registerStubs(app: Hono<JfEnv>): void {
+  for (const path of EMPTY_LIST_ROUTES) app.get(path, (c) => c.json(EMPTY_LIST));
+  for (const path of EMPTY_ARRAY_ROUTES) app.get(path, (c) => c.json([]));
+
+  app.get('/items/:id/thememedia', (c) => {
+    const empty = { ...EMPTY_LIST, OwnerId: c.req.param('id') };
+    return c.json({ ThemeVideosResult: empty, ThemeSongsResult: empty, SoundtrackSongsResult: empty });
+  });
+
+  app.get('/livetv/info', (c) => c.json({ Services: [], IsEnabled: false, EnabledUsers: [] }));
+
+  app.get('/branding/configuration', (c) => c.json({ LoginDisclaimer: '', CustomCss: '', SplashscreenEnabled: false }));
+  app.get('/branding/splashscreen', (c) => c.body(null, 404));
+  // The web client asks for this while the sign-in page loads, before it has a token.
+  app.get('/branding/css', (c) => c.text('', 200, { 'content-type': 'text/css' }));
+  app.get('/branding/css.css', (c) => c.text('', 200, { 'content-type': 'text/css' }));
+
+  app.get('/localization/options', (c) => c.json([{ Name: 'English', Value: 'en-US' }]));
+
+  app.get('/displaypreferences/:id', (c) => c.json(displayPreferences(c.req.param('id'))));
+  app.post('/displaypreferences/:id', (c) => c.body(null, 204));
+
+  app.get('/system/endpoint', (c) => c.json({ IsLocal: false, IsInNetwork: false }));
+  app.get('/system/configuration', (c) => c.json({ EnableMetrics: false, ServerName: c.get('jf').ctx.cfg.name || 'Titan' }));
+  app.get('/system/logs', (c) => c.json([]));
+
+  app.get('/startup/configuration', (c) => c.json({ UICulture: 'en-US', MetadataCountryCode: 'US', PreferredMetadataLanguage: 'en' }));
+  app.get('/startup/user', (c) => c.json({ Name: c.get('jf').ctx.cfg.jellyfin.username, Password: '' }));
+  app.get('/startup/firstuser', (c) => c.json({ Name: c.get('jf').ctx.cfg.jellyfin.username, Password: '' }));
+  app.post('/startup/*', (c) => c.body(null, 204));
+
+  app.get('/items/counts', (c) =>
+    c.json({
+      MovieCount: 0, SeriesCount: 0, EpisodeCount: 0, ArtistCount: 0, ProgramCount: 0, TrailerCount: 0,
+      SongCount: 0, AlbumCount: 0, MusicVideoCount: 0, BoxSetCount: 0, BookCount: 0, ItemCount: 0,
+    }),
+  );
+
+  // Favourites are not a tracker concept; a client reads the state back out of the answer.
+  const notFavourite = (c: { req: { param: (n: string) => string }; json: (b: unknown) => Response }) => {
+    const id = c.req.param('id');
+    return c.json({ PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: id, ItemId: id });
+  };
+  app.post('/users/:uid/favoriteitems/:id', notFavourite);
+  app.delete('/users/:uid/favoriteitems/:id', notFavourite);
+  app.post('/userfavoriteitems/:id', notFavourite);
+  app.delete('/userfavoriteitems/:id', notFavourite);
+}
