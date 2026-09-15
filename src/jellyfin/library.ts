@@ -312,7 +312,9 @@ export class Library {
   }
 
   async views(): Promise<Dto[]> {
-    return (await this.browsable()).map((c) => collectionFolder(c.viewId, this.jf.who, c.name, collectionTypeOf(c.type)));
+    const { visibleCollections, collectionViewDto } = await import('./collections');
+    const collections = (await visibleCollections(this)).map((c) => collectionViewDto(this, c));
+    return [...collections, ...(await this.browsable()).map((c) => collectionFolder(c.viewId, this.jf.who, c.name, collectionTypeOf(c.type)))];
   }
 
   async viewOf(g: LabelGuid | null | undefined): Promise<CatalogRef | null> {

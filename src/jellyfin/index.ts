@@ -31,6 +31,7 @@ import { personFor,creditsFor } from './people';
 import { applyAgeCap } from '../addon/agecap';
 import type { Meta } from '../stremio/types';
 import { collectionMembers } from '../addon/collections';
+import { boxSetDto, boxSetMembers, boxSetOf, collectionOf, collectionViewDto, visibleCollections } from './collections';
 
 export { handleJellyfinSocket } from './socket';
 
@@ -433,6 +434,11 @@ async function listItems(c: C): Promise<Response> {
       const views = await L.views();
       return reply(c, listOf(views.slice(start, start + limit), views.length, start));
     }
+    if (wanted?.has('BoxSet') && !wanted.has('Movie') && !wanted.has('Series')) {
+      const sets = (await visibleCollections(L)).flatMap((col) => col.folders.map((f) => boxSetDto(L, col, f)));
+      const items = sortWithin(sets, sortBy, descending);
+      return reply(c, listOf(items.slice(start, start + limit), items.length, start));
+    }
     const genre = await genreExtra(L, jf);
     const pool = (await L.browsable()).filter((cat) => {
       if (!wanted) return true;
@@ -463,6 +469,19 @@ async function listItems(c: C): Promise<Response> {
 
   const parent = decodeGuid(parentRaw);
   if (!parent) return reply(c, listOf([], 0, start));
+  if (parent.kind === 'misc' && parent.sub === 'collection') {
+    const col = await collectionOf(L, parent);
+    if (!col) return reply(c, listOf([], 0, start));
+    const items = sortWithin(col.folders.map((f) => boxSetDto(L, col, f)), sortBy, descending);
+    return reply(c, listOf(items.slice(start, start + limit), items.length, start));
+  }
+  if (parent.kind === 'misc' && parent.sub === 'boxset') {
+    const found = await boxSetOf(L, parent);
+    if (!found) return reply(c, listOf([], 0, start));
+    const page = await boxSetMembers(L, found.folder, start, limit);
+    const items = sortWithin(applyFilters(filterByType(page.items, wanted), filters), sortBy, descending);
+    return reply(c, listOf(items, page.hasMore ? start + items.length + limit : start + items.length, start));
+  }
   if(parent.kind==='movie'&&(parent.source==='tvdbc'||parent.source==='tmdbc')) {
     const members=await collectionMembers(jf.ctx,`${parent.source}:${parent.num}`,start,limit);
     const safe=await applyAgeCap(jf.ctx,'movie',members.items);
@@ -500,6 +519,14 @@ async function singleItem(L: Library, id: string, withSources: boolean): Promise
   }
   if (g.kind === 'misc') {
     if(g.sub==='genre')return genreDto(await L.genreNameOf(g),L.jf.who);
+    if (g.sub === 'collection') {
+      const col = await collectionOf(L, g);
+      return col ? collectionViewDto(L, col) : null;
+    }
+    if (g.sub === 'boxset') {
+      const found = await boxSetOf(L, g);
+      return found ? boxSetDto(L, found.collection, found.folder) : null;
+    }
     const person=await personFor(L.ctx,g);
     return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday??null,EndDate:person.deathday??null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ImageTags:person.profile_path?{Primary:`https://image.tmdb.org/t/p/h632${person.profile_path}`}:{},IsFolder:false}:null;
   }
@@ -586,6 +613,10 @@ async function latestHandler(c: C): Promise<Response> {
   const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
   const parent = decodeGuid(jf.q('ParentId'));
   let cats: CatalogRef[] = [];
+  if (parent && parent.kind === 'misc' && parent.sub === 'collection') {
+    const col = await collectionOf(L, parent);
+    return reply(c, col ? col.folders.slice(0, limit).map((f) => boxSetDto(L, col, f)) : []);
+  }
   if (parent && parent.kind === 'view') {
     const cat = await L.viewOf(parent);
     if (cat) cats = [cat];
@@ -674,8 +705,12 @@ inner.get('/shows/:id/similar', similarHandler);
 
 inner.get('/items/:id/ancestors', async (c) => {
   const { g } = itemGuid(c);
-  if (!g || (g.kind !== 'episode' && g.kind !== 'season')) return reply(c, []);
   const L = lib(c);
+  if (g?.kind === 'misc' && g.sub === 'boxset') {
+    const found = await boxSetOf(L, g);
+    return reply(c, found ? [collectionViewDto(L, found.collection)] : []);
+  }
+  if (!g || (g.kind !== 'episode' && g.kind !== 'season')) return reply(c, []);
   const show = await L.show(g);
   if (!show) return reply(c, []);
   const chain: Dto[] = [];

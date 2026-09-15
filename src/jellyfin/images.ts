@@ -2,6 +2,7 @@ import type { Meta } from '../stremio/types';
 import { decodeGuid } from './ids';
 import type { Library } from './library';
 import { personFor } from './people';
+import { boxSetCoverUrl, boxSetOf, collectionOf } from './collections';
 
 export type ImageKind = 'primary' | 'backdrop' | 'logo' | 'thumb' | 'banner' | 'art';
 
@@ -26,6 +27,11 @@ export async function imageUrlFor(lib: Library, itemId: string, kindRaw: string)
   const g = decodeGuid(itemId);
   if (!g || g.kind === 'view') return null;
   if(g.kind==='misc') {
+    if (g.sub === 'collection') return (await collectionOf(lib, g))?.collection.backdrop ?? null;
+    if (g.sub === 'boxset') {
+      const found = await boxSetOf(lib, g);
+      return found ? boxSetCoverUrl(lib, found.folder, kind) : null;
+    }
     const person=await personFor(lib.ctx,g);
     return person?.profile_path?`https://image.tmdb.org/t/p/h632${person.profile_path}`:null;
   }

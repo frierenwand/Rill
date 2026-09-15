@@ -554,6 +554,13 @@ function body(): string {
     <div class="f"><label class="t" for="jf-max">Max sources per title</label><input type="number" id="jf-max" data-k="jellyfin.maxSources" min="1" max="200"></div>
   </div>
   <details class="profile-settings"><summary>Profiles</summary><p class="note">Profiles use the same password. Share your watch history or keep it separate.</p><div id="profiles"></div><button type="button" id="profile-add">Add profile</button></details>
+  <details class="profile-settings" id="collections-panel"><summary>Collections</summary>
+    <p class="note">Collections are box set libraries. Each tile inside is a row of its own: an actor, a genre, a studio, a network, a decade, a franchise or any mix of your catalogs, with its own artwork and tile shape. Auto rows build whole sets in one click; starter packs give you a finished library to tweak.</p>
+    <div class="b"><button type="button" id="collection-add">Add collection</button><select id="collection-pack" aria-label="Starter pack"><option value="">Starter packs…</option><option value="movie-genres">Movie genres</option><option value="series-genres">Series genres</option><option value="catalog-genres">Genres of a catalog</option><option value="actors">Popular actors</option><option value="studios">Studios</option><option value="networks">Streaming networks</option><option value="franchises">Franchises</option><option value="decades">Decades</option><option value="cinema">Cinema: everything</option></select><button type="button" id="collection-import-toggle">Import</button><button type="button" id="collection-export-all">Export all</button></div>
+    <div id="collection-import" hidden><textarea id="collection-import-text" rows="4" placeholder="Paste a collection export, or a link to one" spellcheck="false"></textarea><div class="b"><button type="button" id="collection-import-btn">Import</button><span class="hint" id="collection-import-status" role="status"></span></div></div>
+    <textarea id="collection-export-text" rows="4" hidden readonly spellcheck="false"></textarea>
+    <div id="jf-collections"></div>
+  </details>
   <label class="t">Home screen rows</label>
   <div class="list" data-order="jellyfin.home" data-options="resume,nextup,latest,upcoming"></div>
 </section>
@@ -874,6 +881,7 @@ const JS = String.raw`
       catDefs = Array.isArray(r.catalogs) ? r.catalogs : [];
       renderProfiles();
       if(!$('custom-catalogs').contains(document.activeElement)) renderCustomCatalogs();
+      if(!$('jf-collections').contains(document.activeElement)) renderCollections();
       $('cat-status').textContent = catDefs.length ? '' : 'No catalogs available with the current settings.';
       reconcileCatalogs();
       renderCatalogs();
@@ -977,6 +985,148 @@ const JS = String.raw`
     });
     enhanceSelects();
   }
+  var collOptions={studios:[],networks:[],franchises:[],decades:[]};
+  api('/api/collections/options').then(function(r){if(!r.error)collOptions=r;});
+  function newId(){return crypto.randomUUID().replace(/-/g,'').slice(0,16);}
+  function collections(){cfg.jellyfin.collections=cfg.jellyfin.collections || [];return cfg.jellyfin.collections;}
+  var SHAPES=[['poster','Poster 2:3'],['landscape','Landscape 16:9'],['square','Square 1:1']];
+  var GEN_KINDS=[['genres','Genres'],['people','Popular actors'],['studios','Studios'],['networks','Networks'],['franchises','Franchises'],['decades','Decades']];
+  function shapeSelect(current,update,allowDefault){
+    var sel=el('select',{'aria-label':'Tile shape',onchange:function(){update(sel.value||undefined);changed();}});
+    if(allowDefault)sel.appendChild(el('option',{value:'',text:allowDefault}));
+    SHAPES.forEach(function(o){sel.appendChild(el('option',{value:o[0],text:o[1]}));});
+    sel.value=current || '';return sel;
+  }
+  function field(label,value,update,type,placeholder){
+    var input=el('input',{type:type || 'text',value:value || '',placeholder:placeholder || '',autocomplete:'off',spellcheck:'false',oninput:function(){update(input.value);changed();}});
+    return el('label',{class:'f'},[el('span',{class:'t',text:label}),input]);
+  }
+  function searchBox(placeholder,path,key,onPick){
+    var input=el('input',{type:'text','aria-label':placeholder,placeholder:placeholder,autocomplete:'off'}),hits=el('div',{class:'b'}),timer;
+    input.addEventListener('input',function(){clearTimeout(timer);clear(hits);if(!input.value.trim())return;timer=setTimeout(function(){api(path,{config:cfg,query:input.value}).then(function(r){clear(hits);if(r.error){hits.appendChild(el('span',{class:'hint',text:r.error}));return;}(r[key] || []).forEach(function(p){hits.appendChild(el('button',{type:'button',text:p.name+(p.department?' · '+p.department:''),onclick:function(){onPick(p);input.value='';clear(hits);}}));});});},350);});
+    return el('div',{class:'f'},[input,hits]);
+  }
+  function pickList(label,list,onPick){
+    var sel=el('select',{'aria-label':label});sel.appendChild(el('option',{value:'',text:label}));
+    list.forEach(function(x){sel.appendChild(el('option',{value:String(x.id),text:x.name}));});
+    sel.addEventListener('change',function(){if(!sel.value)return;var hit=list.find(function(x){return String(x.id)===sel.value;});onPick(hit);});
+    return sel;
+  }
+  function sourceLabel(s){
+    if(s.kind==='person')return 'Actor: '+(s.name || s.id);
+    if(s.kind==='franchise')return 'Franchise: '+(s.name || s.id);
+    if(s.kind==='studio')return 'Studio: '+(s.name || s.id)+' ('+(s.type || 'movie')+')';
+    if(s.kind==='network')return 'Network: '+(s.name || s.id);
+    if(s.kind==='discover')return 'TMDB filters ('+s.type+'): '+Object.keys(s.params || {}).map(function(k){return k+'='+s.params[k];}).join(', ');
+    var def=catDefs.find(function(d){return d.id===s.id&&d.type===s.type;});return (def?def.name:s.id)+' ('+s.type+')'+(s.genre?' · '+s.genre:'');
+  }
+  function exportText(list){return JSON.stringify(list.length===1?{rill:'collection',v:1,collection:list[0]}:{rill:'collections',v:1,collections:list},null,2);}
+  function showExport(list){var box=$('collection-export-text');box.value=exportText(list);box.hidden=false;box.focus();box.select();try{navigator.clipboard.writeText(box.value);}catch(e){}}
+  function pack(kind){
+    var c={id:newId(),name:'',folders:[],generators:[]};
+    var gen=function(k,extra){var g={id:newId(),kind:k,limit:30};Object.keys(extra || {}).forEach(function(x){g[x]=extra[x];});c.generators.push(g);};
+    if(kind==='movie-genres'){c.name='Movies by genre';gen('genres',{type:'movie'});}
+    else if(kind==='series-genres'){c.name='Series by genre';gen('genres',{type:'series'});}
+    else if(kind==='catalog-genres'){var first=catDefs.find(function(d){return (d.genres || (d.extra || []).some(function(e){return e.name==='genre';}))&&!(d.extra || []).some(function(e){return e.isRequired;});});c.name=(first?first.name:'Catalog')+' by genre';gen('genres',first?{catalog:{id:first.id,type:first.type}}:{type:'movie'});}
+    else if(kind==='actors'){c.name='Actors';gen('people',{limit:40});}
+    else if(kind==='studios'){c.name='Studios';c.shape='square';gen('studios',{type:'movie'});}
+    else if(kind==='networks'){c.name='Networks';c.shape='square';gen('networks');}
+    else if(kind==='franchises'){c.name='Franchises';gen('franchises',{limit:60});}
+    else if(kind==='decades'){c.name='Decades';gen('decades',{type:'movie'});}
+    else if(kind==='cinema'){c.name='Cinema';gen('franchises',{limit:24});gen('people',{limit:24});gen('studios',{type:'movie',limit:16,shape:'square'});gen('genres',{type:'movie',limit:12});gen('decades',{type:'movie',limit:6});}
+    return c;
+  }
+  function renderCollections() {
+    var root=$('jf-collections');clear(root);
+    var pickable=catDefs.filter(function(d){return !(d.extra || []).some(function(e){return e.isRequired;});});
+    collections().forEach(function(col,ci) {
+      var box=el('div',{class:'svc'});
+      box.appendChild(el('div',{class:'b'},[el('strong',{text:col.name || 'Collection'}),el('button',{type:'button',text:'Up',onclick:function(){move(collections(),ci,-1);renderCollections();changed();}}),el('button',{type:'button',text:'Down',onclick:function(){move(collections(),ci,1);renderCollections();changed();}}),el('button',{type:'button',text:'Export',onclick:function(){showExport([col]);}}),el('button',{type:'button',text:'Duplicate',onclick:function(){var copy=JSON.parse(JSON.stringify(col));copy.id=newId();copy.name=col.name+' copy';(copy.folders || []).forEach(function(f){f.id=newId();});(copy.generators || []).forEach(function(g){g.id=newId();});collections().splice(ci+1,0,copy);renderCollections();changed();}}),el('button',{type:'button',text:'Remove collection',onclick:function(){collections().splice(ci,1);renderCollections();changed();}})]));
+      box.appendChild(field('Collection name',col.name,function(v){col.name=v;}));
+      box.appendChild(field('Description',col.description,function(v){col.description=v;},'text','Optional'));
+      box.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:'Default tile shape'}),shapeSelect(col.shape,function(v){col.shape=v;},'Poster 2:3 unless a row says otherwise')]));
+      box.appendChild(field('Library cover URL',col.cover,function(v){col.cover=v;},'url','Optional poster for the library tile'));
+      box.appendChild(field('Library backdrop URL',col.backdrop,function(v){col.backdrop=v;},'url','Optional'));
+      if((cfg.jellyfin.profiles || []).length) {
+        var who=el('details',{},[el('summary',{text:'Profiles'}),el('p',{class:'note',text:'Leave all unchecked to show this collection to everyone.'})]);
+        cfg.jellyfin.profiles.forEach(function(p){var input=el('input',{type:'checkbox',checked:(col.profiles || []).indexOf(p.id)>=0,onchange:function(){col.profiles=(col.profiles || []).filter(function(id){return id!==p.id;});if(input.checked)col.profiles.push(p.id);changed();}});who.appendChild(el('label',{class:'check'},[input,p.name]));});
+        box.appendChild(who);
+      }
+      var gens=el('div',{class:'group'});
+      gens.appendChild(el('strong',{text:'Auto rows'}));
+      gens.appendChild(el('p',{class:'note',text:'Whole sets of tiles built for you: every genre, popular actors with their photos, studios and networks with their logos, franchises, decades. Everything except genres of a catalog needs a TMDB key.'}));
+      (col.generators || []).forEach(function(g,gi){
+        var row=el('div',{class:'b'});
+        var kind=el('select',{'aria-label':'Auto row kind',onchange:function(){g.kind=kind.value;delete g.catalog;delete g.ids;renderCollections();changed();}});
+        GEN_KINDS.forEach(function(o){kind.appendChild(el('option',{value:o[0],text:o[1]}));});kind.value=g.kind;row.appendChild(kind);
+        if(g.kind==='genres'){
+          var src=el('select',{'aria-label':'Genre source',onchange:function(){if(src.value==='movie'||src.value==='series'){delete g.catalog;g.type=src.value;}else{var parts=src.value.split('|');g.catalog={type:parts[0],id:parts[1]};delete g.type;}changed();}});
+          src.appendChild(el('option',{value:'movie',text:'TMDB movie genres'}));src.appendChild(el('option',{value:'series',text:'TMDB series genres'}));
+          pickable.filter(function(d){return d.genres||(d.extra || []).some(function(e){return e.name==='genre';});}).forEach(function(d){src.appendChild(el('option',{value:d.type+'|'+d.id,text:'Genres of '+d.name+' ('+d.type+')'}));});
+          src.value=g.catalog?g.catalog.type+'|'+g.catalog.id:(g.type || 'movie');row.appendChild(src);
+        } else if(g.kind==='decades'||g.kind==='studios'){
+          var media=el('select',{'aria-label':'Media',onchange:function(){g.type=media.value;changed();}});[['movie','Movies'],['series','Series']].forEach(function(o){media.appendChild(el('option',{value:o[0],text:o[1]}));});media.value=g.type || 'movie';row.appendChild(media);
+        }
+        if(g.kind==='studios'||g.kind==='networks'||g.kind==='franchises'||g.kind==='people'){
+          var picked=el('span',{class:'hint',text:(g.ids && g.ids.length)?g.ids.length+' chosen':'all curated'});
+          var list=g.kind==='studios'?collOptions.studios:g.kind==='networks'?collOptions.networks:g.kind==='franchises'?collOptions.franchises:[];
+          if(list.length)row.appendChild(pickList('Only these…',list,function(hit){g.ids=g.ids || [];if(g.ids.indexOf(hit.id)<0)g.ids.push(hit.id);renderCollections();changed();}));
+          if(g.kind==='people')row.appendChild(searchBox('Only these actors…','/api/people/search','people',function(p){g.ids=g.ids || [];if(g.ids.indexOf(p.id)<0)g.ids.push(p.id);renderCollections();changed();}));
+          if(g.kind==='franchises')row.appendChild(searchBox('Find a franchise…','/api/franchises/search','franchises',function(p){g.ids=g.ids || [];if(g.ids.indexOf(p.id)<0)g.ids.push(p.id);renderCollections();changed();}));
+          row.appendChild(picked);
+          if(g.ids && g.ids.length)row.appendChild(el('button',{type:'button',text:'Use all',onclick:function(){delete g.ids;renderCollections();changed();}}));
+        }
+        var limit=el('input',{type:'number',min:'1',max:'100','aria-label':'Maximum tiles',value:g.limit || 30,oninput:function(){g.limit=Number(limit.value) || 30;changed();}});row.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:'Max tiles'}),limit]));
+        row.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:'Shape'}),shapeSelect(g.shape,function(v){g.shape=v;},'Auto')]));
+        row.appendChild(el('button',{type:'button',text:'Remove',onclick:function(){col.generators.splice(gi,1);renderCollections();changed();}}));
+        gens.appendChild(row);
+      });
+      gens.appendChild(el('button',{type:'button',text:'Add auto row',onclick:function(){col.generators=col.generators || [];col.generators.push({id:newId(),kind:'genres',type:'movie',limit:30});renderCollections();changed();}}));
+      box.appendChild(gens);
+      (col.folders || []).forEach(function(f,fi) {
+        var fbox=el('div',{class:'group'});
+        fbox.appendChild(el('div',{class:'b'},[el('strong',{text:f.name || 'Tile '+(fi+1)}),el('button',{type:'button',text:'Up',onclick:function(){move(col.folders,fi,-1);renderCollections();changed();}}),el('button',{type:'button',text:'Down',onclick:function(){move(col.folders,fi,1);renderCollections();changed();}}),el('button',{type:'button',text:'Remove tile',onclick:function(){col.folders.splice(fi,1);renderCollections();changed();}})]));
+        fbox.appendChild(field('Name',f.name,function(v){f.name=v;}));
+        fbox.appendChild(el('label',{class:'f'},[el('span',{class:'t',text:'Tile shape'}),shapeSelect(f.shape,function(v){f.shape=v;},'Collection default')]));
+        fbox.appendChild(field('Cover URL',f.cover,function(v){f.cover=v;},'url','Optional. Falls back to the actor photo, franchise poster, studio logo or first member artwork'));
+        fbox.appendChild(field('Backdrop URL',f.backdrop,function(v){f.backdrop=v;},'url','Optional'));
+        fbox.appendChild(field('Logo URL',f.logo,function(v){f.logo=v;},'url','Optional'));
+        var addSource=function(s){f.sources=f.sources || [];f.sources.push(s);if(!f.name||/^New tile$/.test(f.name))f.name=s.name || f.name;renderCollections();changed();};
+        var select=el('select',{'aria-label':'Catalog to add'});
+        select.appendChild(el('option',{value:'',text:'Add a catalog'}));
+        pickable.forEach(function(d){select.appendChild(el('option',{value:d.type+'|'+d.id,text:d.name+' ('+d.type+')'}));});
+        select.addEventListener('change',function(){if(!select.value)return;var parts=select.value.split('|');if(!(f.sources || []).some(function(s){return s.kind==='catalog'&&s.id===parts[1]&&s.type===parts[0];}))addSource({kind:'catalog',type:parts[0],id:parts[1]});});
+        fbox.appendChild(select);
+        fbox.appendChild(searchBox('Add an actor or director by name','/api/people/search','people',function(p){addSource({kind:'person',id:p.id,name:p.name});}));
+        fbox.appendChild(searchBox('Add a franchise (TMDB collection)','/api/franchises/search','franchises',function(p){addSource({kind:'franchise',id:p.id,name:p.name});}));
+        var brands=el('div',{class:'b'});
+        if(collOptions.studios.length)brands.appendChild(pickList('Add a studio',collOptions.studios,function(hit){addSource({kind:'studio',id:hit.id,name:hit.name,type:'movie'});}));
+        if(collOptions.networks.length)brands.appendChild(pickList('Add a network',collOptions.networks,function(hit){addSource({kind:'network',id:hit.id,name:hit.name});}));
+        if(collOptions.franchises.length)brands.appendChild(pickList('Add a known franchise',collOptions.franchises,function(hit){addSource({kind:'franchise',id:hit.id,name:hit.name});}));
+        brands.appendChild(el('button',{type:'button',text:'Add TMDB filters',onclick:function(){addSource({kind:'discover',type:'movie',params:{sort_by:'popularity.desc'}});}}));
+        fbox.appendChild(brands);
+        (f.sources || []).forEach(function(s,si){
+          fbox.appendChild(el('div',{class:'b'},[el('span',{text:(si+1)+'. '+sourceLabel(s)}),el('button',{type:'button',text:'Up',onclick:function(){move(f.sources,si,-1);renderCollections();changed();}}),el('button',{type:'button',text:'Remove',onclick:function(){f.sources.splice(si,1);renderCollections();changed();}})]));
+          if(s.kind==='catalog'){var genre=el('input',{type:'text','aria-label':'Source genre or filter',value:s.genre || '',placeholder:'Optional genre or filter value',oninput:function(){s.genre=genre.value;changed();}});fbox.appendChild(genre);}
+          if(s.kind==='studio'){var st=el('select',{'aria-label':'Studio media',onchange:function(){s.type=st.value;changed();}});[['movie','Movies'],['series','Series']].forEach(function(o){st.appendChild(el('option',{value:o[0],text:o[1]}));});st.value=s.type || 'movie';fbox.appendChild(st);}
+          if(s.kind==='discover'){
+            var dt=el('select',{'aria-label':'Filter media',onchange:function(){s.type=dt.value;changed();}});[['movie','Movies'],['series','Series']].forEach(function(o){dt.appendChild(el('option',{value:o[0],text:o[1]}));});dt.value=s.type;fbox.appendChild(dt);
+            var ta=el('textarea',{rows:'3','aria-label':'TMDB discover filters',placeholder:'One per line, like with_genres=28 or primary_release_date.gte=today-1y',spellcheck:'false'});ta.value=Object.keys(s.params || {}).map(function(k){return k+'='+s.params[k];}).join('\n');
+            ta.addEventListener('input',function(){var p={};ta.value.split('\n').forEach(function(line){var i=line.indexOf('=');if(i>0)p[line.slice(0,i).trim()]=line.slice(i+1).trim();});s.params=p;changed();});fbox.appendChild(ta);
+          }
+        });
+        box.appendChild(fbox);
+      });
+      box.appendChild(el('div',{class:'b'},[el('button',{type:'button',text:'Add tile',onclick:function(){col.folders=col.folders || [];col.folders.push({id:newId(),name:'New tile',sources:[]});renderCollections();changed();}})]));
+      root.appendChild(box);
+    });
+    enhanceSelects();
+  }
+  $('collection-add').addEventListener('click',function(){collections().push({id:newId(),name:'My collection',folders:[],generators:[]});renderCollections();changed();});
+  $('collection-pack').addEventListener('change',function(){var v=this.value;if(!v)return;this.value='';if(this._picker)this._picker.sync();collections().push(pack(v));renderCollections();changed();});
+  $('collection-import-toggle').addEventListener('click',function(){var box=$('collection-import');box.hidden=!box.hidden;if(!box.hidden)$('collection-import-text').focus();});
+  $('collection-export-all').addEventListener('click',function(){showExport(collections());});
+  $('collection-import-btn').addEventListener('click',function(){var text=$('collection-import-text').value.trim();if(!text)return;var status=$('collection-import-status');status.textContent='Importing…';api('/api/collections/import',{data:text}).then(function(r){if(r.error){status.textContent=r.error;return;}var have=collections();r.collections.forEach(function(c){if(have.some(function(x){return x.id===c.id;}))c.id=newId();have.push(c);});status.textContent=r.collections.length+' imported.';$('collection-import-text').value='';renderCollections();changed();});});
   $('add-custom-catalog').addEventListener('click',function(){cfg.customCatalogs=cfg.customCatalogs || [];cfg.customCatalogs.push({id:crypto.randomUUID(),name:'My catalog',provider:'tmdb',type:'movie',params:{}});renderCustomCatalogs();changed();});
   var recommendationPoll;
   function recommendationProgress(r){
@@ -1485,6 +1635,7 @@ const JS = String.raw`
     renderCatalogs();
     renderProfiles();
     renderCustomCatalogs();
+    renderCollections();
     enhanceSelects();
     renderInstall();
   }

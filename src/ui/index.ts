@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { Env } from '../env';
-import { normalizeConfig, type RillConfig } from '../config/schema';
+import { collectionOf, normalizeConfig, type RillConfig } from '../config/schema';
+import { DECADES, FRANCHISES, NETWORKS, STUDIOS, dedupe } from '../jellyfin/curated';
 import { decodeConfig, encodeConfig } from '../config/codec';
 import { getManifest } from '../stremio/client';
 import { sha256 } from '../util/bytes';
@@ -10,6 +11,7 @@ import { renderPage, renderLogo } from './page';
 import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
 import { syncMovieLens,movieLensSyncStatus,importRatingsCsv } from '../addon/movielens-sync';
 import { aiCatalog } from '../addon/ai';
+import { tmdbGet } from '../meta/tmdb';
 import { mountAccountRoutes } from './account';
 
 export const uiRouter = new Hono<{ Variables: { ctx?: Ctx }; Bindings: Env }>();
@@ -180,6 +182,67 @@ uiRouter.post('/api/catalogs/generate',async c=>{
   const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config);
   try{return c.json({catalog:await aiCatalog(await buildCtx(cfg,c.env,new URL(c.req.url).origin),field(body,'query'),field(body,'provider'),field(body,'type'))});}
   catch(error){return c.json({error:error instanceof Error?error.message:'The catalog could not be generated.'},400);}
+});
+
+uiRouter.post('/api/people/search', async (c) => {
+  const body = await readBody(c.req.raw);
+  const cfg = normalizeConfig(body.config);
+  const query = field(body, 'query').trim();
+  if (!query) return c.json({ people: [] });
+  try {
+    const ctx = await buildCtx(cfg, c.env, new URL(c.req.url).origin);
+    if (!ctx.tmdbKey) return c.json({ error: 'People search needs a TMDB key.', people: [] }, 400);
+    const data = await tmdbGet<{ results?: Array<{ id: number; name: string; profile_path?: string; known_for_department?: string }> }>(ctx, '/search/person', { query, language: cfg.language, include_adult: cfg.search.includeAdult }, 3600);
+    return c.json({ people: (data?.results ?? []).slice(0, 10).map((p) => ({ id: p.id, name: p.name, department: p.known_for_department ?? '', photo: p.profile_path ? `https://image.tmdb.org/t/p/w185${p.profile_path}` : '' })) });
+  } catch {
+    return c.json({ error: 'People search is unavailable right now.', people: [] }, 502);
+  }
+});
+
+uiRouter.post('/api/collections/options', (c) => c.json({ studios: dedupe(STUDIOS), networks: dedupe(NETWORKS), franchises: dedupe(FRANCHISES), decades: DECADES.map((d) => d.name) }));
+
+uiRouter.post('/api/collections/import', async (c) => {
+  const body = await readBody(c.req.raw);
+  let raw: unknown = body.data;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        const res = await fetch(text, { headers: { accept: 'application/json' } });
+        raw = res.ok ? await res.json() : null;
+      } catch {
+        raw = null;
+      }
+    } else {
+      try { raw = JSON.parse(text); } catch { raw = null; }
+    }
+  }
+  const unwrap = (v: unknown): unknown[] => {
+    if (!v || typeof v !== 'object') return [];
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.collections)) return o.collections;
+    if (o.collection) return [o.collection];
+    if (Array.isArray(v)) return v;
+    return [v];
+  };
+  const collections = unwrap(raw).map((x) => collectionOf(x as never)).filter((x): x is NonNullable<typeof x> => !!x);
+  if (!collections.length) return c.json({ error: 'Nothing importable was found. Paste a collection export or a link to one.' }, 400);
+  return c.json({ collections });
+});
+
+uiRouter.post('/api/franchises/search', async (c) => {
+  const body = await readBody(c.req.raw);
+  const cfg = normalizeConfig(body.config);
+  const query = field(body, 'query').trim();
+  if (!query) return c.json({ franchises: [] });
+  try {
+    const ctx = await buildCtx(cfg, c.env, new URL(c.req.url).origin);
+    if (!ctx.tmdbKey) return c.json({ error: 'Franchise search needs a TMDB key.', franchises: [] }, 400);
+    const data = await tmdbGet<{ results?: Array<{ id: number; name: string; poster_path?: string }> }>(ctx, '/search/collection', { query, language: cfg.language }, 3600);
+    return c.json({ franchises: (data?.results ?? []).slice(0, 10).map((p) => ({ id: p.id, name: p.name })) });
+  } catch {
+    return c.json({ error: 'Franchise search is unavailable right now.', franchises: [] }, 502);
+  }
 });
 
 uiRouter.post('/api/probe', async (c) => {
