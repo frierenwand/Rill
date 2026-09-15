@@ -42,7 +42,7 @@ The settings page has two modes, switched at the top.
 
 Tip for operators: setting the optional `TMDB_KEY` secret lets Simple-mode users resolve titles that addons identify only by TMDB id.
 
-**One account, every device.** The first time you open your Worker it asks you to create an account: a username and a password of at least 8 characters. That single account protects the settings page and is what you type into Jellyfin apps. Every change saves to your Worker's database automatically, and any device that signs in sees the same configuration. There is no registration afterwards, so nobody else can create an account or open your settings. Forgot the password? Delete the row in the `owner` table of your D1 database in the Cloudflare dashboard and the setup screen returns.
+**One account, every device.** The first time you open your Worker it asks you to create an account: a username and a password of at least 8 characters. That single account protects the settings page and is what you type into Jellyfin apps. Every change saves to your Worker's database automatically, nothing is kept in the browser, and any device that signs in sees the same configuration. There is no registration afterwards, so nobody else can create an account or open your settings. Forgot the password? Delete the row in the `owner` table of your D1 database in the Cloudflare dashboard and the setup screen returns.
 
 Then connect your apps:
 

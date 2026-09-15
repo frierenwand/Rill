@@ -125,7 +125,7 @@ async function buildCtx(cfg: RillConfig, env: Env | undefined, origin: string): 
 // ---------------------------------------------------------------------------------------------
 
 uiRouter.get('/', (c) => {
-  return c.html(renderPage(), 200, { 'Cache-Control': 'public, max-age=300' });
+  return c.html(renderPage(), 200, { 'Cache-Control': 'no-store' });
 });
 
 uiRouter.get('/logo.svg', (c) => {

@@ -1,7 +1,7 @@
 /**
  * The configure page: one HTML document, inline CSS and vanilla JS, no dependencies.
  *
- * Layout is a single centred column. The draft config lives in the browser (localStorage) and is
+ * Layout is a single centred column. The configuration lives only in D1 on the Worker; the browser keeps nothing and is
  * turned into an install token by POSTing to /api/config/encode on this same origin; nothing the
  * user types ever leaves that origin except through the tracker OAuth helpers, which forward to
  * the provider the user picked.
@@ -566,8 +566,6 @@ const JS = String.raw`
 (function () {
   'use strict';
   var DEFAULTS = __DEFAULTS__;
-  var LS_CFG = 'rill.draft.v1';
-  var LS_UI = 'rill.ui.v1';
   var ORIGIN = location.origin;
   var LABELS = {
     tmdb: 'TMDB', fanart: 'Fanart.tv', tvdb: 'TVDB', rpdb: 'RPDB', metahub: 'Metahub',
@@ -656,15 +654,14 @@ const JS = String.raw`
     });
     return out;
   }
-  function lsGet(key) { try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
-  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); $('draft-status').textContent = 'Saved on this device'; } catch (e) { $('draft-status').textContent = 'Device storage unavailable'; } }
-  function ssGet(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } }
-  function ssSet(key, val) { try { sessionStorage.setItem(key, val); } catch (e) {} }
+  // Nothing is persisted in the browser: the Worker's database is the only copy of the configuration.
+  var memory = {};
+  function ssGet(key) { return memory[key] || null; }
+  function ssSet(key, val) { memory[key] = val; }
 
-  var cfg = merge(DEFAULTS, lsGet(LS_CFG));
-  if (!cfg.installationKey) {cfg.installationKey=crypto.randomUUID()+crypto.randomUUID().replace(/-/g,'').slice(0,16);cfg.revision=Date.now();lsSet(LS_CFG,cfg);}
+  var cfg = clone(DEFAULTS);
   if (['Luma', 'Titan', 'Frame', 'Noma', 'Vanta'].indexOf(cfg.name) !== -1) cfg.name = 'Rill';
-  var ui = merge({ trakt: { clientId: '', clientSecret: '' }, simkl: { clientId: '' }, mal: { clientId: '', redirectUri: '' }, anilist: { clientId: '' } }, lsGet(LS_UI));
+  var ui = merge({ trakt: { clientId: '', clientSecret: '' }, simkl: { clientId: '' }, mal: { clientId: '', redirectUri: '' }, anilist: { clientId: '' } }, null);
   var catDefs = [];
   var token = '';
 
@@ -728,7 +725,7 @@ const JS = String.raw`
   function changed() {
     cfg.revision=Math.max(Date.now(),(cfg.revision || 0)+1);
     updateSummary();
-    lsSet(LS_CFG, cfg);
+    $('draft-status').textContent = account.signedIn ? 'Saving…' : '';
     clearTimeout(encTimer);
     encTimer = setTimeout(encode, 400);
     if (catalogKey() !== lastCatKey) { clearTimeout(catTimer); catTimer = setTimeout(loadCatalogs, 900); }
@@ -743,7 +740,6 @@ const JS = String.raw`
     cfg = merge(DEFAULTS, config);
     if (!cfg.installationKey) cfg.installationKey = key;
     lastCatKey = '';
-    lsSet(LS_CFG, cfg);
     renderAll(); encode(); loadCatalogs();
     $('draft-status').textContent = 'Synced with your server';
   }
@@ -827,7 +823,7 @@ const JS = String.raw`
     });
   }
   function logout() {
-    api('/api/account/logout').then(function () { account.signedIn = false; account.username = ''; renderAccount(); });
+    api('/api/account/logout').then(function () { account.signedIn = false; account.username = ''; cfg = clone(DEFAULTS); token = ''; lastCatKey = ''; renderAll(); renderAccount(); });
   }
   $('login-form').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('login-submit').click(); } });
   $('login-form').addEventListener('submit', function (e) {
@@ -841,7 +837,7 @@ const JS = String.raw`
       renderAccount();
     });
   });
-  function uiChanged() { lsSet(LS_UI, ui); renderAuthLinks(); }
+  function uiChanged() { renderAuthLinks(); }
 
   function encode() {
     $('enc-status').textContent = '';
