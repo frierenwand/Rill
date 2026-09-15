@@ -46,7 +46,8 @@ function canonicalId(ids: IdBundle, type: ContentType): string | null {
 
 function providerOrder(ctx: Ctx, type: ContentType): MetaProvider[] {
   const primary = type === 'movie' ? ctx.cfg.providers.movie : ctx.cfg.providers.series;
-  return [primary, ...PROVIDER_ORDER.filter((p) => p !== primary)];
+  // Cinemeta needs no key, so it always closes the chain for keyless installations.
+  return [primary, ...PROVIDER_ORDER.filter((p) => p !== primary), ...(primary === 'cinemeta' ? [] : ['cinemeta' as MetaProvider])];
 }
 
 function canServe(ctx: Ctx, provider: MetaProvider, type: ContentType, ids: IdBundle): boolean {
@@ -275,6 +276,7 @@ async function searchMeta(ctx: Ctx, type: ContentType, query: string, opts: { sk
         break;
     }
   }
+  if (!tasks.length || !providers.some((p) => (p === 'tmdb' && ctx.tmdbKey) || (p === 'tvdb' && hasTvdb(ctx)) || p === 'cinemeta')) tasks.push(() => cinemetaSearch(ctx, type, q, { skip }));
   const results = await mapLimit(tasks, 4, (t) => t().catch(() => [] as MetaPreview[]));
 
   // Interleave provider results so a weak first provider cannot bury the others, then dedupe.

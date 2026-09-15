@@ -57,6 +57,8 @@ export interface RillConfig {
   trackers: { primary: TrackerName | 'off'; scrobbleTo: TrackerName[]; media?: Partial<Record<TrackerName, { movie?: boolean; series?: boolean }>>; trakt?: TraktAuth; simkl?: SimklAuth; mal?: MalAuth; anilist?: AnilistAuth };
   /** Age rating cap, e.g. 'PG-13' or 'TV-14'. Empty = no cap. */
   ageCap: string;
+  /** Advanced mode exposes provider API keys and API-backed catalogs. Simple mode uses addons and Cinemeta. */
+  advanced: boolean;
   /** Jellyfin facade options. */
   jellyfin: { username: string; password: string; maxSources: number; home: Array<'resume' | 'nextup' | 'latest' | 'upcoming'>; profiles?: JellyfinProfile[] };
   /** Search behaviour. */
@@ -75,6 +77,7 @@ export const DEFAULT_CONFIG: RillConfig = {
   lists: { mdblist: [], trakt: [], publicmetadb: [], publicmetadbPicks: [] },
   trackers: { primary: 'off', scrobbleTo: [], media: Object.fromEntries(['trakt','simkl','mdblist','publicmetadb','mal','anilist'].map(name => [name, { movie: true, series: true }])) },
   ageCap: '',
+  advanced: false,
   jellyfin: { username: 'rill', password: '', profiles: [], maxSources: 30, home: ['resume', 'nextup', 'latest', 'upcoming'] },
   search: { providers: ['tmdb', 'mal'], includeAdult: false },
   recommendations:{sources:'both',enabled:false,provider:'gemini',apiKey:'',model:'',webSearch:false,refreshHours:24,order:'balanced',minVotes:100,reasoning:'low',staleDays:180,stalledWeight:'note'},
@@ -110,6 +113,7 @@ export function normalizeConfig(input: unknown): RillConfig {
   cfg.trackers.media = Object.fromEntries(['trakt','simkl','mdblist','publicmetadb','mal','anilist'].map(name => [name, { movie: true, series: true, ...src.trackers?.media?.[name as TrackerName] }]));
   cfg.trackers.scrobbleTo = arr(cfg.trackers.scrobbleTo) as TrackerName[];
   cfg.ageCap = str(src.ageCap, '');
+  cfg.advanced = src.advanced === true;
   cfg.jellyfin = { ...cfg.jellyfin, ...(src.jellyfin ?? {}) };
   const seenProfiles = new Set<string>();
   const seenNames = new Set<string>([cfg.jellyfin.username.toLowerCase()]);

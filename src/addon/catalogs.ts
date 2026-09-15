@@ -267,7 +267,8 @@ export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinitio
       ...sources,
       ...(ctx.cfg.recommendations?.enabled&&ctx.cfg.recommendations.apiKey&&ctx.cfg.recommendations.model&&ctx.tmdbKey?(['movie','series','anime'] as const).map(type=>({id:`recommendations.${type}`,type,name:type==='movie'?'Films For You':type==='series'?'Series For You':'Anime For You',group:'Recommendations',extra:[SKIP]})):[]),
     ];
-    return all.filter((d) => (d.needs ?? []).every((n) => have.has(n)));
+    const simple = !ctx.cfg.advanced;
+    return all.filter((d) => (d.needs ?? []).every((n) => have.has(n)) && (!simple || ['rill', 'addon', 'tracker'].includes(d.id.split('.')[0])));
   });
 }
 

@@ -34,9 +34,16 @@ Wrangler provisions the D1 database on the first deploy. Node.js 20 or newer is 
 
 ## Configure
 
-1. Open the Worker URL. Add your metadata keys, tracker accounts and Stremio stream addons, then enable the catalogs you want.
-2. **Stremio:** install the manifest link shown at the bottom of the page.
-3. **Jellyfin clients:** add the Worker URL as a server and sign in with the username and password from the Jellyfin section. Signing in activates that configuration's settings. Quick Connect is supported.
+The settings page has two modes, switched at the top.
+
+**Simple** (default) needs no API keys. Paste your Stremio addons, connect the trackers you want to scrobble to, set a Jellyfin password and you are done. Catalogs come from your metadata addons and connected trackers; title details and search use Cinemeta.
+
+**Advanced** adds the Metadata and Catalogs tabs: TMDB, TVDB, Fanart and RPDB keys, provider and artwork priority, anime lists from MyAnimeList, AniList and Kitsu, list sources such as MDBList, Letterboxd, TVDB and MovieLens, custom and merged catalogs, and AI recommendations. API-backed catalogs only appear in your apps while Advanced is on.
+
+Then connect your apps:
+
+1. **Stremio:** install the manifest link from the Connect tab.
+2. **Jellyfin clients:** add the Worker URL as a server and sign in with the username and password from the Jellyfin tab. Signing in activates that configuration's settings. Quick Connect is supported.
 
 Configuration links carry credentials. Share the Worker URL, never the install link.
 

@@ -49,6 +49,14 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .brand img { width:28px; height:28px; }
 .wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
 .header-actions { display:flex; align-items:center; gap:20px; }
+.mode { display:inline-flex; border:1px solid #eeeeee29; border-radius:6px; overflow:hidden; }
+.mode label { cursor:pointer; }
+.mode input { position:absolute; opacity:0; pointer-events:none; }
+.mode span { display:block; padding:6px 11px; font-size:12px; color:#969696; }
+.mode input:checked + span { color:var(--accent); background:#eeeeee0b; }
+.mode input:focus-visible + span { outline:1px solid var(--accent); }
+[data-advanced][hidden] { display:none; }
+.mode-note { font-size:12px; color:var(--mute); margin:-8px 0 18px; }
 #draft-status { font-size:12px; color:var(--mute); }
 button { appearance:none; font:inherit; font-size:13px; font-weight:550; border:1px solid #393939; border-radius:8px; background:#1e1e1e; color:var(--fg); padding:11px 17px; cursor:pointer; transition:background .18s,border-color .18s,box-shadow .18s,transform .18s; }
 button:hover { background:#2d2d2d; border-color:#5d5d5d; box-shadow:0 3px 12px #0003; }
@@ -240,9 +248,9 @@ function body(): string {
   return `
 <main>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
+  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
-    ${[['general','General'],['meta','Metadata'],['catalogs','Catalogs'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}">${label}</button>`).join('')}
+    ${[['general','General'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'?' data-advanced':''}>${label}</button>`).join('')}
   </nav>
 </header>
 <div class="workspace"><div id="panels">
@@ -336,7 +344,8 @@ function body(): string {
 
 <section id="s-addons">
   <h2><small>4</small>Addons</h2>
-  <p class="note">Paste addon manifest links below, one per line.</p>
+  <p class="note">Paste Stremio addon manifest links below, one per line. Catalogs from your metadata addons appear in your apps automatically; details fall back to Cinemeta.</p>
+  <p class="mode-note" id="addons-mode-note">Simple mode. Switch to <strong>Advanced</strong> at the top for TMDB, TVDB, anime lists, custom catalogs and AI recommendations.</p>
   <div class="f">
     <label class="t" for="a-meta">Metadata</label>
     <textarea id="a-meta" data-lines="addons.meta" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
@@ -525,8 +534,18 @@ const JS = String.raw`
     details.appendChild(summary);
     details.appendChild(service);
   });
+  function applyMode() {
+    var advanced = !!cfg.advanced;
+    document.getElementById('mode-' + (advanced ? 'advanced' : 'simple')).checked = true;
+    all('[data-advanced]').forEach(function(tab) { tab.hidden = !advanced; });
+    var note = document.getElementById('addons-mode-note'); if (note) note.hidden = advanced;
+    var current = all('[data-tab]').filter(function(t) { return t.getAttribute('aria-selected') === 'true'; })[0];
+    if (current && current.hidden) { location.hash = 'general'; selectTab('general', false); }
+  }
   function selectTab(key, focus) {
     if (!groups[key]) key = 'general';
+    var target = document.getElementById('tab-' + key);
+    if (target && target.hidden) key = 'general';
     all('[data-tab]').forEach(function(tab) {
       var active = tab.dataset.tab === key;
       tab.setAttribute('aria-selected', String(active));
@@ -816,8 +835,12 @@ const JS = String.raw`
     all('[data-ui]').forEach(function (n) { n.value = get(n.getAttribute('data-ui'), ui) || ''; });
     all('[data-order]').forEach(renderOrder);
     enhanceSelects();
+    applyMode();
   }
   function bindInputs() {
+    all('input[name="mode"]').forEach(function (n) {
+      n.addEventListener('change', function () { cfg.advanced = n.value === 'advanced'; changed(); applyMode(); });
+    });
     all('[data-k]').forEach(function (n) {
       n.addEventListener('input', function () {
         var v = n.type === 'checkbox' ? n.checked : n.type === 'number' ? Number(n.value) : n.value;
