@@ -91,6 +91,24 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .seg button { padding:9px 14px; background:none; border:0; color:var(--mute); font-size:13px; }
 .seg button[aria-pressed=true] { background:#222; color:var(--fg); }
 
+.locked > .t, .locked > .key-row .t, .locked .n { color:#7a7a7a; }
+.locked input:not([type=checkbox]), .locked textarea { opacity:.5; }
+.need-tag { display:inline-flex; align-items:center; gap:6px; margin:8px 0 0; padding:4px 9px; white-space:nowrap; border:1px dashed #3a3a3a; border-radius:6px; background:none; color:var(--mute); font-size:11px; line-height:1.2; }
+.need-tag:after { content:'→'; }
+.need-tag:hover { color:var(--fg); border-color:#5a5a5a; }
+.checks label.locked { color:#6f6f6f; }
+.checks label .need-tag { margin:0 0 0 auto; padding:2px 7px; font-size:10px; }
+.item.locked .n { color:#6f6f6f; }
+.item .need-tag { margin:0; }
+.key-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.key-row .t { margin:0; }
+.pill { font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid #333; color:var(--mute); line-height:1.2; }
+.pill.on { color:#111; background:var(--accent); border-color:var(--accent); }
+.key-link { display:inline-block; margin-top:8px; font-size:12px; color:var(--mute); text-decoration:none; }
+.key-link:hover { color:var(--fg); }
+.reqs { margin:0 0 12px; }
+.req { display:inline-block; margin:0 14px 6px 0; font-size:12px; color:var(--mute); }
+.req.on { color:var(--fg); }
 .tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
 .tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
 .tabs-row .mode { flex:none; }
@@ -329,30 +347,31 @@ function body(): string {
 
 <section id="s-meta">
   <h2><small>2</small>Metadata</h2>
+  <h3>API keys</h3>
+  <p class="note">Everything below that needs a key stays locked until you add it. Free sources such as Cinemeta, Metahub, TVmaze and the anime sites work without keys.</p>
+  <div class="two">
+    <div class="f"><div class="key-row"><label class="t" for="k-tmdb">TMDB</label><span class="pill" data-key-status="tmdb">Not set</span></div><input type="password" id="k-tmdb" data-k="keys.tmdb" class="key" autocomplete="off"><a class="key-link" href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Get a TMDB key ↗</a></div>
+    <div class="f"><div class="key-row"><label class="t" for="k-tvdb">TVDB</label><span class="pill" data-key-status="tvdb">Not set</span></div><input type="password" id="k-tvdb" data-k="keys.tvdb" class="key" autocomplete="off"><a class="key-link" href="https://thetvdb.com/api-information" target="_blank" rel="noopener">Get a TVDB key ↗</a></div>
+    <div class="f"><div class="key-row"><label class="t" for="k-fanart">Fanart.tv</label><span class="pill" data-key-status="fanart">Not set</span></div><input type="password" id="k-fanart" data-k="keys.fanart" class="key" autocomplete="off"><a class="key-link" href="https://fanart.tv/get-an-api-key/" target="_blank" rel="noopener">Get a Fanart.tv key ↗</a></div>
+    <div class="f"><div class="key-row"><label class="t" for="k-rpdb">RPDB</label><span class="pill" data-key-status="rpdb">Not set</span></div><input type="password" id="k-rpdb" data-k="keys.rpdb" class="key" autocomplete="off"><a class="key-link" href="https://ratingposterdb.com/" target="_blank" rel="noopener">Get a RPDB key ↗</a></div>
+    <div class="f"><div class="key-row"><label class="t" for="k-mdblist">MDBList</label><span class="pill" data-key-status="mdblist">Not set</span></div><input type="password" id="k-mdblist" data-k="keys.mdblist" class="key" autocomplete="off"><a class="key-link" href="https://mdblist.com/preferences/" target="_blank" rel="noopener">Get a MDBList key ↗</a></div>
+  </div>
+  <p class="hint"><button class="q" type="button" id="show-keys">Show keys</button> Keys are stored on your Worker and forwarded only to their providers.</p>
   <h3>Providers</h3>
   <div class="two">
     <div class="f"><label class="t" for="p-movie">Movies</label><div class="sel"><select id="p-movie" data-k="providers.movie">${options(PROVIDER_OPTS)}</select></div></div>
     <div class="f"><label class="t" for="p-series">Series</label><div class="sel"><select id="p-series" data-k="providers.series">${options(PROVIDER_OPTS)}</select></div></div>
     <div class="f"><label class="t" for="p-anime">Anime</label><div class="sel"><select id="p-anime" data-k="providers.anime">${options(ANIME_OPTS)}</select></div></div>
   </div>
-  <p class="note">Choose where your movie, series and anime details come from.</p>
+  <p class="note">Where movie, series and anime details come from. Cinemeta always fills in anything the chosen provider lacks.</p>
   <h3>Artwork priority</h3>
-  <p class="note">Ticked sources are used, top first. Untick to skip a source.</p>
+  <p class="note">Ticked sources are used, top first. Locked sources are skipped until their key exists.</p>
   <label class="t">Posters</label>
   <div class="list" data-order="artwork.posters" data-options="tmdb,fanart,tvdb,rpdb,metahub"></div>
   <label class="t">Backgrounds</label>
   <div class="list" data-order="artwork.backgrounds" data-options="tmdb,fanart,tvdb,metahub"></div>
   <label class="t">Logos</label>
   <div class="list" data-order="artwork.logos" data-options="fanart,tmdb,tvdb,metahub"></div>
-  <h3>API keys</h3>
-  <div class="two">
-    <div class="f"><label class="t" for="k-tmdb">TMDB</label><input type="password" id="k-tmdb" data-k="keys.tmdb" class="key" autocomplete="off"></div>
-    <div class="f"><label class="t" for="k-tvdb">TVDB</label><input type="password" id="k-tvdb" data-k="keys.tvdb" class="key" autocomplete="off"></div>
-    <div class="f"><label class="t" for="k-fanart">Fanart.tv</label><input type="password" id="k-fanart" data-k="keys.fanart" class="key" autocomplete="off"></div>
-    <div class="f"><label class="t" for="k-rpdb">RPDB</label><input type="password" id="k-rpdb" data-k="keys.rpdb" class="key" autocomplete="off"></div>
-    <div class="f"><label class="t" for="k-mdblist">MDBList</label><input type="password" id="k-mdblist" data-k="keys.mdblist" class="key" autocomplete="off"></div>
-  </div>
-  <p class="hint"><button class="q" type="button" id="show-keys">Show keys</button> Keys are included in your private install URL and forwarded to their providers. Keep the URL private.</p>
 </section>
 
 <section id="s-catalogs">
@@ -366,12 +385,12 @@ function body(): string {
   </div>
   <h3>Your lists</h3>
   <div class="two">
-    <div class="f"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Needs the MDBList key above.</p></div>
-    <div class="f"><label class="t" for="l-trakt">Trakt list ids</label><textarea id="l-trakt" data-lines="lists.trakt" placeholder="user/list-slug, one per line" spellcheck="false"></textarea><p class="hint">Requires a Trakt client ID.</p></div>
-    <div class="f"><label class="t" for="l-pmdb">PublicMetaDB list IDs</label><textarea id="l-pmdb" data-lines="lists.publicmetadb" placeholder="one per line" spellcheck="false"></textarea></div>
-    <div class="f"><label class="t" for="l-pmdb-picks">PublicMetaDB pick IDs</label><textarea id="l-pmdb-picks" data-lines="lists.publicmetadbPicks" placeholder="one per line" spellcheck="false"></textarea></div>
-    <div class="f"><label class="t" for="l-tmdb-collections">TMDB collections</label><textarea id="l-tmdb-collections" data-lines="lists.tmdbCollections" placeholder="Collection links or IDs, one per line"></textarea></div>
-    <div class="f"><label class="t" for="l-tvdb">TVDB lists</label><textarea id="l-tvdb" data-lines="lists.tvdb" placeholder="List links or IDs, one per line" spellcheck="false"></textarea></div>
+    <div class="f" data-needs="mdblist"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Needs the MDBList key above.</p></div>
+    <div class="f" data-needs="trakt"><label class="t" for="l-trakt">Trakt list ids</label><textarea id="l-trakt" data-lines="lists.trakt" placeholder="user/list-slug, one per line" spellcheck="false"></textarea><p class="hint">Requires a Trakt client ID.</p></div>
+    <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb">PublicMetaDB list IDs</label><textarea id="l-pmdb" data-lines="lists.publicmetadb" placeholder="one per line" spellcheck="false"></textarea></div>
+    <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb-picks">PublicMetaDB pick IDs</label><textarea id="l-pmdb-picks" data-lines="lists.publicmetadbPicks" placeholder="one per line" spellcheck="false"></textarea></div>
+    <div class="f" data-needs="tmdb"><label class="t" for="l-tmdb-collections">TMDB collections</label><textarea id="l-tmdb-collections" data-lines="lists.tmdbCollections" placeholder="Collection links or IDs, one per line"></textarea></div>
+    <div class="f" data-needs="tvdb"><label class="t" for="l-tvdb">TVDB lists</label><textarea id="l-tvdb" data-lines="lists.tvdb" placeholder="List links or IDs, one per line" spellcheck="false"></textarea></div>
     <div class="f"><label class="t" for="l-letterboxd">Letterboxd lists and watchlists</label><textarea id="l-letterboxd" data-lines="lists.letterboxd" placeholder="List or watchlist links, one per line" spellcheck="false"></textarea></div>
     <div class="f"><label class="t" for="l-flixpatrol">FlixPatrol regions</label><textarea id="l-flixpatrol" data-lines="lists.flixpatrol" placeholder="global&#10;romania&#10;united-states" spellcheck="false"></textarea><p class="hint">One region per line. Available charts appear above.</p></div>
   </div>
@@ -390,6 +409,7 @@ function body(): string {
   <button type="button" id="add-custom-catalog">Add catalog</button>
   <h3>Recommendations</h3>
   <p class="note">Optional AI recommendations use your viewing history with the provider you choose. Provider charges apply when a taste profile or recommendation list is generated.</p>
+  <div id="rec-req" class="reqs"></div>
   <label class="check"><input type="checkbox" data-k="recommendations.enabled">Enable recommendations</label>
   <label class="check"><input type="checkbox" data-k="recommendations.aiSearch">Enable AI search with the prefix “ai:”</label>
   <p class="hint">For example: ai: thoughtful science fiction about first contact. Each uncached request uses your chosen AI provider.</p>
@@ -447,12 +467,12 @@ function body(): string {
     <div class="f"><label class="t" for="tr-primary">Primary tracker</label><div class="sel"><select id="tr-primary" data-k="trackers.primary"><option value="off">Off</option><option value="trakt">Trakt</option><option value="simkl">Simkl</option><option value="mdblist">MDBList</option><option value="mal">MyAnimeList</option><option value="anilist">AniList</option></select></div><p class="hint">Used for continue watching and watched status.</p></div>
     <div class="f"><label class="t">Also scrobble to</label>
       <div class="checks" id="scrobble">
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="trakt"> Trakt</label>
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="simkl"> Simkl</label>
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="mdblist"> MDBList</label>
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="publicmetadb"> PublicMetaDB</label>
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="mal"> MyAnimeList</label>
-        <label><input type="checkbox" data-arr="trackers.scrobbleTo" value="anilist"> AniList</label>
+        <label data-needs="trakt"><input type="checkbox" data-arr="trackers.scrobbleTo" value="trakt"> Trakt</label>
+        <label data-needs="simkl"><input type="checkbox" data-arr="trackers.scrobbleTo" value="simkl"> Simkl</label>
+        <label data-needs="mdblist"><input type="checkbox" data-arr="trackers.scrobbleTo" value="mdblist"> MDBList</label>
+        <label data-needs="publicmetadb"><input type="checkbox" data-arr="trackers.scrobbleTo" value="publicmetadb"> PublicMetaDB</label>
+        <label data-needs="mal"><input type="checkbox" data-arr="trackers.scrobbleTo" value="mal"> MyAnimeList</label>
+        <label data-needs="anilist"><input type="checkbox" data-arr="trackers.scrobbleTo" value="anilist"> AniList</label>
       </div>
     </div>
   </div>
@@ -513,8 +533,8 @@ function body(): string {
   <h2><small>6</small>Search</h2>
   <label class="t">Providers</label>
   <div class="checks">
-    <label><input type="checkbox" data-arr="search.providers" value="tmdb"> TMDB</label>
-    <label><input type="checkbox" data-arr="search.providers" value="tvdb"> TVDB</label>
+    <label data-needs="tmdb"><input type="checkbox" data-arr="search.providers" value="tmdb"> TMDB</label>
+    <label data-needs="tvdb"><input type="checkbox" data-arr="search.providers" value="tvdb"> TVDB</label>
     <label><input type="checkbox" data-arr="search.providers" value="cinemeta"> Cinemeta</label>
     <label><input type="checkbox" data-arr="search.providers" value="mal"> MyAnimeList</label>
     <label><input type="checkbox" data-arr="search.providers" value="anilist"> AniList</label>
@@ -725,22 +745,24 @@ const JS = String.raw`
   function changed() {
     cfg.revision=Math.max(Date.now(),(cfg.revision || 0)+1);
     updateSummary();
+    refreshNeeds();
     $('draft-status').textContent = account.signedIn ? 'Saving…' : '';
     clearTimeout(encTimer);
     encTimer = setTimeout(encode, 400);
     if (catalogKey() !== lastCatKey) { clearTimeout(catTimer); catTimer = setTimeout(loadCatalogs, 900); }
-    if (account.signedIn) { clearTimeout(saveTimer); saveTimer = setTimeout(saveRemote, 800); }
+    if (account.signedIn && account.loaded) { clearTimeout(saveTimer); saveTimer = setTimeout(saveRemote, 800); }
   }
 
   // ---- owner account: settings live in D1 and follow you across devices ----------------------
-  var account = { durable: false, exists: false, signedIn: false, username: '' }, saveTimer = null;
+  var account = { durable: false, exists: false, signedIn: false, loaded: false, username: '' }, saveTimer = null, wantedTab = location.hash.slice(1);
   function adoptServerConfig(config) {
     if (!config) return;
     var key = cfg.installationKey;
     cfg = merge(DEFAULTS, config);
     if (!cfg.installationKey) cfg.installationKey = key;
-    lastCatKey = '';
+    lastCatKey = ''; account.loaded = true;
     renderAll(); encode(); loadCatalogs();
+    if (wantedTab) { location.hash = wantedTab; selectTab(wantedTab, false); wantedTab = ''; }
     $('draft-status').textContent = 'Synced with your server';
   }
   var activePop = null;
@@ -781,7 +803,7 @@ const JS = String.raw`
     saveRemote().then(function (r) {
       if (r.error) { status.textContent = r.error; return; }
       status.textContent = ''; $('setup-pass').value = ''; $('setup-pass2').value = '';
-      account.exists = true; account.signedIn = true; account.username = r.username || user;
+      account.exists = true; account.signedIn = true; account.loaded = true; account.username = r.username || user;
       fillInputs(); renderInstall(); renderAccount(); $('draft-status').textContent = 'Saved to your server';
     });
   });
@@ -823,7 +845,8 @@ const JS = String.raw`
     });
   }
   function logout() {
-    api('/api/account/logout').then(function () { account.signedIn = false; account.username = ''; cfg = clone(DEFAULTS); token = ''; lastCatKey = ''; renderAll(); renderAccount(); });
+    clearTimeout(saveTimer);
+    api('/api/account/logout').then(function () { account.signedIn = false; account.loaded = false; account.username = ''; cfg = clone(DEFAULTS); token = ''; lastCatKey = ''; renderAll(); renderAccount(); });
   }
   $('login-form').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('login-submit').click(); } });
   $('login-form').addEventListener('submit', function (e) {
@@ -985,6 +1008,59 @@ const JS = String.raw`
   function swapCatalog(a, b) { var t = cfg.catalogs[a]; cfg.catalogs[a] = cfg.catalogs[b]; cfg.catalogs[b] = t; renderCatalogs(); changed(); }
 
   // ---- ordered pick lists ---------------------------------------------------------------------------
+  // ---- requirements: lock anything that needs a key or account until it exists ----------------------
+  var NEEDS = {
+    tmdb: { label: 'TMDB key', tab: 'meta', field: 'k-tmdb', ok: function () { return !!cfg.keys.tmdb; } },
+    tvdb: { label: 'TVDB key', tab: 'meta', field: 'k-tvdb', ok: function () { return !!cfg.keys.tvdb; } },
+    fanart: { label: 'Fanart.tv key', tab: 'meta', field: 'k-fanart', ok: function () { return !!cfg.keys.fanart; } },
+    rpdb: { label: 'RPDB key', tab: 'meta', field: 'k-rpdb', ok: function () { return !!cfg.keys.rpdb; } },
+    mdblist: { label: 'MDBList key', tab: 'meta', field: 'k-mdblist', ok: function () { return !!cfg.keys.mdblist; } },
+    publicmetadb: { label: 'PublicMetaDB key', tab: 'tracking', field: 'k-publicmetadb', ok: function () { return !!cfg.keys.publicmetadb; } },
+    trakt: { label: 'Trakt account', tab: 'tracking', field: 'trakt-id', ok: function () { return !!(cfg.trackers.trakt && cfg.trackers.trakt.accessToken); } },
+    simkl: { label: 'Simkl account', tab: 'tracking', field: 'simkl-id', ok: function () { return !!(cfg.trackers.simkl && cfg.trackers.simkl.accessToken); } },
+    mal: { label: 'MyAnimeList account', tab: 'tracking', field: 'mal-id', ok: function () { return !!(cfg.trackers.mal && cfg.trackers.mal.accessToken); } },
+    anilist: { label: 'AniList account', tab: 'tracking', field: 'anilist-id', ok: function () { return !!(cfg.trackers.anilist && cfg.trackers.anilist.accessToken); } },
+    ai: { label: 'AI key and model', tab: 'catalogs', field: 'rec-key', ok: function () { var r = cfg.recommendations || {}; return !!(r.apiKey && r.model); } }
+  };
+  var OPTION_NEEDS = { tmdb: 'tmdb', tvdb: 'tvdb', fanart: 'fanart', rpdb: 'rpdb' };
+  function needOk(n) { var d = NEEDS[n]; return !d || !!d.ok(); }
+  function needTag(n, short) {
+    var d = NEEDS[n];
+    return el('button', { type: 'button', class: 'need-tag', title: 'Needs ' + d.label, text: short ? (/account$/.test(d.label) ? 'Connect' : 'Add key') : 'Needs ' + d.label, onclick: function (e) {
+      e.preventDefault(); e.stopPropagation(); location.hash = d.tab; selectTab(d.tab, false);
+      var f = $(d.field); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
+    } });
+  }
+  function lockSelect(select, needFor, hintFor) {
+    if (!select) return;
+    Array.from(select.options).forEach(function (o) {
+      if (!o.dataset.label) o.dataset.label = o.textContent;
+      var n = needFor(o.value); o.disabled = !!n && !needOk(n);
+      o.textContent = o.dataset.label + (o.disabled ? ' · needs ' + NEEDS[n].label.replace(' account', '').replace(' key', ' key') : '');
+    });
+    var wrap = select.closest('.f'), hint = wrap.querySelector('.need-hint'), cur = select.options[select.selectedIndex];
+    if (cur && cur.disabled) { if (!hint) { hint = el('p', { class: 'hint need-hint' }); wrap.appendChild(hint); } hint.textContent = hintFor(cur.value); }
+    else if (hint) hint.remove();
+    if (select._picker) select._picker.sync();
+  }
+  function refreshNeeds() {
+    all('[data-needs]').forEach(function (node) {
+      var n = node.getAttribute('data-needs'), ok = needOk(n);
+      node.classList.toggle('locked', !ok);
+      var tag = node.querySelector(':scope > .need-tag');
+      if (!ok && !tag) node.appendChild(needTag(n, node.tagName === 'LABEL'));
+      if (ok && tag) tag.remove();
+      all('input[type=checkbox]', node).forEach(function (i) { i.disabled = !ok; });
+    });
+    ['p-movie', 'p-series'].forEach(function (id) { lockSelect($(id), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. Cinemeta is used until you add one.'; }); });
+    lockSelect($('p-anime'), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. MyAnimeList is used until you add one.'; });
+    lockSelect($('tr-primary'), function (v) { return v === 'off' ? null : v; }, function (v) { return 'Connect ' + NEEDS[v].label.replace(' account', '') + ' below to use it as your primary tracker.'; });
+    all('[data-order]').forEach(renderOrder);
+    all('[data-key-status]').forEach(function (pill) { var on = !!cfg.keys[pill.getAttribute('data-key-status')]; pill.textContent = on ? 'Set' : 'Not set'; pill.classList.toggle('on', on); });
+    var req = $('rec-req');
+    if (req) { clear(req); [['ai', 'AI key and model'], ['tmdb', 'TMDB key']].forEach(function (r) { var ok = needOk(r[0]); req.appendChild(el('span', { class: 'req' + (ok ? ' on' : ''), text: (ok ? '✓ ' : '○ ') + r[1] })); }); }
+  }
+
   function renderOrder(box) {
     var path = box.getAttribute('data-order');
     var opts = box.getAttribute('data-options').split(',');
@@ -993,7 +1069,8 @@ const JS = String.raw`
     clear(box);
     chosen.concat(rest).forEach(function (v, i) {
       var on = i < chosen.length;
-      var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (LABELS[v] || v) });
+      var need = OPTION_NEEDS[v], locked = !!need && !needOk(need);
+      var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (LABELS[v] || v), disabled: locked });
       cb.checked = on;
       cb.addEventListener('change', function () {
         var arr = chosen.slice();
@@ -1002,7 +1079,8 @@ const JS = String.raw`
       });
       var up = el('button', { type: 'button', text: '↑', title: 'Move up', 'aria-label': 'Move ' + (LABELS[v] || v) + ' up', disabled: !on || i === 0, onclick: function () { set(path, move(chosen.slice(), i, -1)); renderOrder(box); changed(); } });
       var dn = el('button', { type: 'button', text: '↓', title: 'Move down', 'aria-label': 'Move ' + (LABELS[v] || v) + ' down', disabled: !on || i === chosen.length - 1, onclick: function () { set(path, move(chosen.slice(), i, 1)); renderOrder(box); changed(); } });
-      box.appendChild(el('div', { class: 'item' + (on ? '' : ' off') }, [cb, el('div', { class: 'n', text: LABELS[v] || v }), el('div', { class: 'ud' }, [up, dn])]));
+      var name = el('div', { class: 'n' }, [document.createTextNode(LABELS[v] || v), locked ? el('small', { text: on ? 'Skipped until the key is added' : '' }) : null]);
+      box.appendChild(el('div', { class: 'item' + (on ? '' : ' off') + (locked ? ' locked' : '') }, [cb, name, locked ? needTag(need) : el('div', { class: 'ud' }, [up, dn])]));
     });
   }
 
@@ -1018,6 +1096,7 @@ const JS = String.raw`
     all('[data-order]').forEach(renderOrder);
     enhanceSelects();
     applyMode();
+    refreshNeeds();
   }
   function bindInputs() {
     all('input[name="mode"]').forEach(function (n) {
