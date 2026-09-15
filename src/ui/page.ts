@@ -300,7 +300,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 function body(): string {
   return `
 <main>
-<div id="setup-gate" hidden><form id="setup-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><h2>Create your account</h2><p class="note">One account protects this page and signs you in from Jellyfin apps. Your settings are stored on your Worker and follow you to every device.</p><div class="f"><label class="t" for="setup-user">Username</label><input type="text" id="setup-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="setup-pass">Password</label><input type="password" id="setup-pass" name="password" autocomplete="new-password" minlength="8" required><p class="hint">At least 8 characters.</p></div><div class="f"><label class="t" for="setup-pass2">Confirm password</label><input type="password" id="setup-pass2" autocomplete="new-password" minlength="8" required></div><button type="submit" id="setup-submit">Create account</button><p class="status" id="setup-status" role="alert"></p><p class="hint"><button class="q" type="button" id="setup-skip">Continue without an account</button> Settings then stay in this browser only.</p></form></div>
+<div id="setup-gate" hidden><form id="setup-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><h2>Create your account</h2><p class="note">One account protects this page and signs you in from Jellyfin apps. Your settings are stored on your Worker and follow you to every device.</p><div class="f"><label class="t" for="setup-user">Username</label><input type="text" id="setup-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="setup-pass">Password</label><input type="password" id="setup-pass" name="password" autocomplete="new-password" minlength="8" required><p class="hint">At least 8 characters.</p></div><div class="f"><label class="t" for="setup-pass2">Confirm password</label><input type="password" id="setup-pass2" autocomplete="new-password" minlength="8" required></div><button type="submit" id="setup-submit">Create account</button><p class="status" id="setup-status" role="alert"></p></form></div>
 <div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
@@ -767,18 +767,13 @@ const JS = String.raw`
       side.appendChild(el('span', { class: 'avatar big', 'aria-hidden': 'true', text: initial(account.username) }));
       side.appendChild(el('div', { class: 'meta' }, [el('strong', { text: account.username }), el('small', { text: statusText() })]));
       side.appendChild(el('button', { type: 'button', class: 'q', text: 'Log out', onclick: function () { closeDrawer(); logout(); } }));
-    } else if (account.durable && !account.exists) {
-      host.appendChild(el('button', { type: 'button', class: 'chip cta', title: 'Store these settings on your Worker so they follow you to every device', text: 'Save to server', onclick: protect }));
-      side.appendChild(el('div', { class: 'meta' }, [el('strong', { text: 'Not saved to server' }), el('small', { text: 'Settings live only in this browser.' })]));
-      side.appendChild(el('button', { type: 'button', class: 'q', text: 'Save to server', onclick: function () { closeDrawer(); protect(); } }));
     }
     $('login-gate').hidden = !(account.exists && !account.signedIn);
     if (!$('login-gate').hidden) $('login-user').focus();
-    var firstRun = account.durable && !account.exists && !account.skippedSetup;
+    var firstRun = account.durable && !account.exists;
     $('setup-gate').hidden = !firstRun;
     if (firstRun) { $('setup-user').value = $('setup-user').value || (cfg.jellyfin.username !== 'rill' ? cfg.jellyfin.username : ''); $('setup-user').focus(); }
   }
-  $('setup-skip').addEventListener('click', function () { account.skippedSetup = true; renderAccount(); });
   $('setup-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var status = $('setup-status'), user = $('setup-user').value.trim(), pass = $('setup-pass').value;
@@ -829,17 +824,6 @@ const JS = String.raw`
       if (r.config && r.config.installationKey) cfg.installationKey = r.config.installationKey;
       if (r.token) { token = r.token; renderInstall(); }
       return r;
-    });
-  }
-  function protect() {
-    if (!cfg.jellyfin.username || (cfg.jellyfin.password || '').length < 8) {
-      alert('Set a Jellyfin username and a password of at least 8 characters first. They also protect this page.');
-      location.hash = 'jellyfin'; selectTab('jellyfin', true); return;
-    }
-    saveRemote().then(function (r) {
-      if (r.error) { alert(r.error); return; }
-      account.exists = true; account.signedIn = true; account.username = r.username || cfg.jellyfin.username;
-      renderAccount();
     });
   }
   function logout() {
