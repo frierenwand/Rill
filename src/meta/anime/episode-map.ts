@@ -1,5 +1,3 @@
-/** Episode-level Anime-Lists mappings. Pure conversion supports both TVDB and TMDB.
- * The constrained XML reader never resolves entities, DTDs or external resources. */
 import type { Ctx } from '../../context';
 import { memo } from '../../util/cache';
 export type EpisodeSpace = 'tvdb' | 'tmdb';
@@ -44,7 +42,6 @@ export function toExternalEpisodes(rows: EpisodeMap[], space: EpisodeSpace, anim
   const id = row[space]!;
   const rules = row[`${space}Rules`].filter(r => r.animeSeason === anime.season);
   const explicit = rules.flatMap(r => r.pairs.filter(p => p[0] === anime.episode).flatMap(p => p[1].map(episode => ({ id, season: r.season, episode }))));
-  // Explicit zero is an intentional exclusion, never fall back to a default.
   if (explicit.length) return unique(explicit.filter(r => r.episode > 0));
   const ranges = rules.filter(r => r.start !== undefined && anime.episode >= r.start && (r.end === undefined || anime.episode <= r.end));
   if (ranges.length) return unique(ranges.map(r => ({ id, season: r.season, episode: anime.episode + r.offset })).filter(r => r.episode > 0));
@@ -53,7 +50,6 @@ export function toExternalEpisodes(rows: EpisodeMap[], space: EpisodeSpace, anim
   const offset = row[`${space}Offset`], episode = anime.episode + offset;
   const next = rows.filter(r => r[space] === id && r[`${space}Season`] === season && r[`${space}Offset`] > offset).map(r => r[`${space}Offset`]).sort((a,b) => a-b)[0];
   if (episode <= 0 || (next !== undefined && episode > next)) return [];
-  // Two entries with the same default offset are ambiguous without explicit rules.
   if (rows.some(r => r.anidb !== row.anidb && r[space] === id && r[`${space}Season`] === season && r[`${space}Offset`] === offset)) return [];
   return [{ id, season, episode }];
 }
@@ -67,7 +63,6 @@ export function toAnimeEpisodes(rows: EpisodeMap[], space: EpisodeSpace, externa
       if (rule.start !== undefined && episode >= rule.start && (rule.end === undefined || episode <= rule.end)) candidates.push({ anidb: row.anidb, season: rule.animeSeason, episode });
     }
     if (row[`${space}Season`] === external.season) candidates.push({ anidb: row.anidb, season: 1, episode: external.episode - row[`${space}Offset`] });
-    // Round-trip validation enforces explicit overrides over offset fallbacks.
     for (const candidate of candidates) if (toExternalEpisodes(rows, space, candidate).some(r => r.id === external.id && r.season === external.season && r.episode === external.episode)) matches.push(candidate);
   }
   return unique(matches);

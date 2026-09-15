@@ -1,9 +1,3 @@
-/**
- * TMDB v3. One details request per title (append_to_response carries ids, credits,
- * trailers, images, certifications, keywords and translations); seasons are fetched
- * separately with bounded concurrency. Every GET is memoised in the Cache API under a
- * key that omits the api key so users sharing a colo share the cached record.
- */
 import type { Ctx } from '../context';
 import { episodeId } from '../stremio/ids';
 import type { ContentType, Meta, MetaLink, MetaPreview, MetaVideo } from '../stremio/types';
@@ -37,7 +31,6 @@ export interface TmdbEpisode {
 
 export interface TmdbSeasonSummary { season_number: number; episode_count: number; name?: string; poster_path?: string | null; air_date?: string | null }
 
-/** Shape of a movie or tv details record after append_to_response. */
 export interface TmdbDetails {
   id: number;
   imdb_id?: string | null;
@@ -75,17 +68,10 @@ interface TmdbPage<T> { page: number; results: T[]; total_pages?: number; total_
 
 export interface TmdbArtwork { poster?: string; background?: string; logo?: string; posterLandscape?: string }
 
-/* ------------------------------------------------------------------ transport */
-
 function keyMode(key: string): 'bearer' | 'query' {
-  // v4 read tokens are JWTs; v3 keys are 32 hex chars.
   return key.length > 40 && key.includes('.') ? 'bearer' : 'query';
 }
 
-/**
- * GET a TMDB path. Returns null without a key. The cache key is path + params
- * (never the key), so the record is shared between users with different keys.
- */
 export async function tmdbGet<T>(ctx: Ctx, path: string, params: Record<string, string | number | boolean | undefined>, ttl: number): Promise<T | null> {
   const key = ctx.tmdbKey;
   if (!key) return null;
@@ -104,16 +90,10 @@ export async function tmdbGet<T>(ctx: Ctx, path: string, params: Record<string, 
   return hit ?? null;
 }
 
-/* ------------------------------------------------------------------ images */
-
 export function tmdbImageUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' | 'w780' | 'w1280' | 'original' = 'w500'): string | undefined {
   return path ? `${IMG}/${size}${path}` : undefined;
 }
 
-/**
- * Pick the best image for the user's language: exact language, then English, then
- * the title's original language, then any language, then textless (null/xx).
- */
 export function pickImage(images: TmdbImage[] | undefined, lang: string, originalLang?: string | null, preferTextless = false): TmdbImage | undefined {
   if (!images?.length) return undefined;
   const buckets: Record<string, TmdbImage | undefined> = {};
@@ -134,7 +114,6 @@ export function pickImage(images: TmdbImage[] | undefined, lang: string, origina
   return undefined;
 }
 
-/** Artwork out of a details record (no extra request). */
 export function artworkFromDetails(d: TmdbDetails, lang: string): TmdbArtwork {
   const orig = d.original_language;
   const poster = pickImage(d.images?.posters, lang, orig) ?? undefined;
@@ -149,13 +128,10 @@ export function artworkFromDetails(d: TmdbDetails, lang: string): TmdbArtwork {
   };
 }
 
-/** Exported for the anime module: poster/background/logo for a TMDB title, from the cached details call. */
 export async function tmdbImages(ctx: Ctx, kind: TmdbKind, tmdbId: number): Promise<TmdbArtwork> {
   const d = await tmdbDetails(ctx, kind, tmdbId);
   return d ? artworkFromDetails(d, splitLanguageTag(ctx.cfg.language).lang) : {};
 }
-
-/* ------------------------------------------------------------------ details */
 
 function appendList(kind: TmdbKind, lang: string): string {
   const base = ['external_ids', 'credits', 'videos', 'images', 'keywords', kind === 'movie' ? 'release_dates' : 'content_ratings'];
@@ -186,19 +162,12 @@ export async function tmdbSeason(ctx: Ctx, tmdbId: number, season: number): Prom
   return tmdbGet(ctx, `/tv/${tmdbId}/season/${season}`, { language: tmdbLanguage(ctx.cfg.language) }, TTL_SEASON);
 }
 
-/** Every episode of every listed season, in season/episode order. At most 4 seasons in flight. */
 export async function tmdbAllEpisodes(ctx: Ctx, d: TmdbDetails): Promise<TmdbEpisode[]> {
   const seasons = (d.seasons ?? []).filter((s) => s.episode_count > 0 && s.season_number >= 0).map((s) => s.season_number);
   const chunks = await mapLimit(seasons, 4, async (n) => (await tmdbSeason(ctx, d.id, n))?.episodes ?? []);
   return chunks.flat().sort((a, b) => a.season_number - b.season_number || a.episode_number - b.episode_number);
 }
 
-/* ------------------------------------------------------------------ find / search / lists */
-
-/**
- * Fill tmdb (and tmdbType) from imdb or tvdb via /find. Also fills imdb/tvdb from a
- * known tmdb id through the details record's external_ids.
- */
 export async function tmdbFind(ctx: Ctx, ids: IdBundle): Promise<IdBundle> {
   const out: IdBundle = { ...ids };
   if (!ctx.tmdbKey) return out;
@@ -241,7 +210,6 @@ function contentTypeFor(kind: TmdbKind): ContentType {
   return kind === 'movie' ? 'movie' : 'series';
 }
 
-/** Genre id -> name table (cached a week; cheap and shared by every list call). */
 export async function tmdbGenres(ctx: Ctx, kind: TmdbKind): Promise<Map<number, string>> {
   const data = await tmdbGet<{ genres?: TmdbGenre[] }>(ctx, `/genre/${kind}/list`, { language: tmdbLanguage(ctx.cfg.language) }, 7 * 24 * 3600);
   return new Map<number, string>((data?.genres ?? []).map((g) => [g.id, g.name]));
@@ -265,10 +233,6 @@ export function previewFromListItem(item: TmdbListItem, kind: TmdbKind, genres?:
   };
 }
 
-/**
- * Any list-shaped endpoint: '/trending/movie/week', '/movie/popular', '/tv/top_rated',
- * '/discover/movie' ... `params` are passed through (with_genres, sort_by, region, ...).
- */
 export async function tmdbList(ctx: Ctx, kind: TmdbKind, path: string, params: Record<string, string>, page: number): Promise<MetaPreview[]> {
   const p = path.startsWith('/') ? path : `/${path}`;
   const data = await tmdbGet<TmdbPage<TmdbListItem>>(ctx, p, {
@@ -291,8 +255,6 @@ export async function tmdbSearch(ctx: Ctx, kind: TmdbKind, query: string, page =
   return tmdbList(ctx, kind, `/search/${kind}`, { query: q }, page);
 }
 
-/* ------------------------------------------------------------------ text helpers */
-
 function translated(d: TmdbDetails, lang: string, field: 'title' | 'overview' | 'tagline'): string | undefined {
   const list = d.translations?.translations ?? [];
   const isTitle = field === 'title';
@@ -311,7 +273,6 @@ export function overviewOf(d: TmdbDetails, lang: string): string | undefined {
   return d.overview || translated(d, lang, 'overview') || undefined;
 }
 
-/** Certification for the user's region, then US, then the first country that has one. */
 export function certificationOf(d: TmdbDetails, region: string): string | undefined {
   const tryRegions = [region.toUpperCase(), 'US'];
   if (d.release_dates?.results) {
@@ -333,7 +294,6 @@ export function runtimeText(minutes: number | null | undefined): string | undefi
   return minutes && minutes > 0 ? `${Math.round(minutes)} min` : undefined;
 }
 
-/** YouTube trailers, user language first then English; teasers and clips after trailers. */
 export function trailersOf(d: TmdbDetails, lang: string): Array<{ source: string; type: 'Trailer' | 'Clip' }> {
   const vids = (d.videos?.results ?? []).filter((v) => v.site === 'YouTube' && v.key);
   const rank = (v: TmdbVideo) => (v.type === 'Trailer' ? 0 : v.type === 'Teaser' ? 1 : 2) * 10 + (v.iso_639_1 === lang ? 0 : v.iso_639_1 === 'en' ? 1 : 2) + (v.official ? 0 : 3);
@@ -357,8 +317,6 @@ export function buildLinks(opts: { imdb?: string; tmdb?: number; kind: TmdbKind;
   for (const c of opts.writer ?? []) links.push(searchLink(c, 'Writers'));
   return links;
 }
-
-/* ------------------------------------------------------------------ meta */
 
 export const ONGOING_STATUSES = new Set(['Returning Series', 'In Production', 'Planned', 'Pilot']);
 
@@ -393,15 +351,10 @@ function episodeToVideo(canonicalId: string, ep: TmdbEpisode, fallbackThumb: str
   };
 }
 
-/** A bare date is treated as noon UTC so it lands on the right calendar day in most zones. */
 export function toIsoNoon(date: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00.000Z` : new Date(date).toISOString();
 }
 
-/**
- * Build a Stremio meta for a TMDB title. `canonicalId` is the Stremio id the videos
- * should hang off (imdb when known so stream addons match, else tmdb:N).
- */
 export async function tmdbMeta(ctx: Ctx, kind: TmdbKind, tmdbId: number, canonicalId: string, opts: { withEpisodes?: boolean } = {}): Promise<Meta | null> {
   const d = await tmdbDetails(ctx, kind, tmdbId);
   if (!d) return null;
@@ -460,7 +413,6 @@ export async function tmdbMeta(ctx: Ctx, kind: TmdbKind, tmdbId: number, canonic
   return meta;
 }
 
-/** Search previews carry tmdb ids; this upgrades a preview id to imdb when the record knows it (one cached call). */
 export async function tmdbPreviewWithImdb(ctx: Ctx, preview: MetaPreview): Promise<MetaPreview> {
   const m = /^tmdb:(\d+)$/.exec(preview.id);
   if (!m) return preview;

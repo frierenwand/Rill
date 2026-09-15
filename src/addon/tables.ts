@@ -1,12 +1,6 @@
-/**
- * Static option tables for discover-style catalogs. Kept small and hand-picked:
- * the upstream project resolves networks and keywords from TMDB's daily gzip
- * exports, which a Worker cannot afford; a curated list covers the common asks.
- */
 
 export interface NamedId { name: string; id: number }
 
-/** TMDB TV network ids for the "By network" catalog. */
 export const TMDB_NETWORKS: NamedId[] = [
   { name: 'Netflix', id: 213 }, { name: 'HBO', id: 49 }, { name: 'Amazon', id: 1024 }, { name: 'Apple TV+', id: 2552 },
   { name: 'Disney+', id: 2739 }, { name: 'Hulu', id: 453 }, { name: 'Paramount+', id: 4330 }, { name: 'Peacock', id: 3353 },
@@ -19,7 +13,6 @@ export const TMDB_NETWORKS: NamedId[] = [
   { name: 'Crunchyroll', id: 1112 }, { name: 'Fuji TV', id: 3 }, { name: 'TV Tokyo', id: 94 }, { name: 'Nippon TV', id: 57 }, { name: 'Tokyo MX', id: 98 },
 ];
 
-/** TMDB keyword ids for the "By keyword" catalog. */
 export const TMDB_KEYWORDS: NamedId[] = [
   { name: 'Superhero', id: 9715 }, { name: 'Anime', id: 210024 }, { name: 'Based on novel or book', id: 818 }, { name: 'Time travel', id: 4379 },
   { name: 'Zombie', id: 12377 }, { name: 'Vampire', id: 3133 }, { name: 'Heist', id: 10051 }, { name: 'Space', id: 9882 },
@@ -32,7 +25,6 @@ export const TMDB_KEYWORDS: NamedId[] = [
   { name: 'High school', id: 6270 }, { name: 'Assassin', id: 5565 }, { name: 'Cyberpunk', id: 12190 }, { name: 'Mockumentary', id: 11800 },
 ];
 
-/** Original-language options: display name -> ISO 639-1. */
 export const TMDB_LANGUAGES: Array<{ name: string; code: string }> = [
   { name: 'English', code: 'en' }, { name: 'Spanish', code: 'es' }, { name: 'French', code: 'fr' }, { name: 'German', code: 'de' },
   { name: 'Italian', code: 'it' }, { name: 'Portuguese', code: 'pt' }, { name: 'Japanese', code: 'ja' }, { name: 'Korean', code: 'ko' },
@@ -45,7 +37,6 @@ export const TMDB_LANGUAGES: Array<{ name: string; code: string }> = [
   { name: 'Vietnamese', code: 'vi' }, { name: 'Filipino', code: 'tl' },
 ];
 
-/** Streaming services: TMDB watch-provider id plus the region the catalogue is most complete for. */
 export const STREAMING_PROVIDERS: Array<{ name: string; id: number; region: string }> = [
   { name: 'Netflix', id: 8, region: 'US' }, { name: 'Netflix Kids', id: 175, region: 'US' }, { name: 'Amazon Prime Video', id: 9, region: 'US' },
   { name: 'Disney+', id: 337, region: 'US' }, { name: 'Apple TV+', id: 350, region: 'US' }, { name: 'Max', id: 1899, region: 'US' },
@@ -60,12 +51,10 @@ export const STREAMING_PROVIDERS: Array<{ name: string; id: number; region: stri
   { name: 'ZEE5', id: 232, region: 'IN' }, { name: 'BluTV', id: 341, region: 'TR' },
 ];
 
-/** Regions offered for "Airing today" origin-country filtering. */
 export const AIRING_REGIONS = ['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'NL', 'SE', 'PL', 'PT', 'BR', 'IN', 'JP', 'KR'];
 
 export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-/** MAL genre / theme / demographic ids as Jikan reports them. Explicit adult genres are left out. */
 export const MAL_GENRES: NamedId[] = [
   { name: 'Action', id: 1 }, { name: 'Adventure', id: 2 }, { name: 'Comedy', id: 4 }, { name: 'Drama', id: 8 }, { name: 'Fantasy', id: 10 },
   { name: 'Horror', id: 14 }, { name: 'Mystery', id: 7 }, { name: 'Romance', id: 22 }, { name: 'Sci-Fi', id: 24 }, { name: 'Slice of Life', id: 36 },
@@ -81,7 +70,6 @@ export const MAL_GENRES: NamedId[] = [
   { name: 'Seinen', id: 42 }, { name: 'Josei', id: 43 }, { name: 'Kids', id: 15 },
 ];
 
-/** MAL producer ids for well-known studios. */
 export const MAL_STUDIOS: NamedId[] = [
   { name: 'MAPPA', id: 569 }, { name: 'Madhouse', id: 11 }, { name: 'Kyoto Animation', id: 2 }, { name: 'Bones', id: 4 }, { name: 'Wit Studio', id: 858 },
   { name: 'ufotable', id: 43 }, { name: 'A-1 Pictures', id: 56 }, { name: 'Production I.G', id: 10 }, { name: 'Sunrise', id: 14 },
@@ -108,12 +96,10 @@ export function seasonOf(date: Date): { season: AnimeSeason; year: number } {
   return { season, year: date.getUTCFullYear() };
 }
 
-/** "Fall 2025", "Summer 2025", ... walking back `count` seasons from now. */
 export function recentSeasonLabels(count: number, now = new Date()): string[] {
   const order: AnimeSeason[] = ['winter', 'spring', 'summer', 'fall'];
   let { season, year } = seasonOf(now);
   let idx = order.indexOf(season);
-  // Include the upcoming season first so the option list stays useful near a season boundary.
   idx += 1; if (idx > 3) { idx = 0; year += 1; }
   const out: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -129,7 +115,6 @@ export function parseSeasonLabel(label: string | undefined): { season: AnimeSeas
   return { season: m[1].toLowerCase() as AnimeSeason, year: Number(m[2]) };
 }
 
-/** Year options: every year back to 1950 plus decade buckets. */
 export function yearOptions(now = new Date()): string[] {
   const cur = now.getUTCFullYear();
   const years: string[] = [];

@@ -1,11 +1,3 @@
-/**
- * The library as a Jellyfin client sees it: catalogs are CollectionFolders,
- * catalog pages are Items, series unfold into Seasons and Episodes from the
- * meta's video list, and watch state is painted on from the tracker snapshot.
- *
- * A `Library` instance lives for one request. It memoises the catalog list and
- * the watch snapshot for that request only.
- */
 import { catalogPage, enabledCatalogDefinitions, type CatalogDefinition } from '../addon/catalogs';
 import { metaAddons } from '../config/schema';
 import { aiQuery,aiSearch } from '../addon/ai';
@@ -46,7 +38,6 @@ const MAX_WINDOW_PAGES = 64;
 const WINDOW_HEADROOM = 6;
 const UPCOMING_DAYS = 90;
 
-/** The loose shape this module reads off a catalog definition. */
 interface CatalogShape {
   id: string;
   type: ContentType;
@@ -82,7 +73,6 @@ function kindOfPreview(m: MetaPreview, catType: ContentType): 'movie' | 'series'
   return t === 'movie' ? 'movie' : 'series';
 }
 
-/** Id key used by the watch index: `${source}:${num}`. */
 function key(source: IdSource, num: number): string {
   return `${source}:${num}`;
 }
@@ -101,7 +91,6 @@ export function bundleKeys(ids: IdBundle | Meta['ids'] | undefined): string[] {
   return out;
 }
 
-/** Turn a title guid into the IdBundle trackers understand, enriched by meta ids when given. */
 export function bundleOf(g: TitleGuid, meta?: Meta | null): IdBundle {
   const b: IdBundle = { ...(meta?.ids ?? {}) };
   if (g.source === 'imdb') b.imdb ??= `tt${String(g.num).padStart(7, '0')}`;
@@ -110,8 +99,6 @@ export function bundleOf(g: TitleGuid, meta?: Meta | null): IdBundle {
   else b.tmdbType ??= 'tv';
   return b;
 }
-
-// ---------- Watch index ----------
 
 interface EpisodeMark {
   plays: number;
@@ -188,25 +175,17 @@ export class WatchIndex {
     return undefined;
   }
 
-  /** Any tracker knowledge of this show at all? Used to skip lookups. */
   knowsShow(keys: string[]): boolean {
     return keys.some((k) => this.episodes.has(k) || this.resumeEpisodes.has(k) || this.shows.has(k));
   }
 }
 
-/**
- * Anime trackers count absolute episodes with no season, or season 1; TV
- * trackers count broadcast seasons. Both spellings are indexed so a match is
- * found whichever way the meta numbers its videos.
- */
 function episodeKeys(season: number | undefined, episode: number | undefined): string[] {
   const e = episode ?? 0;
   const keys = [`${season ?? 1}:${e}`];
   if (season === undefined || season === 1) keys.push(`abs:${e}`);
   return keys;
 }
-
-// ---------- Shows ----------
 
 export interface EpisodeView {
   season: number;
@@ -231,10 +210,6 @@ export interface Show {
   keys: string[];
 }
 
-/**
- * Group a meta's videos into seasons. Anime metas number episodes absolutely
- * with no season; those become Season 1 unless the meta carries seasons.
- */
 export function episodesOf(meta: Meta, series: TitleGuid): { seasons: SeasonView[]; episodes: EpisodeView[] } {
   const videos = Array.isArray(meta.videos) ? meta.videos : [];
   const seen = new Set<string>();
@@ -280,15 +255,12 @@ function isReleased(v: MetaVideo): boolean {
   return !Number.isFinite(t) || t <= Date.now();
 }
 
-// ---------- The per-request library ----------
-
 export class Library {
   private episodeBook=new Map<string,{show:Show;episode:EpisodeView}>();
   private episodeStates=new Map<string,Promise<{watched?:EpisodeMark;resume?:ResumeEntry}>>();
   private catalogsPromise?: Promise<CatalogRef[]>;
   private watchPromise?: Promise<WatchIndex>;
   private readonly metas = new Map<string, Promise<Meta | null>>();
-  /** Item guid -> every id key the item is known by (from meta.ids). */
   private readonly keyBook = new Map<string, string[]>();
 
   constructor(readonly jf: JfRequest) {}
@@ -296,8 +268,6 @@ export class Library {
   get ctx() {
     return this.jf.ctx;
   }
-
-  // ----- catalogs / views -----
 
   catalogs(): Promise<CatalogRef[]> {
     this.catalogsPromise ??= (async () => {
@@ -350,7 +320,6 @@ export class Library {
     return (await this.catalogs()).find((c) => c.hash === g.hash) ?? null;
   }
 
-  /** Genre name from a misc/genre guid, matched against known genres, else the embedded hint. */
   async genreNameOf(g: LabelGuid): Promise<string> {
     const all = new Set<string>();
     for (const c of await this.catalogs()) for (const name of c.genres) all.add(name);
@@ -358,13 +327,6 @@ export class Library {
     return g.hint;
   }
 
-  // ----- catalog windows -----
-
-  /**
-   * Catalogs page by `skip` and never say how long they are. A window is filled
-   * page by page until it has enough, and `hasMore` is whether the last page
-   * came back full, so a client keeps asking until a short page ends it.
-   */
   async window(cat: CatalogRef, start: number, limit: number, extra: { search?: string; genre?: string } = {}): Promise<{ items: MetaPreview[]; hasMore: boolean }> {
     const collected: MetaPreview[] = [];
     const seen = new Set<string>();
@@ -403,8 +365,6 @@ export class Library {
     return { items: collected.slice(0, limit), hasMore: !exhausted };
   }
 
-  // ----- items from previews / metas -----
-
   allowed(cert: string | undefined | null): boolean {
     const cap = this.ctx.cfg.ageCap;
     if (!cap) return true;
@@ -415,7 +375,6 @@ export class Library {
     }
   }
 
-  /** Movie/Series item for a preview from a catalog listing. */
   previewItem(m: MetaPreview, cat: CatalogRef, parentId: string | null): Dto | null {
     const g = guidOfPreview(m, cat.type);
     if (!g) return null;
@@ -426,7 +385,6 @@ export class Library {
     return item;
   }
 
-  /** Movie/Series item from a full meta. */
   titleItemOf(meta: Meta, g: TitleGuid, parentId: string | null = null): Dto {
     const id = encodeGuid(g);
     this.noteKeys(id, g, meta.ids);
@@ -451,8 +409,6 @@ export class Library {
     if (known) return known;
     return g ? [key(g.source, g.num)] : [];
   }
-
-  // ----- metas -----
 
   meta(g: TitleGuid): Promise<Meta | null> {
     const title = g.kind === 'movie' ? g : parentSeriesOf(g);
@@ -492,14 +448,12 @@ export class Library {
     return { guid: series, id, meta, seasons, episodes, keys: this.keysOf(id, series) };
   }
 
-  /** The episode view a guid points at: exact numbering first, then absolute numbering folded into season 1. */
   findEpisode(show: Show, g: TitleGuid): EpisodeView | undefined {
     if (g.kind !== 'episode' || g.episode === undefined) return undefined;
     const s = g.season ?? 1;
     return show.episodes.find((e) => e.season === s && e.episode === g.episode) ?? (s === 1 ? show.episodes.find((e) => e.episode === g.episode && show.seasons.length === 1) : undefined);
   }
 
-  /** Stremio id a stream addon wants for an episode: the video's own id when the meta has one. */
   streamIdOf(show: Show | null, g: TitleGuid): string {
     if (g.kind === 'movie' || g.kind === 'series') return stremioIdOfGuid(g);
     const ep = show ? this.findEpisode(show, g) : undefined;
@@ -547,8 +501,6 @@ export class Library {
     return item;
   }
 
-  // ----- watch state -----
-
   async episodeState(idx:WatchIndex,show:Show,episode:EpisodeView): Promise<{watched?:EpisodeMark;resume?:ResumeEntry}> {
     const local=idx.localEpisode(show.keys,episode.season,episode.episode);
     if(local) return local;
@@ -565,7 +517,7 @@ export class Library {
         const states=queries.map(q=>idx.episode(bundleKeys(q.ids),q.season ?? 1,q.episode ?? 0));
         const watched=states.every(s=>s.watched) ? {plays:Math.min(...states.map(s=>s.watched!.plays)),lastAt:states.map(s=>s.watched!.lastAt).sort().at(-1)!}:undefined;
         return {watched,resume:states.find(s=>s.resume)?.resume};
-      } catch { return {}; } // An unresolved mapping is not evidence that another entry was watched.
+      } catch { return {}; }
     })();
     this.episodeStates.set(episode.id,task);
     return task;
@@ -583,11 +535,6 @@ export class Library {
     return this.watchPromise;
   }
 
-  /**
-   * Paint UserData on built items from the tracker snapshot. Series and
-   * seasons aggregate their episodes when the show is loaded; otherwise they
-   * keep the empty defaults rather than claiming zero unplayed.
-   */
   async decorate(items: Dto[], shows: Map<string, Show> = new Map()): Promise<Dto[]> {
     if (!items.length) return items;
     const idx = await this.watch();
@@ -622,7 +569,6 @@ export class Library {
         });
         continue;
       }
-      // Series / season: aggregate over the show's released episodes when we have it.
       const show = shows.get(g.kind === 'series' ? id : encodeGuid(parentSeriesOf(g)));
       if (!show) continue;
       const pool = show.episodes.filter((e) => isReleased(e.video) && (g.kind === 'series' || e.season === g.season));
@@ -643,9 +589,6 @@ export class Library {
     return items;
   }
 
-  // ----- shelves -----
-
-  /** Resolve a tracker id bundle to a series/movie guid via the meta agent's canonical id. */
   guidOfBundle(ids: IdBundle, kind: 'movie' | 'series'): TitleGuid | null {
     let canonical: string | null = null;
     try {
@@ -680,8 +623,6 @@ export class Library {
       let ep = this.findEpisode(show, { ...g, kind: 'episode', season: row.season, episode: row.episode });
       const local=idx.localEpisode(show.keys,row.season ?? 1,row.episode ?? 0);
       if (!local) {
-        // Tracker coordinates may be TVDB while the configured metadata uses TMDB/anime.
-        // Find the display episode whose projected resume points back to this row.
         if (!ep || (await this.episodeState(idx,show,ep)).resume !== row) {
           ep=undefined;
           for(const candidate of show.episodes) if ((await this.episodeState(idx,show,candidate)).resume===row) {ep=candidate;break;}
@@ -767,7 +708,6 @@ export class Library {
     return this.decorate(built);
   }
 
-  /** Recommendations for this title, independently of the enabled home catalogs. */
   async similar(g: TitleGuid, limit: number): Promise<Dto[]> {
     const meta = await this.meta(g);
     if (!meta?.ids?.tmdb) return [];
@@ -780,11 +720,6 @@ export class Library {
     return this.decorate(built);
   }
 
-  /**
-   * Search across movie and series metas, interleaving the ranked lists so one
-   * provider's weak tail does not bury another's best hit. Titles are de-duped
-   * by id and by name|year since the same title reaches us under several ids.
-   */
   async search(term: string, wanted: Set<ItemType> | null, limit: number): Promise<Dto[]> {
     const ai=aiQuery(this.ctx,term);
     const types: Array<{ type: ContentType; kind: 'movie' | 'series' }> = [];
@@ -820,7 +755,6 @@ export class Library {
     return this.decorate(out);
   }
 }
-
 
 export function includeTypesOf(list: string[]): Set<ItemType> | null {
   const wanted = new Set<ItemType>();

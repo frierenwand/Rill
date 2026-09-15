@@ -1,6 +1,5 @@
 import { queueBulk } from '../storage/bulk';
 import { withStateLock } from '../storage/lock';
-/** Store progress durably when configured; only playback transitions reach providers. */
 import { mapLimit } from '../util/concurrency';
 import { metaApi } from '../meta/index';
 import type { IdBundle } from '../meta/types';
@@ -52,7 +51,6 @@ function numberingOf(lib: Library, g: TitleGuid): ScrobbleEvent['numbering'] {
   return lib.ctx.cfg.providers.series === 'tvdb' ? 'tvdb' : 'tmdb';
 }
 
-/** Resolve a movie or episode guid into what a tracker needs: ids, numbering, runtime. */
 export async function playTarget(lib: Library, itemId: string): Promise<PlayTarget | null> {
   const g = decodeGuid(itemId);
   if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return null;
@@ -62,12 +60,10 @@ export async function playTarget(lib: Library, itemId: string): Promise<PlayTarg
     try {
       ids = { ...ids, ...(await metaApi.resolveIds(lib.ctx, lib.streamIdOf(null, g.kind === 'movie' ? g : { ...g, kind: 'series' }), g.kind === 'movie' ? 'movie' : 'series')) };
     } catch {
-      /* the single id we have will do */
     }
   }
   const episode = g.kind === 'episode' ? meta?.videos?.find(v => v.season === (g.season ?? 1) && v.episode === g.episode) : undefined;
   if (g.kind === 'episode' && !['mal', 'anilist', 'kitsu', 'anidb'].includes(g.source)) {
-    // Title-level anime IDs can point at the first cour, never assume they match this episode.
     delete ids.mal; delete ids.anilist; delete ids.kitsu; delete ids.anidb;
   }
   const rt = runtimeTicks((episode as { runtime?: string } | undefined)?.runtime ?? meta?.runtime);
@@ -107,7 +103,6 @@ export function reportOf(body: Record<string, unknown>, paramId?: string): PlayR
   };
 }
 
-/** Persist transitions only. Retry failed transitions at most once on a later client report. */
 async function transition(lib: Library, r: PlayReport, known: PlayCursor | null, action: ScrobbleEvent['action']): Promise<void> {
   const retry = known?.pending === action;
   if (!lib.ctx.env.DB && retry && ((known.attempts ?? 0) >= MAX_ATTEMPTS || Date.now() < (known.retryAt ?? 0))) return;
@@ -123,7 +118,6 @@ async function transition(lib: Library, r: PlayReport, known: PlayCursor | null,
     sequence, generation: known?.generation ?? crypto.randomUUID(), pending: action, attempts: retry ? (known.attempts ?? 0) + 1 : 1,
     retryAt: Date.now() + RETRY_DELAY_MS,
   };
-  // The pending cursor also bounds retries during an upstream outage.
   await statePut(lib.ctx, key, next, POSITION_TTL);
   const ev: ScrobbleEvent = {
     action, numbering: t.numbering, animeEpisode: t.animeEpisode, ids: t.ids, kind: t.kind, season: t.season, episode: t.episode,
@@ -134,7 +128,6 @@ async function transition(lib: Library, r: PlayReport, known: PlayCursor | null,
   await statePut(lib.ctx, key, { ...next, pending: undefined, retryAt: undefined }, POSITION_TTL);
 }
 
-/** Only a new session or a resume produces a start. No timer-based re-scrobbling. */
 async function onPlayingUnlocked(lib: Library, r: PlayReport): Promise<void> {
   if (!lib.ctx.env.DB && !trackerApi.sinks(lib.ctx).length) return;
   const known = await stateGet<PlayCursor>(lib.ctx, cursorKey(lib, r));
@@ -145,9 +138,7 @@ async function onPlayingUnlocked(lib: Library, r: PlayReport): Promise<void> {
   await transition(lib, r, known, r.isPaused ? 'pause' : 'start');
 }
 
-/** Save a heartbeat without resolving metadata or calling a tracker. */
 async function checkpoint(lib: Library, r: PlayReport, known: PlayCursor | null): Promise<void> {
-  // Keep a failed delivery's original position stable for its bounded retry.
   if (known?.pending) return;
   const positionMs = ticksToMs(r.positionTicks);
   if (positionMs === null) return;
@@ -159,7 +150,6 @@ async function checkpoint(lib: Library, r: PlayReport, known: PlayCursor | null)
   }, POSITION_TTL);
 }
 
-/** Jellyfin carries pause/resume in Progress; ordinary ticks retain only position. */
 async function onProgressUnlocked(lib: Library, r: PlayReport): Promise<void> {
   if (!lib.ctx.env.DB && !trackerApi.sinks(lib.ctx).length) return;
   const known = await stateGet<PlayCursor>(lib.ctx, cursorKey(lib, r));
@@ -171,7 +161,6 @@ async function onProgressUnlocked(lib: Library, r: PlayReport): Promise<void> {
   await transition(lib, r, known, r.isPaused ? 'pause' : 'start');
 }
 
-/** Retain a stopped cursor to absorb duplicates; a subsequent Playing opens a rewatch. */
 async function onStoppedUnlocked(lib: Library, r: PlayReport): Promise<void> {
   if (!lib.ctx.env.DB && !trackerApi.sinks(lib.ctx).length) return;
   const known = await stateGet<PlayCursor>(lib.ctx, cursorKey(lib, r));
@@ -179,7 +168,6 @@ async function onStoppedUnlocked(lib: Library, r: PlayReport): Promise<void> {
   await transition(lib, r, known, 'stop');
 }
 
-/** Mark watched / unwatched. A series marks every episode, a season its own. */
 export async function setPlayed(lib: Library, itemId: string, watched: boolean): Promise<Dto> {
   const id = plainGuid(itemId);
   const g = decodeGuid(id);
@@ -229,7 +217,6 @@ export async function setPlayed(lib: Library, itemId: string, watched: boolean):
         await queueBulk(lib.ctx,videos.map(v => ({...ev,numbering:v.numbering ?? ev.numbering,animeEpisode:v.trackerAnime,kind:'episode',season:v.season,episode:v.episode})));
         return state;
       }
-      // No whole-show fallback: incomplete metadata must never mark another season.
       await mapLimit(videos, 1, async v => {
         await trackerApi.mark(lib.ctx, { ...ev, numbering: v.numbering ?? ev.numbering, animeEpisode: v.trackerAnime, kind: 'episode', season: v.season, episode: v.episode });
       });
@@ -243,7 +230,6 @@ export async function setPlayed(lib: Library, itemId: string, watched: boolean):
   return state;
 }
 
-/** Remove a title's resume point when the client clears its position. */
 export async function dropResume(lib: Library, g: TitleGuid): Promise<void> {
   const idx = await lib.watch();
   const keys = lib.keysOf(plainGuid(''), g);
@@ -252,10 +238,6 @@ export async function dropResume(lib: Library, g: TitleGuid): Promise<void> {
   await trackerApi.clearResume(lib.ctx, entry);
 }
 
-/**
- * POST /Items/:id/UserData: the client sends the whole UserData it wants. Only
- * Played and a zeroed position mean anything to a tracker.
- */
 export async function updateUserData(lib: Library, itemId: string, body: Record<string, unknown>): Promise<Dto> {
   const id = plainGuid(itemId);
   const g = decodeGuid(id);

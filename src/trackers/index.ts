@@ -1,10 +1,4 @@
 import { loadSnapshot, saveSnapshot } from '../storage/snapshots';
-/**
- * Tracker facade. One primary tracker answers resume + watched state; every
- * sink (primary + scrobbleTo) receives writes. The snapshot is memoised for a
- * minute in the Cache API and overlaid with the scrobble buffer so a pause
- * shows up on the resume shelf before the tracker reports it.
- */
 import type { Ctx } from '../context';
 import type { TrackerName } from '../config/schema';
 import { cacheDelete, cacheGet, cachePut, memo } from '../util/cache';
@@ -64,7 +58,6 @@ function sinks(ctx: Ctx): Tracker[] {
   return out;
 }
 
-/** Tracker resume list with the buffer laid over it. */
 async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry[]> {
   const records = await bufferedRecords(ctx);
   if (!records.length) return base;
@@ -73,7 +66,7 @@ async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry
   for (const r of records) {
     const key = titleKey(r.ev.ids, r.ev.kind, r.ev.season, r.ev.episode);
     const existing = merged.get(key);
-    if (existing && epoch(existing.at) >= epoch(r.at)) continue; // tracker is newer
+    if (existing && epoch(existing.at) >= epoch(r.at)) continue;
     if (finishedInBuffer(r)) { merged.delete(key); continue; }
     if (r.progress <= 0) continue;
     merged.set(key, { ids: r.ev.ids, kind: r.ev.kind, season: r.ev.season, episode: r.ev.episode, progress: r.progress, at: r.at, ref: existing?.ref });
@@ -114,8 +107,6 @@ async function scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void> {
     return;
   }
   if (!targets.length) return;
-  // Acknowledge each sink only after success. Retrying a partially failed event
-  // must not send it again to the providers that already accepted it.
   const results = await Promise.allSettled(targets.map(async (t) => {
     const ack = ev.deliveryId ? `scrobble-ack:${ctx.scope}:${t.name}:${ev.deliveryId}` : null;
     if (ack && await cacheGet<boolean>(ack)) return;
@@ -130,10 +121,9 @@ async function scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void> {
   }));
   const failed = results.flatMap((r, i) => r.status === 'rejected' ? [targets[i].name] : []);
   if (failed.length) {
-    // Provider names only: never include credential-bearing URLs or response bodies.
     throw new Error(`Scrobble delivery failed: ${failed.join(', ')}`);
   }
-  await recordConfirmed(ctx, ev); // Resume overlay records confirmed delivery, not an attempted write.
+  await recordConfirmed(ctx, ev);
   if (ev.action === 'stop') await invalidate(ctx);
 }
 

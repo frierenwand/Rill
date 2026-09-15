@@ -1,7 +1,3 @@
-/**
- * fanart.tv v3. Movies are addressed by tmdb (or imdb) id, shows by tvdb id. One GET per
- * title memoised a week; the api key never enters the cache key.
- */
 import type { Ctx } from '../context';
 import { fetchJson, memo } from '../util/cache';
 import { fanartLanguage } from './language';
@@ -42,7 +38,6 @@ export async function fanartShow(ctx: Ctx, tvdb: number): Promise<FanartShow | n
   return tvdb ? fanartGet<FanartShow>(ctx, `/tv/${tvdb}`) : null;
 }
 
-/** User language, then English, then textless ('00'), then any; most liked first. */
 export function pickFanart(list: FanartImage[] | undefined, lang: string): string | undefined {
   if (!list?.length) return undefined;
   const likes = (i: FanartImage) => Number(i.likes || 0);
@@ -53,7 +48,6 @@ export function pickFanart(list: FanartImage[] | undefined, lang: string): strin
   return undefined;
 }
 
-/** Poster/background/logo for a title. Movies need tmdb or imdb; series need tvdb. */
 export async function fanartArtwork(ctx: Ctx, type: 'movie' | 'series', ids: IdBundle): Promise<FanartArtwork> {
   if (!hasFanart(ctx)) return {};
   const lang = fanartLanguage(ctx.cfg.language);

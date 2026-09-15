@@ -1,11 +1,3 @@
-/**
- * Configure page and its helper API.
- *
- * Everything under /api/* is stateless: config encode/decode, a catalog preview built from a
- * draft config, an addon manifest probe, and thin pass-throughs to tracker OAuth endpoints so
- * the browser never has to talk to a provider that lacks CORS. Nothing here logs or caches
- * secrets, and every POST answers with `Cache-Control: no-store`.
- */
 import { Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { Env } from '../env';
@@ -27,10 +19,6 @@ const SIMKL_API = 'https://api.simkl.com';
 const MAL_TOKEN_URL = 'https://myanimelist.net/v1/oauth2/token';
 const UPSTREAM_TIMEOUT_MS = 15000;
 
-// ---------------------------------------------------------------------------------------------
-// Small helpers
-// ---------------------------------------------------------------------------------------------
-
 type Json = Record<string, unknown>;
 
 async function readBody(req: Request): Promise<Json> {
@@ -47,7 +35,6 @@ function field(body: Json, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-/** fetch with a hard timeout; returns status + parsed JSON (or null when the body is not JSON). */
 async function upstream(url: string, init: RequestInit = {}): Promise<{ status: number; data: Json | null }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
@@ -78,7 +65,6 @@ function expiryFrom(expiresIn: unknown): number | undefined {
   return secs === undefined ? undefined : Date.now() + secs * 1000;
 }
 
-/** Pull a config token out of whatever the user pasted: bare token, install URL, stremio:// link. */
 async function tokenFromInput(input: string): Promise<{ token: string; config: RillConfig } | null> {
   const raw = input.trim();
   if (!raw) return null;
@@ -91,11 +77,9 @@ async function tokenFromInput(input: string): Promise<{ token: string; config: R
         if (seg) candidates.push(decodeURIComponent(seg));
       }
     } catch {
-      /* fall through to treating it as a token */
     }
   }
   candidates.push(raw);
-  // Longest segment first: the config token is by far the longest path part.
   candidates.sort((a, b) => b.length - a.length);
   for (const token of candidates) {
     if (token.length < 8) continue;
@@ -120,10 +104,6 @@ async function buildCtx(cfg: RillConfig, env: Env | undefined, origin: string): 
   };
 }
 
-// ---------------------------------------------------------------------------------------------
-// Static
-// ---------------------------------------------------------------------------------------------
-
 uiRouter.get('/', (c) => {
   return c.html(renderPage(), 200, { 'Cache-Control': 'no-store' });
 });
@@ -132,15 +112,10 @@ uiRouter.get('/logo.svg', (c) => {
   return c.body(renderLogo(), 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
 });
 
-// Every API answer is per-request and may carry secrets: never cache.
 uiRouter.use('/api/*', async (c, next) => {
   await next();
   c.header('Cache-Control', 'no-store');
 });
-
-// ---------------------------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------------------------
 
 mountAccountRoutes(uiRouter, buildCtx);
 
@@ -157,10 +132,6 @@ uiRouter.post('/api/config/decode', async (c) => {
   if (!found) return c.json({ error: 'Not a valid config token or install URL.' }, 400);
   return c.json({ config: found.config, token: found.token });
 });
-
-// ---------------------------------------------------------------------------------------------
-// Catalog preview and addon probe
-// ---------------------------------------------------------------------------------------------
 
 uiRouter.post('/api/catalogs', async (c) => {
   const body = await readBody(c.req.raw);
@@ -228,10 +199,6 @@ uiRouter.post('/api/probe', async (c) => {
     idPrefixes: manifest.idPrefixes || [],
   });
 });
-
-// ---------------------------------------------------------------------------------------------
-// Trakt: device code flow
-// ---------------------------------------------------------------------------------------------
 
 function traktHeaders(clientId: string, bearer?: string): Record<string, string> {
   const h: Record<string, string> = {
@@ -322,10 +289,6 @@ uiRouter.post('/api/oauth/trakt/refresh', async (c) => {
   });
 });
 
-// ---------------------------------------------------------------------------------------------
-// Simkl: PIN flow
-// ---------------------------------------------------------------------------------------------
-
 uiRouter.post('/api/oauth/simkl/pin', async (c) => {
   const body = await readBody(c.req.raw);
   const clientId = field(body, 'clientId');
@@ -358,7 +321,6 @@ uiRouter.post('/api/oauth/simkl/poll', async (c) => {
   const message = typeof r.data?.message === 'string' ? r.data.message.toLowerCase() : '';
   if (message.includes('slow')) return c.json({ pending: true, slowDown: true });
   if (r.status === 200 && r.data?.result === 'OK' && r.data.device_code) {
-    // Simkl replays the first-step body once the PIN is gone: start over.
     return c.json({ error: 'The PIN expired. Start again.' }, 400);
   }
   if (r.status === 0) return c.json({ pending: true });
@@ -366,10 +328,6 @@ uiRouter.post('/api/oauth/simkl/poll', async (c) => {
   if (r.status !== 200 && r.status !== 400) return c.json({ error: `Simkl answered ${r.status}.` }, 502);
   return c.json({ pending: true });
 });
-
-// ---------------------------------------------------------------------------------------------
-// MyAnimeList: PKCE (plain) code exchange
-// ---------------------------------------------------------------------------------------------
 
 uiRouter.post('/api/oauth/mal/token', async (c) => {
   const body = await readBody(c.req.raw);

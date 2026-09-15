@@ -1,7 +1,3 @@
-/**
- * Stremio's own Cinemeta (keyless). Last-resort meta/search and a cheap way to learn
- * tmdb/tvdb ids for an imdb id, since its records carry moviedb_id / tvdb_id.
- */
 import type { Ctx } from '../context';
 import type { ContentType, Meta, MetaPreview, MetaVideo } from '../stremio/types';
 import { fetchJson } from '../util/cache';
@@ -30,14 +26,12 @@ function num(v: unknown): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-/** tmdb/tvdb ids Cinemeta knows for an imdb id. */
 export async function cinemetaIds(ctx: Ctx, type: ContentType, imdb: string): Promise<IdBundle> {
   const m = await rawMeta(type, imdb);
   if (!m) return { imdb };
   return { imdb, tmdb: num(m.moviedb_id), tvdb: num(m.tvdb_id), tmdbType: m.moviedb_id ? (cinemetaType(type) === 'movie' ? 'movie' : 'tv') : undefined };
 }
 
-/** Full meta, normalised into Rill's shape. Videos keep Cinemeta's own tt:S:E ids. */
 export async function cinemetaMeta(ctx: Ctx, type: ContentType, imdb: string): Promise<Meta | null> {
   const m = await rawMeta(type, imdb);
   if (!m) return null;
@@ -64,7 +58,6 @@ export async function cinemetaMeta(ctx: Ctx, type: ContentType, imdb: string): P
   return meta;
 }
 
-/** Cinemeta catalog page ('top', 'year', 'imdbRating' ...), used as a keyless catalog fallback. */
 export async function cinemetaCatalog(type: ContentType, catalogId: string, extra: Record<string, string | number | undefined> = {}): Promise<MetaPreview[]> {
   const parts = Object.entries(extra).filter(([, v]) => v !== undefined && v !== '' && v !== 0).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
   const url = `${API}/catalog/${cinemetaType(type)}/${encodeURIComponent(catalogId)}${parts.length ? `/${parts.join('&')}` : ''}.json`;

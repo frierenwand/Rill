@@ -1,8 +1,3 @@
-/**
- * AniList (GraphQL). Like MAL it stores a list entry with an episode counter,
- * so only watched-threshold stops and explicit marks are written. Every call
- * is a POST; reads that are safe to reuse are memoised through `memo`.
- */
 import type { Ctx } from '../context';
 import type { AnilistAuth } from '../config/schema';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';

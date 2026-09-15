@@ -1,7 +1,3 @@
-/**
- * Client for external Stremio addons the user pasted in (meta, stream, subtitle).
- * Manifests and catalog/meta responses are cached; streams are cached briefly.
- */
 import type { Ctx } from '../context';
 import { metaAddons } from '../config/schema';
 import { fetchJson, memo } from '../util/cache';
@@ -55,7 +51,6 @@ export async function addonMeta(base: string, type: ContentType, id: string): Pr
   return data?.meta ?? null;
 }
 
-/** Meta from the first configured meta addon that answers. */
 export async function externalMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
   for (const url of metaAddons(ctx.cfg)) {
     const base = addonBase(url);
@@ -69,11 +64,9 @@ export async function externalMeta(ctx: Ctx, type: ContentType, id: string): Pro
 }
 
 export interface SourcedStream extends Stream {
-  /** Which addon produced it. */
   addon: string;
 }
 
-/** Streams from every stream addon, in config order, one round of requests. */
 export async function externalStreams(ctx: Ctx, type: ContentType, id: string): Promise<SourcedStream[]> {
   const key = `streams:${ctx.scope}:${type}:${id}`;
   return memo(key, 120, async () => {
@@ -104,7 +97,6 @@ export async function externalSubtitles(ctx: Ctx, type: ContentType, id: string,
   return uniq(results.flat(), (s) => s.url);
 }
 
-/** Catalogs exposed by the user's external meta addons, for aggregation into Rill's manifest. */
 export async function externalCatalogs(ctx: Ctx): Promise<Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }>> {
   const out: Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }> = [];
   for (const url of metaAddons(ctx.cfg)) {

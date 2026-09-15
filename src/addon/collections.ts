@@ -30,7 +30,6 @@ export async function collectionMembers(ctx:Ctx,id:string,skip=0,limit=20):Promi
   const rows=(data.entities??[]).filter(r=>r.movieId).sort((a,b)=>(a.order??0)-(b.order??0));
   return{items:await mapLimit(rows.slice(skip,skip+limit),4,r=>sourcePreview(ctx,'movie',`tvdb:${r.movieId}`,'Untitled')),total:rows.length};
 }
-/** Paginate against the API's native list page size, independent of filtered rows. */
 export async function collectionsPage(ctx:Ctx,skip:number):Promise<{items:MetaPreview[];consumed:number}> {
   const first=await tvdbGet<TvdbCollection[]>(ctx,'/lists?page=0',86400);if(!first)throw new Error('TVDB collections unavailable');
   if(!first.length)return{items:[],consumed:0};

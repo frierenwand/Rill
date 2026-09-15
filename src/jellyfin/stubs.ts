@@ -1,11 +1,3 @@
-/**
- * Surfaces stock clients probe that mean nothing here. Empty answers keep them
- * quiet; a genuinely unknown route still falls through to a 404, never a 401,
- * which some clients read as "log me out".
- *
- * Paths are lowercase: the router lower-cases every request path before
- * matching, because clients mix `/Users/Me` and `/users/me` freely.
- */
 import type { Hono } from 'hono';
 import type { JfEnv } from './request';
 
@@ -95,7 +87,6 @@ export function registerStubs(app: Hono<JfEnv>): void {
 
   app.get('/branding/configuration', (c) => c.json({ LoginDisclaimer: '', CustomCss: '', SplashscreenEnabled: false }));
   app.get('/branding/splashscreen', (c) => c.body(null, 404));
-  // The web client asks for this while the sign-in page loads, before it has a token.
   app.get('/branding/css', (c) => c.text('', 200, { 'content-type': 'text/css' }));
   app.get('/branding/css.css', (c) => c.text('', 200, { 'content-type': 'text/css' }));
 
@@ -131,7 +122,6 @@ export function registerStubs(app: Hono<JfEnv>): void {
     }),
   );
 
-  // Favourites are not a tracker concept; a client reads the state back out of the answer.
   const notFavourite = (c: { req: { param: (n: string) => string }; json: (b: unknown) => Response }) => {
     const id = c.req.param('id');
     return c.json({ PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: id, ItemId: id });

@@ -1,12 +1,8 @@
-/**
- * Small helpers shared by the anime providers. Pure functions only.
- */
 import type { ContentType } from '../../stremio/types';
 import { sha256 } from '../../util/bytes';
 
 export type AnimeKind = 'TV' | 'MOVIE' | 'OVA' | 'ONA' | 'SPECIAL' | 'MUSIC' | 'UNKNOWN';
 
-/** Normalise the many spellings of anime formats (Jikan "TV Special", AniList "TV_SHORT", Kitsu "special"). */
 export function animeKind(raw: string | null | undefined): AnimeKind {
   const s = String(raw || '').toUpperCase().replace(/[\s_-]+/g, '');
   if (!s) return 'UNKNOWN';
@@ -23,12 +19,10 @@ export function stremioTypeFor(kind: AnimeKind): ContentType {
   return kind === 'MOVIE' ? 'movie' : 'series';
 }
 
-/** Is this something that carries an episode list (as opposed to a film)? */
 export function isSeriesKind(kind: AnimeKind): boolean {
   return kind !== 'MOVIE';
 }
 
-/** MAL rating strings ("R+ - Mild Nudity") to the certification vocabulary the rest of Rill uses. */
 export function certFromMalRating(rating: string | null | undefined): string | undefined {
   if (!rating) return undefined;
   const head = rating.split(' - ')[0].trim().toUpperCase();
@@ -43,7 +37,6 @@ export function certFromMalRating(rating: string | null | undefined): string | u
   }
 }
 
-/** Kitsu ageRating is one of G, PG, R, R18. */
 export function certFromKitsuRating(rating: string | null | undefined): string | undefined {
   switch (String(rating || '').toUpperCase()) {
     case 'G': return 'G';
@@ -54,12 +47,10 @@ export function certFromKitsuRating(rating: string | null | undefined): string |
   }
 }
 
-/** AniList only exposes an adult flag; anything flagged is treated as NC-17. */
 export function certFromAnilist(isAdult: boolean | null | undefined): string | undefined {
   return isAdult ? 'NC-17' : undefined;
 }
 
-/** "24 min per ep" / "1 hr 30 min" / "23 min" -> minutes. */
 export function minutesFromJikanDuration(text: string | null | undefined): number | undefined {
   if (!text) return undefined;
   const hr = /(\d+)\s*hr/i.exec(text);
@@ -89,14 +80,12 @@ export function stripHtml(html: string | null | undefined): string | undefined {
   return text || undefined;
 }
 
-/** Remove trailing "[Written by MAL Rewrite]" style attributions Jikan/Kitsu carry. */
 export function cleanSynopsis(text: string | null | undefined): string | undefined {
   if (!text) return undefined;
   const cleaned = text.replace(/\s*\[Written by .*?\]\s*$/i, '').replace(/\s*\(Source: .*?\)\s*$/i, '').trim();
   return cleaned || undefined;
 }
 
-/** AniList fuzzy dates {year, month, day} -> ISO date. */
 export function isoFromParts(parts: { year?: number | null; month?: number | null; day?: number | null } | null | undefined): string | undefined {
   if (!parts || !parts.year) return undefined;
   const m = String(parts.month || 1).padStart(2, '0');
@@ -104,7 +93,6 @@ export function isoFromParts(parts: { year?: number | null; month?: number | nul
   return `${parts.year}-${m}-${d}T00:00:00.000Z`;
 }
 
-/** Any ISO-ish date string -> normalised ISO, or undefined. */
 export function isoDate(value: string | number | null | undefined): string | undefined {
   if (value === null || value === undefined || value === '') return undefined;
   const d = typeof value === 'number' ? new Date(value * (value < 1e12 ? 1000 : 1)) : new Date(value);
@@ -117,7 +105,6 @@ export function yearOf(iso: string | undefined): number | undefined {
   return Number.isFinite(y) && y > 1900 ? y : undefined;
 }
 
-/** "2013-" while airing, "2013" for a single year, "2013-2015" otherwise. */
 export function releaseSpan(start: string | undefined, end: string | undefined, ongoing: boolean, movie: boolean): string | undefined {
   const a = yearOf(start);
   if (!a) return undefined;
@@ -184,7 +171,6 @@ export function dedupeStrings(items: Array<string | null | undefined>): string[]
   return out;
 }
 
-/** Sleep without touching Node timers API surface (setTimeout is a Web API in Workers). */
 export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }

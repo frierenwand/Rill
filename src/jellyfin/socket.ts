@@ -1,8 +1,3 @@
-/**
- * The official clients open a websocket right after signing in and log an
- * error for the whole session when it is refused. Nothing is ever pushed over
- * it: every list here is fetched. It exists to be answered.
- */
 import type { Ctx } from '../context';
 import { tokenOf, verifyToken } from './auth';
 
@@ -24,7 +19,6 @@ export async function handleJellyfinSocket(ctx: Ctx, req: Request): Promise<Resp
     try {
       server.send(JSON.stringify({ MessageType, Data }));
     } catch {
-      /* the socket is gone */
     }
   };
 
@@ -36,7 +30,6 @@ export async function handleJellyfinSocket(ctx: Ctx, req: Request): Promise<Resp
       const msg = JSON.parse(event.data) as { MessageType?: string };
       if (msg?.MessageType === 'KeepAlive') send('KeepAlive');
     } catch {
-      /* a client may send anything; nothing depends on it */
     }
   });
 
@@ -44,7 +37,6 @@ export async function handleJellyfinSocket(ctx: Ctx, req: Request): Promise<Resp
     try {
       server.close();
     } catch {
-      /* already closed */
     }
   });
 

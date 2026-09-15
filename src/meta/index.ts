@@ -1,11 +1,3 @@
-/**
- * metaApi: the one place the rest of Rill asks for meta, search and id bridging.
- *
- * resolveMeta walks cfg.providers (primary first, the rest in a fixed order) and lets
- * later providers fill what the first one lacked: episodes, description, artwork,
- * air timestamps. Anime ids, and titles the anime module recognises, are handed to
- * animeApi. Artwork is merged last according to cfg.artwork.
- */
 import type { Ctx } from '../context';
 import type { MetaProvider } from '../config/schema';
 import { parseStremioId } from '../stremio/ids';
@@ -29,8 +21,6 @@ const TTL_MOVIE = 12 * 3600;
 const TTL_SERIES = 6 * 3600;
 const TTL_MIN = 300;
 
-/* ------------------------------------------------------------------ helpers */
-
 function canonicalId(ids: IdBundle, type: ContentType): string | null {
   if (ids.imdb) return ids.imdb;
   if (ids.tmdb) return `tmdb:${ids.tmdb}`;
@@ -46,7 +36,6 @@ function canonicalId(ids: IdBundle, type: ContentType): string | null {
 
 function providerOrder(ctx: Ctx, type: ContentType): MetaProvider[] {
   const primary = type === 'movie' ? ctx.cfg.providers.movie : ctx.cfg.providers.series;
-  // Cinemeta needs no key, so it always closes the chain for keyless installations.
   return [primary, ...PROVIDER_ORDER.filter((p) => p !== primary), ...(primary === 'cinemeta' ? [] : ['cinemeta' as MetaProvider])];
 }
 
@@ -76,7 +65,6 @@ async function providerMeta(ctx: Ctx, provider: MetaProvider, type: ContentType,
   return meta;
 }
 
-/** Copy fields `from` has that `into` lacks. Arrays count as missing when empty. */
 function fillGaps(into: Meta, from: Meta | null | undefined): Meta {
   if (!from) return into;
   const out: Meta = { ...into };
@@ -97,7 +85,6 @@ function needsMore(meta: Meta, type: ContentType): boolean {
   return !meta.description || !meta.poster;
 }
 
-/** Air timestamps from TVmaze for episodes that have none (or only a bare date). */
 async function fillAirDates(ctx: Ctx, meta: Meta, ids: IdBundle): Promise<void> {
   const videos = meta.videos ?? [];
   const missing = videos.filter((v) => !v.released);
@@ -120,7 +107,6 @@ function nextAiring(videos: MetaVideo[] | undefined, now: number): number | null
   return next;
 }
 
-/** Shorten a series' cache life so it is rebuilt shortly after the next episode airs. */
 function metaTtl(meta: Meta, type: ContentType): number {
   if (type === 'movie') return TTL_MOVIE;
   const next = nextAiring(meta.videos, Date.now());
@@ -143,8 +129,6 @@ function stripByAgeCap(ctx: Ctx, meta: Meta): Meta | null {
   return passesAgeCap(meta.certification, cap, allowsUnrated(ctx.cfg)) ? meta : null;
 }
 
-/* ------------------------------------------------------------------ resolveMeta */
-
 async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
   const parsed = parseStremioId(id);
   let ids = await bridgeIds(ctx, bundleFromStremioId(parsed.title), type);
@@ -166,7 +150,6 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   if (!meta) return null;
   ids = { ...ids, ...(meta.ids ?? {}) };
 
-  // Gap-filling from the remaining providers, only while something notable is missing.
   for (const provider of order) {
     if (tried.has(provider) || !needsMore(meta, type)) continue;
     tried.add(provider);
@@ -175,7 +158,6 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
     if (extra) meta = fillGaps(meta, extra);
   }
 
-  // Titles the anime module claims are rebuilt from it, with our data as filler.
   {
     const animeProvider = ctx.cfg.providers.anime;
     const usesAnimeSite = animeProvider === 'mal' || animeProvider === 'anilist' || animeProvider === 'kitsu';
@@ -192,7 +174,6 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
 
   if (type !== 'movie') await fillAirDates(ctx, meta, ids);
 
-  // Artwork the providers already returned is reused rather than refetched.
   const lang = splitLanguageTag(ctx.cfg.language).lang;
   if (ctx.tmdbKey && ids.tmdb) {
     const d = await tmdbDetails(ctx, type === 'movie' ? 'movie' : 'tv', ids.tmdb);
@@ -234,7 +215,6 @@ async function resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Met
   const meta = await memo<Meta | null>(key, type === 'movie' ? TTL_MOVIE : TTL_SERIES, async () => {
     const built = await buildMeta(ctx, type, parsed.title);
     if (built && type !== 'movie') {
-      // memo() writes with the ttl above; a shorter air-window ttl is written over it.
       const ttl = metaTtl(built, type);
       if (ttl < TTL_SERIES) await cachePut(key, built, ttl);
     }
@@ -242,8 +222,6 @@ async function resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Met
   });
   return meta ? stripByAgeCap(ctx, meta) : null;
 }
-
-/* ------------------------------------------------------------------ searchMeta */
 
 function normName(s: string): string {
   return s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
@@ -279,7 +257,6 @@ async function searchMeta(ctx: Ctx, type: ContentType, query: string, opts: { sk
   if (!tasks.length || !providers.some((p) => (p === 'tmdb' && ctx.tmdbKey) || (p === 'tvdb' && hasTvdb(ctx)) || p === 'cinemeta')) tasks.push(() => cinemetaSearch(ctx, type, q, { skip }));
   const results = await mapLimit(tasks, 4, (t) => t().catch(() => [] as MetaPreview[]));
 
-  // Interleave provider results so a weak first provider cannot bury the others, then dedupe.
   const merged: MetaPreview[] = [];
   const maxLen = Math.max(0, ...results.map((r) => r.length));
   for (let i = 0; i < maxLen; i++) for (const list of results) if (list[i]) merged.push(list[i]);
@@ -296,8 +273,6 @@ async function searchMeta(ctx: Ctx, type: ContentType, query: string, opts: { sk
   return out.slice(0, limit);
 }
 
-/* ------------------------------------------------------------------ resolveIds */
-
 async function resolveIds(ctx: Ctx, id: string, type?: ContentType): Promise<IdBundle> {
   const parsed = parseStremioId(id);
   let ids = bundleFromStremioId(parsed.title);
@@ -308,7 +283,6 @@ async function resolveIds(ctx: Ctx, id: string, type?: ContentType): Promise<IdB
   }
   if (parsed.source === 'other') return ids;
   if (type) return bridgeIds(ctx, ids, type);
-  // Unknown media kind: try series first (tv ids bridge to more sources), then movie.
   const asSeries = await bridgeIds(ctx, ids, 'series');
   const asMovie = asSeries.tmdb || asSeries.tvdb ? asSeries : await bridgeIds(ctx, ids, 'movie');
   return asMovie;

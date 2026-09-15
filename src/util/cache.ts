@@ -1,7 +1,3 @@
-/**
- * The only "storage" Rill has is the Cloudflare Cache API: best-effort, per-colo,
- * evictable at any time. Everything here must be safe to lose.
- */
 const NS = 'https://rill.cache.invalid/';
 
 function keyUrl(key: string): string {
@@ -24,15 +20,13 @@ export async function cachePut(key: string, value: unknown, ttlSeconds: number):
     });
     await caches.default.put(keyUrl(key), res);
   } catch {
-    /* losing a cache write is fine */
   }
 }
 
 export async function cacheDelete(key: string): Promise<void> {
-  try { await caches.default.delete(keyUrl(key)); } catch { /* ignore */ }
+  try { await caches.default.delete(keyUrl(key)); } catch {}
 }
 
-/** Memoise an async producer in the cache. Errors are never cached. */
 export async function memo<T>(key: string, ttlSeconds: number, produce: () => Promise<T>): Promise<T> {
   const hit = await cacheGet<T>(key);
   if (hit !== null) return hit;
@@ -42,15 +36,11 @@ export async function memo<T>(key: string, ttlSeconds: number, produce: () => Pr
 }
 
 export interface FetchJsonOptions extends RequestInit {
-  /** Cache TTL in seconds; 0 disables caching. Only GETs are cached. */
   ttl?: number;
-  /** Per-request timeout in ms. */
   timeoutMs?: number;
-  /** Extra discriminator for the cache key (e.g. auth identity). */
   cacheScope?: string;
 }
 
-/** GET JSON with timeout and Cache-API memoisation keyed on URL + scope. */
 export async function fetchJson<T = any>(url: string, opts: FetchJsonOptions = {}): Promise<T | null> {
   const { ttl = 0, timeoutMs = 12000, cacheScope = '', ...init } = opts;
   const method = (init.method || 'GET').toUpperCase();

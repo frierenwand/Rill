@@ -1,5 +1,3 @@
-/** Jellyfin authentication uses signed, account-scoped tokens. D1 stores token
- * validity and atomic Quick Connect claims; legacy installs use disposable cache. */
 import type { Ctx } from '../context';
 import { b64urlDecode, b64urlEncode, hmac, sha256, timingSafeEqual } from '../util/bytes';
 import { stateDelete, stateGet, statePut } from '../storage/state';
@@ -12,24 +10,14 @@ export interface ClientInfo {
 }
 
 export interface TokenClaims {
-  /** User id the token was issued for. */
   u: string;
   jti?: string;
   p?: string;
-  /** Device id from the client's MediaBrowser header. */
   d: string;
-  /** Issued at, epoch seconds. */
   iat: number;
-  /** Config scope the token belongs to. */
   s: string;
 }
 
-/**
- * `MediaBrowser Client="Findroid", Device="Pixel", DeviceId="abc", Version="1.0", Token="..."`
- * also appears spelled `Emby ...` and under X-Emby-Authorization. Values are
- * quoted most of the time, but not always, and a comma can appear inside a
- * quoted device name.
- */
 export function parseMediaBrowser(header: string | null | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -56,7 +44,6 @@ export function clientInfoOf(req: Request): ClientInfo {
   };
 }
 
-/** Every place a client may put its token, in order of preference. */
 export function tokenOf(req: Request): string {
   const h = authHeader(req);
   if (h.token) return h.token;
@@ -70,15 +57,12 @@ const SIGNING_KEY = "install:signing-key";
 const FOREVER = 100 * 365 * 86400;
 let installKey: string | undefined;
 
-/** RILL_SECRET when set; otherwise a random key generated once per installation and kept in D1.
- * Legacy storage-less deployments derive a key from the configured credentials. */
 export async function signingSecret(ctx: Ctx): Promise<string> {
   const fromEnv = ctx.env?.RILL_SECRET?.trim();
   if (fromEnv) return fromEnv;
   if (ctx.env.DB) {
     if (installKey) return installKey;
     const fresh = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)));
-    // INSERT OR IGNORE keeps the first writer's key if two isolates race on first start.
     await ctx.env.DB.prepare("INSERT OR IGNORE INTO state(key,value,expires) VALUES(?,?,?)").bind(SIGNING_KEY, JSON.stringify(fresh), Date.now() + FOREVER * 1000).run();
     installKey = (await stateGet<string>(ctx, SIGNING_KEY)) ?? fresh;
     return installKey;
@@ -113,7 +97,6 @@ export async function verifyToken(ctx: Ctx, token: string): Promise<TokenClaims 
   }
 }
 
-/** Constant-time credential check. An empty configured password accepts anything. */
 export function credentialsMatch(ctx: Ctx, username: unknown, password: unknown): boolean {
   const wantUser = ctx.cfg.jellyfin.username.trim().toLowerCase();
   const gotUser = String(username ?? '').trim().toLowerCase();
@@ -123,7 +106,6 @@ export function credentialsMatch(ctx: Ctx, username: unknown, password: unknown)
   return timingSafeEqual(wantPw, String(password ?? ''));
 }
 
-/** Stable identifiers derived from the config scope: a server id and its one user. */
 export interface Identity {
   serverId: string;
   userId: string;
@@ -133,8 +115,6 @@ export async function identityOf(ctx: Ctx): Promise<Identity> {
   const [server, user] = await Promise.all([sha256(`rill:jellyfin:server:${ctx.scope}`), sha256(`rill:jellyfin:user:${ctx.scope}`)]);
   return { serverId: server.slice(0,32), userId:ctx.profile ? (await sha256(`rill:jellyfin:profile:${ctx.scope}:${ctx.profile.id}`)).slice(0,32) : user.slice(0,32) };
 }
-
-// ---------- Quick Connect ----------
 
 const QC_TTL = 10 * 60;
 
@@ -190,7 +170,6 @@ export async function readQuickConnect(ctx: Ctx, secret: string): Promise<QuickC
   return stateGet<QuickConnectRecord>(ctx, secretKey(ctx, secret.toLowerCase()));
 }
 
-/** Approve a pairing by its six-digit code. Fails safe when the cache forgot it. */
 export async function approveQuickConnect(ctx: Ctx, code: string): Promise<QuickConnectRecord | null> {
   const clean = String(code ?? '').replace(/\D/g, '');
   if (clean.length !== 6) return null;
@@ -209,7 +188,6 @@ export async function approveQuickConnect(ctx: Ctx, code: string): Promise<Quick
   return rec;
 }
 
-/** Consume an approved pairing: the secret signs in exactly once. */
 export async function claimQuickConnect(ctx: Ctx, secret: string): Promise<QuickConnectRecord | null> {
   if (ctx.env.DB) {
     const row = await ctx.env.DB.prepare("DELETE FROM state WHERE key=? AND expires>? AND json_extract(value,'$.authenticated')=1 RETURNING value").bind(secretKey(ctx,secret.toLowerCase()),Date.now()).first<{value:string}>();

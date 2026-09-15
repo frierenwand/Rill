@@ -5,8 +5,6 @@ import m0004 from '../../migrations/0004_people.sql';
 import m0005 from '../../migrations/0005_recommendation_jobs.sql';
 import m0006 from '../../migrations/0006_owner.sql';
 
-/** Migrations in order. The bookkeeping table matches Wrangler's, so `wrangler d1 migrations apply`
- * and this runtime path can be mixed freely. */
 const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0001_durable.sql', m0001],
   ['0002_bulk.sql', m0002],
@@ -18,7 +16,6 @@ const MIGRATIONS: Array<[name: string, sql: string]> = [
 
 const done = new WeakMap<D1Database, Promise<void>>();
 
-/** Apply pending migrations once per isolate. Costs one SELECT per isolate start after the first deploy. */
 export function ensureSchema(db: D1Database): Promise<void> {
   let p = done.get(db);
   if (!p) {

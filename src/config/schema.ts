@@ -1,7 +1,3 @@
-/**
- * Rill installation settings travel in compressed URLs. D1 preserves active
- * settings, playback history and refreshed credentials across requests.
- */
 export type TrackerName = 'trakt' | 'simkl' | 'mal' | 'anilist' | 'mdblist' | 'publicmetadb';
 export type MetaProvider = 'tmdb' | 'tvdb' | 'cinemeta' | 'tvmaze';
 export type AnimeProvider = 'mal' | 'anilist' | 'kitsu' | 'tmdb' | 'tvdb';
@@ -32,36 +28,23 @@ export interface RecommendationSettings {
 
 export interface RillConfig {
   v: 1;
-  /** Random installation capability; its hash remains stable across settings edits. */
   installationKey?: string;
   revision?: number;
-  /** Display name shown in Jellyfin clients. */
   name: string;
-  /** BCP-47 like 'en-US'. Used for TMDB/TVDB text and artwork picks. */
   language: string;
-  /** Provider order for each media kind. First wins, others fill gaps. */
   providers: { movie: MetaProvider; series: MetaProvider; anime: AnimeProvider };
-  /** Artwork sources, in priority order. */
   artwork: { posters: Array<'tmdb' | 'fanart' | 'tvdb' | 'rpdb' | 'metahub'>; backgrounds: Array<'tmdb' | 'fanart' | 'tvdb' | 'metahub'>; logos: Array<'fanart' | 'tmdb' | 'tvdb' | 'metahub'> };
   keys: { tmdb?: string; tvdb?: string; fanart?: string; rpdb?: string; publicmetadb?: string; mdblist?: string };
-  /** External Stremio addons the user pastes in (manifest URLs). */
   addons: { catalog: string[]; meta: string[]; stream: string[]; subtitle: string[] };
-  /** Rill's own catalog switches, persisted in manifest order. */
   catalogs: CatalogToggle[];
-  /** MDBList / Trakt list ids the user wants as catalogs. */
   lists: { mdblist: string[]; trakt: string[]; publicmetadb?: string[]; publicmetadbPicks?: string[]; tvdb?: string[]; tmdbCollections?:string[]; letterboxd?: string[]; flixpatrol?: string[] };
   customCatalogs?: CustomCatalog[];
   movieLens?: { username: string; password: string; syncRatings?: boolean };
   recommendations?: RecommendationSettings;
-  /** Watch tracking. `primary` answers resume + watched ticks; others only receive scrobbles. */
   trackers: { primary: TrackerName | 'off'; scrobbleTo: TrackerName[]; media?: Partial<Record<TrackerName, { movie?: boolean; series?: boolean }>>; trakt?: TraktAuth; simkl?: SimklAuth; mal?: MalAuth; anilist?: AnilistAuth };
-  /** Age rating cap, e.g. 'PG-13' or 'TV-14'. Empty = no cap. */
   ageCap: string;
-  /** Advanced mode exposes provider API keys and API-backed catalogs. Simple mode uses addons and Cinemeta. */
   advanced: boolean;
-  /** Jellyfin facade options. */
   jellyfin: { username: string; password: string; maxSources: number; home: Array<'resume' | 'nextup' | 'latest' | 'upcoming'>; profiles?: JellyfinProfile[] };
-  /** Search behaviour. */
   search: { providers: Array<'tmdb' | 'tvdb' | 'mal' | 'anilist' | 'kitsu' | 'cinemeta'>; includeAdult: boolean };
 }
 
@@ -83,7 +66,6 @@ export const DEFAULT_CONFIG: RillConfig = {
   recommendations:{sources:'both',enabled:false,provider:'gemini',apiKey:'',model:'',webSearch:false,refreshHours:24,order:'balanced',minVotes:100,reasoning:'low',staleDays:180,stalledWeight:'note'},
 };
 
-/** Deep-merge a partial over defaults so old configs keep working as fields are added. */
 export function normalizeConfig(input: unknown): RillConfig {
   const src = (input && typeof input === 'object' ? input : {}) as Partial<RillConfig>;
   const cfg: RillConfig = structuredClone(DEFAULT_CONFIG);
@@ -129,7 +111,6 @@ export function normalizeConfig(input: unknown): RillConfig {
 function str(v: unknown, d: string): string { return typeof v === 'string' && v.length ? v : d; }
 function arr(v: unknown): string[] { return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : []; }
 
-/** Catalog and metadata addons share the Stremio manifest format; both may answer catalogs and details. */
 export function metaAddons(cfg: RillConfig): string[] {
   return [...new Set([...cfg.addons.catalog, ...cfg.addons.meta])];
 }

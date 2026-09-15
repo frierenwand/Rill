@@ -1,14 +1,6 @@
 import { profileContext, profileUsers } from './profiles';
 import { revokeToken } from './auth';
 import { registerAccount } from '../storage/state';
-/**
- * The Jellyfin REST facade. Mounted by the integrator at `/:cfg/jellyfin`.
- *
- * Clients mix `/Users/Me` and `/users/me`, prefix paths with `/emby`, put the
- * token in four different places and send ids with or without dashes. The
- * outer router normalises all of that once and dispatches to an inner router
- * whose routes are registered in lowercase.
- */
 import { Hono, type Context } from 'hono';
 import type { Ctx } from '../context';
 import {
@@ -42,10 +34,6 @@ import { collectionMembers } from '../addon/collections';
 
 export { handleJellyfinSocket } from './socket';
 
-// ---------------------------------------------------------------------------
-// Outer router: normalisation, CORS, request state, dispatch
-// ---------------------------------------------------------------------------
-
 export const jellyfinRouter = new Hono<{ Variables: { ctx: Ctx } }>();
 
 const inner = new Hono<JfEnv>();
@@ -71,7 +59,6 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
     }
     if (type.includes('form-urlencoded')) return Object.fromEntries(new URLSearchParams(text).entries());
   } catch {
-    /* an unreadable body is an empty one */
   }
   return {};
 }
@@ -82,7 +69,6 @@ jellyfinRouter.all('/*', async (c) => {
   const url = new URL(raw.url);
   if (raw.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
-  // Everything after `/jellyfin`, with an `/emby` prefix stripped, lower-cased for routing.
   const full = url.pathname;
   const cut = full.toLowerCase().indexOf('/jellyfin');
   const prefix = cut >= 0 ? full.slice(0, cut + '/jellyfin'.length) : '';
@@ -130,16 +116,10 @@ jellyfinRouter.all('/*', async (c) => {
   const res = await inner.fetch(routed, c.env, exec);
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(CORS)) headers.set(k, v);
-  // A 101 must be passed through untouched or the socket never opens.
   if (res.status === 101) return res;
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers, ...(res.webSocket ? { webSocket: res.webSocket } : {}) });
 });
 
-// ---------------------------------------------------------------------------
-// Inner router plumbing
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type C = Context<JfEnv, any, any>;
 
 inner.use('*', async (c, next) => {
@@ -150,7 +130,6 @@ inner.use('*', async (c, next) => {
   await next();
 });
 
-/** Routes that must answer before there is a token: handshake, sign-in, artwork, and the socket. */
 const PUBLIC = [
   /^\/system\/info\/public$/,
   /^\/system\/ping$/,
@@ -174,7 +153,6 @@ inner.use('*', async (c, next) => {
   await next();
 });
 
-/** Dash 32-hex ids in id-shaped fields: the official SDKs parse them as UUIDs and refuse the bare form. */
 const ID_FIELD = /^(Id|ItemId|ParentId|SeriesId|SeasonId|UserId|ServerId|Key|DisplayPreferencesId|MediaSourceId|PlaylistItemId|OwnerId|Parent(Backdrop|Logo|Thumb|Primary|Art)ItemId|PrimaryImageItemId|BackdropImageItemId|ChannelId|AlbumId)$/;
 function dashIds(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(dashIds);
@@ -196,13 +174,11 @@ function lib(c: C): Library {
   return new Library(c.get('jf'));
 }
 
-/** Acknowledge now, act after the response. Playback must never wait on a tracker. */
 function defer(c: C, work: () => Promise<unknown>): void {
   const p = work().catch(() => { console.warn('Playback update failed before completion'); });
   try {
     c.executionCtx.waitUntil(p);
   } catch {
-    /* no execution context (tests): the promise still runs */
   }
 }
 
@@ -212,10 +188,6 @@ function itemGuid(c: C, name = 'id'): { id: string; g: ReturnType<typeof decodeG
 }
 
 const notFound = (c: C) => reply(c, { Message: 'Item not found' }, 404);
-
-// ---------------------------------------------------------------------------
-// Handshake and authentication
-// ---------------------------------------------------------------------------
 
 inner.get('/system/info/public', (c) => {
   const jf = c.get('jf');
@@ -320,10 +292,6 @@ inner.post('/sessions/viewing', (c) => c.body(null, 204));
 inner.get('/socket', (c) => handleJellyfinSocket(c.get('jf').ctx, c.req.raw));
 inner.get('/embywebsocket', (c) => handleJellyfinSocket(c.get('jf').ctx, c.req.raw));
 
-// ---------------------------------------------------------------------------
-// Views
-// ---------------------------------------------------------------------------
-
 async function viewsHandler(c: C): Promise<Response> {
   const views = await lib(c).views();
   return reply(c, listOf(views, views.length, 0));
@@ -332,7 +300,6 @@ inner.get('/users/:uid/views', viewsHandler);
 inner.get('/userviews', viewsHandler);
 inner.get('/library/mediafolders', viewsHandler);
 
-// Part of at least one client's startup; a 404 here is fatal.
 inner.get('/library/virtualfolders', async (c) => {
   const views = await lib(c).views();
   return reply(
@@ -355,10 +322,6 @@ async function groupingHandler(c: C): Promise<Response> {
 }
 inner.get('/userviews/groupingoptions', groupingHandler);
 inner.get('/users/:uid/groupingoptions', groupingHandler);
-
-// ---------------------------------------------------------------------------
-// Items
-// ---------------------------------------------------------------------------
 
 function sortWithin(items: Dto[], sortBy: string[], descending: boolean): Dto[] {
   const key = sortBy[0] ?? '';
@@ -392,12 +355,6 @@ function applyFilters(items: Dto[], filters: string[]): Dto[] {
   return out;
 }
 
-/**
- * A client builds one shelf per kind by ruling out the kinds another shelf
- * owns. When that leaves nothing this server publishes, the shelf wants to be
- * empty rather than showing the same titles under the wrong heading. Only
- * movies and episodes are Video; a series is a folder.
- */
 function nothingSurvives(jf: JfRequest): boolean {
   const excluded = new Set(qList(jf, 'ExcludeItemTypes'));
   const media = new Set(qList(jf, 'MediaTypes'));
@@ -419,7 +376,6 @@ async function genreExtra(L: Library, jf: JfRequest): Promise<string | undefined
   return undefined;
 }
 
-/** Series or season children: seasons for a series, episodes for a season (or a recursive Episode query). */
 async function childrenOf(L: Library, jf: JfRequest, g: TitleGuid, wanted: Set<ItemType> | null): Promise<{ items: Dto[]; shows: Map<string, Show> } | null> {
   const show = await L.show(g);
   if (!show) return null;
@@ -457,7 +413,6 @@ async function listItems(c: C): Promise<Response> {
     return reply(c,listOf(await L.decorate(sortWithin(items,sortBy,descending).slice(start,start+limit)),items.length,start));
   }
 
-  // Particular items by id, not a listing.
   const ids = qList(jf, 'Ids');
   if (ids.length) {
     const items: Dto[] = [];
@@ -478,8 +433,6 @@ async function listItems(c: C): Promise<Response> {
       const views = await L.views();
       return reply(c, listOf(views.slice(start, start + limit), views.length, start));
     }
-    // A cross-library listing walks the catalogs of the wanted kind in order
-    // with one running offset, so paging does not restart at every boundary.
     const genre = await genreExtra(L, jf);
     const pool = (await L.browsable()).filter((cat) => {
       if (!wanted) return true;
@@ -534,13 +487,10 @@ async function listItems(c: C): Promise<Response> {
   const page = await L.window(cat, start, limit, genre ? { genre } : {});
   const built = page.items.map((m) => L.previewItem(m, cat, cat.viewId)).filter((x): x is Dto => Boolean(x));
   const items = sortWithin(applyFilters(await L.decorate(filterByType(built, wanted)), filters), sortBy, descending);
-  // Catalogs report no total, so one page of lookahead keeps the client asking
-  // until a short window tells the truth.
   const total = page.hasMore && items.length > 0 ? start + items.length + limit : start + items.length;
   return reply(c, listOf(items, total, start));
 }
 
-/** Build one item by guid, with MediaSources attached when asked for through Fields. */
 async function singleItem(L: Library, id: string, withSources: boolean): Promise<Dto | null> {
   const g = decodeGuid(id);
   if (!g) return null;
@@ -585,11 +535,6 @@ async function singleItem(L: Library, id: string, withSources: boolean): Promise
   return item;
 }
 
-/**
- * A client that asks for MediaSources in Fields reads them straight off the
- * item and reports "no file" without ever calling PlaybackInfo when absent.
- * Only ever resolved for a single item, never a list.
- */
 async function attachSources(L: Library, item: Dto, g: TitleGuid, id: string): Promise<void> {
   const { sources } = await resolveSources(L, g, id);
   if (!sources.length) return;
@@ -607,7 +552,6 @@ async function singleItemHandler(c: C): Promise<Response> {
   return item ? reply(c, item) : notFound(c);
 }
 
-// Fixed paths (stubs, filters, latest, resume) must be registered before /items/:id.
 registerStubs(inner);
 inner.get('/mediasegments/:id',async c=> {
   const jf=c.get('jf'),id=c.req.param('id'),g=decodeGuid(id);
@@ -635,11 +579,6 @@ inner.get('/users/:uid', (c) => {
   return reply(c, userDto(jf.ctx, jf.who));
 });
 
-// ---------------------------------------------------------------------------
-// Shelves
-// ---------------------------------------------------------------------------
-
-/** A bare array, not a list: some clients build their whole home from this. */
 async function latestHandler(c: C): Promise<Response> {
   const jf = c.get('jf');
   const L = lib(c);
@@ -651,7 +590,6 @@ async function latestHandler(c: C): Promise<Response> {
     const cat = await L.viewOf(parent);
     if (cat) cats = [cat];
   } else if (!parent) {
-    // No parent: the first catalog of each wanted kind, so the home page has something.
     const all = await L.browsable();
     const movies = all.find((x) => x.type === 'movie');
     const shows = all.find((x) => x.type === 'series' || x.type === 'anime');
@@ -675,8 +613,6 @@ inner.get('/shows/nextup', async (c) => {
   const jf = c.get('jf');
   const start = Math.max(0, qInt(jf, 'StartIndex', 0));
   const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
-  // The client's recency cutoff is deliberately ignored: the tracker's own
-  // view of what is in progress is what people expect to see.
   const { items, total } = await lib(c).nextUpShelf(start, limit, {
     includeResumable: qBool(jf, 'EnableResumable', true),
     includeRewatching: qBool(jf, 'EnableRewatching', false),
@@ -691,10 +627,6 @@ inner.get('/shows/upcoming', async (c) => {
   const { items, total } = await lib(c).upcomingShelf(start, limit);
   return reply(c, listOf(items, total, start));
 });
-
-// ---------------------------------------------------------------------------
-// Seasons, episodes, similar, ancestors
-// ---------------------------------------------------------------------------
 
 inner.get('/shows/:id/seasons', async (c) => {
   const { g } = itemGuid(c);
@@ -740,8 +672,6 @@ inner.get('/items/:id/similar', similarHandler);
 inner.get('/movies/:id/similar', similarHandler);
 inner.get('/shows/:id/similar', similarHandler);
 
-// Walked for a breadcrumb when a client opens an item: a season names its
-// series, an episode names both.
 inner.get('/items/:id/ancestors', async (c) => {
   const { g } = itemGuid(c);
   if (!g || (g.kind !== 'episode' && g.kind !== 'season')) return reply(c, []);
@@ -756,10 +686,6 @@ inner.get('/items/:id/ancestors', async (c) => {
   chain.push(L.titleItemOf(show.meta, show.guid));
   return reply(c, chain);
 });
-
-// ---------------------------------------------------------------------------
-// Genres, filters, search
-// ---------------------------------------------------------------------------
 
 async function genresFor(L: Library, jf: JfRequest): Promise<string[]> {
   const parent = decodeGuid(jf.q('ParentId'));
@@ -785,7 +711,6 @@ inner.get('/genres', async (c) => {
   return reply(c, listOf(items, items.length, 0));
 });
 
-// Looked up by name; an unknown name still answers with a genre so a stale link renders.
 inner.get('/genres/:name', async (c) => {
   const jf = c.get('jf');
   const segment = jf.rawPath.split('/').filter(Boolean)[1] ?? c.req.param('name');
@@ -831,10 +756,6 @@ inner.get('/search/hints', async (c) => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Playback
-// ---------------------------------------------------------------------------
-
 async function playbackHandler(c: C): Promise<Response> {
   const jf = c.get('jf');
   const { id, g } = itemGuid(c);
@@ -852,11 +773,6 @@ inner.get('/items/:id/mediasources', async (c) => {
   return reply(c, sources);
 });
 
-/**
- * Some clients never fetch the URL a MediaSource carries: they ask the server
- * for the video and expect to be sent on. Streams are re-resolved (from the
- * short stream cache when possible) and matched by the hashed source id.
- */
 async function videoHandler(c: C): Promise<Response> {
   const jf = c.get('jf');
   const { id, g } = itemGuid(c);
@@ -866,9 +782,6 @@ async function videoHandler(c: C): Promise<Response> {
   if (!chosen || typeof chosen.Path !== 'string') return reply(c, { Message: chosen === null && sources.length ? 'Media source not found' : 'No playable stream' }, 404);
   return new Response(null, { status: 302, headers: { location: chosen.Path, 'cache-control': 'no-store' } });
 }
-// `stream`, `stream.mkv`, `original.mp4`, `stream/anything.mkv`: a dotted
-// segment is matched as one param and checked by hand, since a route pattern
-// cannot split a segment on the dot.
 const VIDEO_FILE = /^(stream|original)(\.[a-z0-9]+)?$/i;
 const videoFileHandler = (c: C) => (VIDEO_FILE.test(c.req.param('file') ?? '') ? videoHandler(c) : c.notFound());
 for (const path of ['/videos/:id/:file', '/videos/:id/stream/:filename']) {
@@ -887,10 +800,6 @@ async function subtitleHandler(c: C): Promise<Response> {
 }
 inner.get('/videos/:id/:msid/subtitles/:index/:file', subtitleHandler);
 inner.get('/videos/:id/:msid/subtitles/:index/:start/:file', subtitleHandler);
-
-// ---------------------------------------------------------------------------
-// Playstate
-// ---------------------------------------------------------------------------
 
 function report(c: C, paramName?: string) {
   const jf = c.get('jf');
@@ -936,8 +845,6 @@ inner.delete('/playingitems/:id', async (c) => {
 });
 inner.post('/sessions/playing/ping', (c) => c.body(null, 204));
 
-// A client reads the new state back out of this response rather than trusting
-// a bare acknowledgement; an empty body reads as "unsupported".
 const markPlayed = (watched: boolean) => async (c: C) => reply(c, await setPlayed(lib(c), c.req.param('id') ?? '', watched));
 inner.post('/users/:uid/playeditems/:id', markPlayed(true));
 inner.delete('/users/:uid/playeditems/:id', markPlayed(false));
@@ -949,12 +856,7 @@ inner.post('/items/:id/userdata', userDataHandler);
 inner.post('/useritems/:id/userdata', userDataHandler);
 inner.post('/users/:uid/items/:id/userdata', userDataHandler);
 
-// ---------------------------------------------------------------------------
-// Images
-// ---------------------------------------------------------------------------
-
 async function imageHandler(c: C): Promise<Response> {
-  // The tag is the artwork URL handed out with the item, so no lookup is needed when a client echoes it.
   const tag = imageTag(c.get('jf').q('tag'));
   if (tag) return redirectTo(tag);
   const url = await imageUrlFor(lib(c), plainGuid(c.req.param('id')), c.req.param('type') ?? 'primary');
@@ -971,14 +873,9 @@ async function profileImage(c: C): Promise<Response> {
 inner.get('/users/:uid/images/:type',profileImage);
 inner.get('/users/:uid/images/:type/:index',profileImage);
 
-// ---------------------------------------------------------------------------
-// Stubs and fallthrough
-// ---------------------------------------------------------------------------
-
 inner.notFound((c) => c.json({ Message: `Unsupported Jellyfin endpoint: ${c.req.method} ${c.get('jf')?.rawPath ?? ''}` }, 404));
 inner.onError((err, c) => c.json({ Message: err instanceof Error ? err.message : 'Internal error' }, 500));
 
-/** Guid an item id decodes to, exposed for the integrator's diagnostics. */
 export function describeJellyfinId(raw: string): ReturnType<typeof decodeGuid> {
   return decodeGuid(raw);
 }

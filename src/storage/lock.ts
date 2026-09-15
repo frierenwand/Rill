@@ -1,6 +1,5 @@
 import type { Ctx } from '../context';
 
-/** Serialize a playback cursor across locations. Busy requests fail before acknowledgement. */
 export async function withStateLock<T>(ctx: Ctx, key: string, work: () => Promise<T>): Promise<T> {
   const db = ctx.env.DB;
   if (!db) return work();

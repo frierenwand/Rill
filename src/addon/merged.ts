@@ -1,7 +1,6 @@
 import type { Meta, MetaPreview } from '../stremio/types';
 import type { CustomCatalog } from '../config/schema';
 
-/** IDs from different providers still identify one title. Names alone are not identities. */
 export function catalogIdentities(m:MetaPreview):string[] {
   const ids=(m as Meta).ids;
   return [`${m.type}:${m.id}`,...Object.entries(ids??{}).filter(([k,v])=>k!=='tmdbType'&&v!==undefined).map(([k,v])=>`${m.type}:${k==='imdb'?'':k+':'}${v}`)];
@@ -17,7 +16,6 @@ export async function mergedItems(
   let count=0;
   while(cursors.some(c=>!c.done||c.items.length) && count<skip+limit) {
     for(const c of cursors) {
-      // Empty filtered pages are not end-of-list when the provider consumed records.
       while(!c.items.length&&!c.done) {
         if(c.pages++>=64) throw new Error('Merged catalog source needs a narrower selection');
         const page=await read(c.source,c.offset);

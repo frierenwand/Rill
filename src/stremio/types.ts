@@ -1,4 +1,3 @@
-/** Stremio addon protocol shapes, as Rill produces and consumes them. */
 export type ContentType = 'movie' | 'series' | 'anime' | 'channel' | 'tv';
 
 export interface ManifestCatalog {
@@ -27,13 +26,12 @@ export interface Manifest {
 
 export interface MetaVideo {
   numbering?: 'tvdb' | 'tmdb' | 'anime';
-  /** Exact anime entry and episode before franchise display numbering. */
   trackerAnime?: { mal?: number; anilist?: number; kitsu?: number; anidb?: number; episode: number };
-  id: string;            // e.g. tt0903747:1:2, kitsu:123:5, mal:123:5
+  id: string;
   title: string;
   season?: number;
   episode?: number;
-  released?: string;     // ISO date
+  released?: string;
   thumbnail?: string;
   overview?: string;
   rating?: string;
@@ -58,11 +56,10 @@ export interface MetaPreview {
 }
 
 export interface Meta extends MetaPreview {
-  /** A browsable movie collection, rather than a playable title. */
   collection?:boolean;
   seasonPosters?:Record<number,string>;
-  runtime?: string;      // "45 min"
-  released?: string;     // ISO
+  runtime?: string;
+  released?: string;
   videos?: MetaVideo[];
   cast?: string[];
   director?: string[];
@@ -72,9 +69,7 @@ export interface Meta extends MetaPreview {
   links?: MetaLink[];
   trailers?: Array<{ source: string; type: 'Trailer' | 'Clip' }>;
   awards?: string;
-  /** Rill extension: rating certification like 'PG-13' / 'TV-MA'. */
   certification?: string;
-  /** Rill extension: external ids we know for this title. */
   ids?: { imdb?: string; tmdb?: number; tvdb?: number; tvmaze?:number; mal?: number; anilist?: number; kitsu?: number; anidb?: number };
   behaviorHints?: { defaultVideoId?: string | null; hasScheduledVideos?: boolean };
   status?: string;

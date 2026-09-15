@@ -1,8 +1,3 @@
-/**
- * TheTVDB v4 with the user's own key. Login tokens are memoised for a day; extended
- * records (series/movie with translations, artwork, characters, remote ids) and the
- * paged episode list are memoised for hours. Everything degrades to null/[] without a key.
- */
 import type { Ctx } from '../context';
 import { episodeId } from '../stremio/ids';
 import type { Meta, MetaLink, MetaPreview, MetaVideo } from '../stremio/types';
@@ -68,8 +63,6 @@ export interface TvdbSearchRow {
 
 interface Envelope<T> { status?: string; data?: T; links?: { next?: string | null; total_items?: number } }
 
-/* ------------------------------------------------------------------ transport */
-
 export function hasTvdb(ctx: Ctx): boolean {
   return !!ctx.cfg.keys.tvdb;
 }
@@ -90,7 +83,6 @@ async function tvdbToken(ctx: Ctx): Promise<string | null> {
   return token ?? null;
 }
 
-/** GET a v4 path, returning the full envelope. Memoised on the path alone (data is key-independent). */
 async function tvdbRaw<T>(ctx: Ctx, path: string, ttl: number): Promise<Envelope<T> | null> {
   const token = await tvdbToken(ctx);
   if (!token) return null;
@@ -103,8 +95,6 @@ async function tvdbRaw<T>(ctx: Ctx, path: string, ttl: number): Promise<Envelope
 export async function tvdbGet<T>(ctx: Ctx, path: string, ttl: number): Promise<T | null> {
   return (await tvdbRaw<T>(ctx, path, ttl))?.data ?? null;
 }
-
-/* ------------------------------------------------------------------ records */
 
 export async function tvdbSeries(ctx: Ctx, id: number): Promise<TvdbRecord | null> {
   return tvdbGet<TvdbRecord>(ctx, `/series/${id}/extended?meta=translations`, TTL_RECORD);
@@ -129,10 +119,6 @@ async function episodePages(ctx: Ctx, id: number, order: string): Promise<TvdbEp
   return out;
 }
 
-/**
- * Episodes in the series' default order, translated to the user's language, falling
- * back to English and finally to the untranslated official order.
- */
 export async function tvdbEpisodes(ctx: Ctx, id: number): Promise<TvdbEpisodeRow[]> {
   const langs = tvdbLanguageChain(ctx.cfg.language);
   for (const l of langs) {
@@ -141,8 +127,6 @@ export async function tvdbEpisodes(ctx: Ctx, id: number): Promise<TvdbEpisodeRow
   }
   return episodePages(ctx, id, 'official');
 }
-
-/* ------------------------------------------------------------------ search / remote ids */
 
 function imdbFromRemote(rows: Array<{ id?: string; sourceName?: string; type?: number }> | undefined): string | undefined {
   const hit = (rows ?? []).find((r) => /^tt\d+$/.test(String(r.id || '')) && (r.sourceName?.toLowerCase().includes('imdb') || r.type === 2 || !r.sourceName));
@@ -183,15 +167,12 @@ export async function tvdbSearch(ctx: Ctx, kind: TvdbKind, query: string, opts: 
   return (rows ?? []).filter((r) => r.network !== 'YouTube').map((r) => previewFromSearch(r, lang3));
 }
 
-/** TVDB id for an imdb or tmdb id, picking the entity kind that was asked for. */
 export async function tvdbByRemoteId(ctx: Ctx, remote: string, kind: TvdbKind): Promise<number | undefined> {
   if (!hasTvdb(ctx) || !remote) return undefined;
   const rows = await tvdbGet<Array<Record<string, { id?: number }>>>(ctx, `/search/remoteid/${encodeURIComponent(remote)}`, TTL_REMOTE);
   const hit = (rows ?? []).find((r) => r[kind]?.id);
   return hit?.[kind]?.id;
 }
-
-/* ------------------------------------------------------------------ artwork / text */
 
 const ART_TYPES: Record<TvdbKind, { poster: number; background: number; logo: number; banner: number }> = {
   series: { poster: 2, background: 3, logo: 23, banner: 1 },
@@ -203,7 +184,6 @@ export function artworkUrl(path: string | null | undefined): string | undefined 
   return /^https?:\/\//.test(path) ? path : `${ART}${path.startsWith('/') ? '' : '/banners/'}${path}`;
 }
 
-/** Best artwork of one type: user language, English, textless (null), then anything, by score. */
 export function pickTvdbArtwork(rows: TvdbArtworkRow[] | undefined, type: number, lang3: string): string | undefined {
   const list = (rows ?? []).filter((a) => a.type === type && a.image);
   if (!list.length) return undefined;
@@ -275,8 +255,6 @@ function certificationOf(rec: TvdbRecord, country3: string): string | undefined 
 }
 
 const ENDED = new Set(['Ended', 'Cancelled', 'Canceled', 'Released']);
-
-/* ------------------------------------------------------------------ meta */
 
 export async function tvdbMeta(ctx: Ctx, kind: TvdbKind, id: number, canonicalId: string, opts: { withEpisodes?: boolean } = {}): Promise<Meta | null> {
   const rec = await tvdbRecord(ctx, kind, id);

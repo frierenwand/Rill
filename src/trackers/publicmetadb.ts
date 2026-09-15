@@ -78,7 +78,6 @@ async function mark(ctx: Ctx, ev: MarkEvent) {
 }
 export const publicmetadbTracker: Tracker = {
   name: 'publicmetadb', ready: ctx => !!ctx.cfg.keys.publicmetadb,
-  // Output-only integration, matching the inspected Jellyfin source's read limitation.
   snapshot: async () => emptySnapshot(),
   catalogs,
   catalogItems,

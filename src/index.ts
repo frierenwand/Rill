@@ -22,14 +22,12 @@ app.use('*', async (c, next) => {
 });
 app.options('*', (c) => c.body(null, 204));
 
-/** Turn the config token in the path into a request context. */
 async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfgToken: string): Promise<Ctx | null> {
   let cfg = await decodeConfig(cfgToken);
   if (!cfg) return null;
   const url = new URL(c.req.url);
   const scope = (await sha256(cfg.installationKey || cfgToken)).slice(0, cfg.installationKey ? 32 : 16);
   let accountConfigToken=cfgToken;
-  // Signing in activates edited settings. Existing sessions use the active account settings.
   const activating = /\/users\/authenticate(byname|withquickconnect)$/i.test(url.pathname);
   if (c.env.DB && cfg.installationKey) {
     const saved = await c.env.DB.prepare('SELECT config FROM accounts WHERE scope=?').bind(scope).first<{config:string}>();
@@ -49,10 +47,8 @@ async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfg
   };
 }
 
-// UI + helper API live at the root.
 app.route('/', uiRouter);
 
-// Jellyfin facade: /:cfg/jellyfin/... (and /:cfg/jellyfin/emby/... which the router strips)
 app.all('/:cfg/jellyfin/socket', async (c) => {
   const ctx = await buildCtx(c, c.req.param('cfg'));
   if (!ctx) return c.json({ error: 'bad config' }, 400);
@@ -72,7 +68,6 @@ app.use('/:cfg/jellyfin/*', async (c, next) => {
 });
 app.route('/:cfg/jellyfin', jellyfinRouter);
 
-// Stremio addon: /:cfg/manifest.json, /:cfg/catalog/..., etc.
 app.use('/:cfg/*', async (c, next) => {
   if (c.get('ctx')) return next();
   const ctx = await buildCtx(c, c.req.param('cfg'));

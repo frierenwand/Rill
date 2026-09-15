@@ -20,7 +20,6 @@ export function historyStatement(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | Resum
     positionMs:mode === 'progress' && !watched && 'positionMs' in ev ? ev.positionMs : undefined,
     runtimeMs:'runtimeMs' in ev ? ev.runtimeMs : undefined,
   };
-  // A partial rewatch/clear preserves the existing played flag. Explicit unwatch clears it.
   const preserve = mode !== 'mark';
   return ctx.env.DB.prepare(`INSERT INTO history(scope,key,value,updated) VALUES(?,?,?,?) ON CONFLICT(scope,key) DO UPDATE SET
     value=CASE WHEN ? AND json_extract(history.value,'$.watched')=1 THEN json_set(excluded.value,'$.watched',json('true')) ELSE excluded.value END,
@@ -35,7 +34,6 @@ type Identified={ids:LocalRecord['ids'];season?:number;episode?:number};
 function aliases(row:Identified,kind:string):string[] {
   return Object.entries(row.ids).filter(([k,v])=>k!=='tmdbType'&&v!==undefined).map(([k,v])=>`${kind}:${k}:${v}:${kind==='episode'?`${row.season}:${row.episode}`:''}`);
 }
-/** Alias indexes avoid scanning the entire imported history for each local decision. */
 class Records<T extends Identified> {
   rows=new Set<T>(); index=new Map<string,Set<T>>();
   constructor(readonly kind:(row:T)=>string,rows:T[]=[]){for(const row of rows)this.add(row);}
@@ -48,7 +46,6 @@ class Records<T extends Identified> {
   }
 }
 
-/** Local decisions, including explicit unwatch/clear, override stale provider reads. */
 export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<WatchSnapshot> {
   if (!ctx.env.DB) return base;
   const rows = await ctx.env.DB.prepare('SELECT value FROM history WHERE scope=? ORDER BY updated').bind(ctx.historyScope ?? ctx.scope).all<{ value: string }>();
@@ -68,7 +65,6 @@ export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<Wat
       if (r.watched && r.season !== undefined && r.episode !== undefined) episodes.add({ ids:r.ids, season:r.season, episode:r.episode, plays:1, lastAt:r.at });
     }
   }
-  // Rebuild show activity from actual remaining history, so unwatch doesn't leave stale Next Up.
   out.movies=[...movies.rows];out.episodes=[...episodes.rows];out.resume=[...resume.rows];
   const shows=new Records<WatchSnapshot['shows'][number]>(()=>'series');
   for (const e of [...out.episodes.map(e => ({...e,at:e.lastAt})), ...out.resume.filter(e => e.kind === 'episode')].sort((a,b) => a.at.localeCompare(b.at))) {

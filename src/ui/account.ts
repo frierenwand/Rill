@@ -1,8 +1,3 @@
-/**
- * Single-owner account for the settings page. The owner's configuration lives in D1 and follows
- * them to any device; the settings page is gated behind the same username and password the
- * Jellyfin facade uses. Sessions are HttpOnly cookies signed with the installation key.
- */
 import type { Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { Env } from '../env';

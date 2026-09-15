@@ -1,9 +1,3 @@
-/**
- * MyAnimeList through Jikan v4 (https://api.jikan.moe/v4).
- *
- * Jikan allows roughly 3 requests/second and 60/minute per IP, so every GET is memoised
- * (details 12h, lists 1h, episodes 6h) and at most 3 calls run concurrently per request.
- */
 import type { Ctx } from '../../context';
 import type { IdBundle } from '../types';
 import type { Meta, MetaLink, MetaPreview } from '../../stremio/types';
@@ -22,7 +16,7 @@ const TTL_EPISODES = 6 * 3600;
 const TTL_STATIC = 24 * 3600;
 const PAGE_SIZE = 25;
 const EPISODES_PER_PAGE = 100;
-const MAX_EPISODE_PAGES = 30; // 3000 episodes is beyond anything Stremio can render sensibly
+const MAX_EPISODE_PAGES = 30;
 
 export interface JikanImage { jpg?: { image_url?: string; large_image_url?: string }; webp?: { large_image_url?: string } }
 export interface JikanNamed { mal_id: number; name: string; type?: string; url?: string }
@@ -68,7 +62,6 @@ export interface JikanEpisode {
 }
 interface JikanPage<T> { data: T; pagination?: { last_visible_page?: number; has_next_page?: boolean } }
 
-/** One Jikan GET with cache. A null (429 / 5xx / timeout) is retried once after a polite pause. */
 async function jikanGet<T>(path: string, ttl: number, retry = true): Promise<T | null> {
   const url = `${BASE}${path}`;
   const first = await fetchJson<T>(url, { ttl, timeoutMs: 15000 });
@@ -83,7 +76,6 @@ export async function malDetails(ctx: Ctx, malId: number): Promise<JikanAnime | 
   return res?.data?.mal_id ? res.data : null;
 }
 
-/** All episodes, 100 per page, at most JIKAN_CONCURRENCY pages in flight. */
 export async function malEpisodes(ctx: Ctx, malId: number): Promise<JikanEpisode[]> {
   void ctx;
   return memo(`anime:mal:episodes:v1:${malId}`, TTL_EPISODES, async () => {
@@ -111,15 +103,6 @@ export async function malSearch(ctx: Ctx, query: string, opts: { skip?: number; 
 
 export type MalListKind = 'top' | 'season' | 'schedule' | 'genre' | 'studio' | 'decade';
 
-/**
- * Catalog lists for the catalog agent.
- *  top:      params.filter = airing|upcoming|bypopularity|favorite, params.type = tv|movie|ova|ona|special
- *  season:   params.season = "fall 2025" | "now" | "upcoming"; params.type optional
- *  schedule: params.day = monday..sunday (defaults to today)
- *  genre:    params.id (MAL genre id) or params.name (matched against /genres/anime); params.type optional
- *  studio:   params.id (producer id) or params.name (searched via /producers?q=)
- *  decade:   params.decade = "1990" (start year), params.genre optional (id or name)
- */
 export async function malList(ctx: Ctx, kind: MalListKind, params: Record<string, string>, page: number): Promise<MetaPreview[]> {
   const p = Math.max(1, Math.floor(page || 1));
   const sfw = ctx.cfg.search.includeAdult ? '' : '&sfw=true';
@@ -201,7 +184,6 @@ async function malStudioId(name: string): Promise<number | undefined> {
   return (exact || rows[0])?.mal_id;
 }
 
-/** Ids gleaned from Jikan's external links (AniDB, AniList, Kitsu) — a fallback for the mapper. */
 export async function malExternalIds(ctx: Ctx, malId: number): Promise<Partial<IdBundle>> {
   void ctx;
   const res = await jikanGet<JikanPage<Array<{ name: string; url: string }>>>(`/anime/${malId}/external`, TTL_DETAILS, false);
@@ -217,8 +199,6 @@ export async function malExternalIds(ctx: Ctx, malId: number): Promise<Partial<I
   }
   return out;
 }
-
-// ---------- shaping ----------
 
 export function malTitle(a: JikanAnime, lang?: string): string {
   if (lang && lang.startsWith('ja') && a.title_japanese) return a.title_japanese;
@@ -285,7 +265,6 @@ export function malMeta(a: JikanAnime, lang?: string): Meta {
   return meta;
 }
 
-/** Jikan episode rows into the neutral shape episodes.ts merges. */
 export function malEpisodeRows(eps: JikanEpisode[]): Array<{ episode: number; title: string; released?: string; overview?: string; filler?: boolean; recap?: boolean }> {
   return eps.map((e) => ({
     episode: e.mal_id,

@@ -1,7 +1,3 @@
-/**
- * Builders for the Jellyfin wire shapes. Everything here is a pure function of
- * Stremio data plus the request identity; nothing is remembered between calls.
- */
 import type { Ctx } from '../context';
 import type { Meta, MetaPreview, MetaVideo, Stream, Subtitle } from '../stremio/types';
 import { sha256 } from '../util/bytes';
@@ -18,7 +14,6 @@ export function serverName(ctx: Ctx): string {
   return ctx.cfg.name?.trim() || 'Rill';
 }
 
-/** "1h 45min", "45 min", "120" (minutes) -> ticks, or null. */
 export function runtimeTicks(runtime: unknown): number | null {
   if (runtime === undefined || runtime === null) return null;
   const text = String(runtime).trim();
@@ -34,8 +29,6 @@ export function ticksToMs(ticks: unknown): number | null {
   const n = typeof ticks === 'number' ? ticks : parseInt(String(ticks ?? ''), 10);
   return Number.isFinite(n) && n >= 0 ? Math.round(n / TICKS_PER_MS) : null;
 }
-
-// ---------- System / user / session ----------
 
 export function publicSystemInfo(ctx: Ctx, who: Identity, base: string): Dto {
   return {
@@ -176,8 +169,6 @@ export function sessionDto(ctx: Ctx, who: Identity, client: ClientInfo): Dto {
   };
 }
 
-// ---------- Lists, user data, folders ----------
-
 export function listOf(items: unknown[], total: number, startIndex: number): Dto {
   return { Items: items, TotalRecordCount: total, StartIndex: startIndex };
 }
@@ -248,8 +239,6 @@ export function collectionFolder(id: string, who: Identity, name: string, collec
   };
 }
 
-// ---------- Titles ----------
-
 function yearOf(m: MetaPreview): number | null {
   const y = parseInt(String(m.year ?? m.releaseInfo ?? '').slice(0, 4), 10);
   return Number.isFinite(y) ? y : null;
@@ -266,7 +255,6 @@ function ratingOf(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Provider ids as Jellyfin names them. Anime entries keep only their own ids so a client does not fold seasons together. */
 export function providerIds(meta: Partial<Meta>, g: TitleGuid): Record<string, string> {
   const out: Record<string, string> = {};
   const ids = meta.ids ?? {};
@@ -298,21 +286,16 @@ function peopleOf(meta: Partial<Meta>): Dto[] {
   return out.filter((p) => p.Name);
 }
 
-/** Clients echo image tags back on every image request, so the tag carries the artwork URL itself
- *  and the image route can answer without resolving the title again. */
 export function imageTag(url: string | undefined | null): string | undefined {
   return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : undefined;
 }
 
 export interface TitleItemOptions {
   parentId?: string | null;
-  /** Number of seasons, when known. */
   seasonCount?: number;
-  /** Number of episodes, when known. */
   episodeCount?: number;
 }
 
-/** A Movie or Series item from a preview or full meta. */
 export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, who: Identity, opts: TitleItemOptions = {}): Dto {
   const full = meta as Partial<Meta>;
   const isMovie = g.kind === 'movie';
@@ -423,7 +406,6 @@ export interface EpisodeInput {
   video: MetaVideo;
   certification?: string;
   runtimeTicks?: number | null;
-  /** Series artwork URLs, surfaced as ParentBackdrop/Logo tags. */
   backdrop?: string;
   logo?: string;
 }
@@ -475,18 +457,10 @@ export function episodeItem(e: EpisodeInput, who: Identity): Dto {
     item.ParentLogoItemId = e.seriesId;
     item.ParentLogoImageTag = imageTag(e.logo)!;
   }
-  // A future air date is what makes an episode "missing"/"unaired" in clients.
   if (premiere && Date.parse(premiere) > Date.now()) item.IsUnaired = true;
   return item;
 }
 
-// ---------- Media sources ----------
-
-/**
- * Stream titles arrive in Unicode small capitals with zero-width joiners hiding
- * metadata, so a plain word boundary never matches what a user reads as "4K".
- * Everything is folded to ASCII before it is inspected.
- */
 const SMALL_CAPS: Record<string, string> = {
   'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ғ': 'f', 'ꜰ': 'f', 'ɢ': 'g',
   'ʜ': 'h', 'ɪ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ʟ': 'l', 'ᴍ': 'm', 'ɴ': 'n', 'ᴏ': 'o',
@@ -575,7 +549,6 @@ export function streamLabel(stream: Stream): string {
   return parts.join('\n') || 'Stream';
 }
 
-/** Stable id for a media source: the URL is what the client plays. */
 export async function mediaSourceId(url: string): Promise<string> {
   return (await sha256(`rill:msid:${url}`)).slice(0, 32);
 }
@@ -650,7 +623,6 @@ function mediaStreams(label: string, subtitles: MediaSourceInput['subtitles']): 
       DeliveryMethod: 'External',
       DeliveryUrl: s.deliveryUrl,
       IsExternalUrl: false,
-      // Upstream file address, so the proxy route knows where to fetch from.
       Path: s.url,
     });
   });
@@ -710,11 +682,6 @@ export function mediaSource(input: MediaSourceInput): Dto {
   };
 }
 
-/**
- * An item without any MediaSources is treated as unplayable by several clients
- * and never reaches PlaybackInfo, so listed items carry this stand-in instead
- * of resolving streams per row.
- */
 export function placeholderSource(itemId: string): Dto {
   return {
     Protocol: 'Http',

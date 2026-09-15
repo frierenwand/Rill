@@ -1,13 +1,6 @@
-/**
- * Language tag helpers. Config carries a BCP-47 tag like 'pt-BR'; each upstream wants
- * its own spelling: TMDB takes 'pt-BR', TVDB wants ISO 639-2 ('por', with 'pt' for
- * Brazilian Portuguese as a TVDB quirk), fanart.tv wants the bare 2-letter code.
- */
 
 export interface LangParts {
-  /** Lowercase 2-letter (or 3-letter) language, e.g. 'pt'. */
   lang: string;
-  /** Uppercase region when present, e.g. 'BR'. */
   region?: string;
 }
 
@@ -20,26 +13,19 @@ export function splitLanguageTag(tag: string | undefined | null): LangParts {
   return { lang, region };
 }
 
-/** 'pt-BR' -> 'pt-BR', 'de' -> 'de'. TMDB accepts either form. */
 export function tmdbLanguage(tag: string | undefined): string {
   const { lang, region } = splitLanguageTag(tag);
   return region ? `${lang}-${region}` : lang;
 }
 
-/** Region for certifications / release dates, defaulting to US. */
 export function regionOf(tag: string | undefined, fallback = 'US'): string {
   return splitLanguageTag(tag).region || fallback;
 }
 
-/** fanart.tv labels images with bare 2-letter codes ('00' means textless). */
 export function fanartLanguage(tag: string | undefined): string {
   return splitLanguageTag(tag).lang;
 }
 
-/**
- * ISO 639-1 -> 639-2/T for the languages TMDB offers translations in. Anything not
- * listed falls back to English rather than sending TVDB a code it will reject.
- */
 const ISO2_TO_3: Record<string, string> = {
   aa: 'aar', ab: 'abk', af: 'afr', am: 'amh', ar: 'ara', as: 'asm', ay: 'aym', az: 'aze',
   ba: 'bak', be: 'bel', bg: 'bul', bn: 'ben', bo: 'bod', br: 'bre', bs: 'bos',
@@ -55,7 +41,6 @@ const ISO2_TO_3: Record<string, string> = {
   uk: 'ukr', ur: 'urd', uz: 'uzb', vi: 'vie', yi: 'yid', zh: 'zho', zu: 'zul',
 };
 
-/** 3-letter code TVDB understands. 'pt-BR' is 'pt' on TVDB; everything else is 639-2/T. */
 export function tvdbLanguage(tag: string | undefined): string {
   const { lang, region } = splitLanguageTag(tag);
   if (lang === 'pt' && region === 'BR') return 'pt';
@@ -63,13 +48,11 @@ export function tvdbLanguage(tag: string | undefined): string {
   return ISO2_TO_3[lang] || 'eng';
 }
 
-/** Preferred language first, then English, deduplicated. */
 export function languageChain(tag: string | undefined): string[] {
   const { lang } = splitLanguageTag(tag);
   return lang === 'en' ? ['en'] : [lang, 'en'];
 }
 
-/** Same chain in TVDB spelling. */
 export function tvdbLanguageChain(tag: string | undefined): string[] {
   const l = tvdbLanguage(tag);
   return l === 'eng' ? ['eng'] : [l, 'eng'];

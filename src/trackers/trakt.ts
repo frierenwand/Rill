@@ -1,9 +1,4 @@
 import { credentials } from '../storage/credentials';
-/**
- * Trakt (API v2). Reads: playback positions, watched movies/shows, watchlist,
- * recommendations, user lists. Writes: scrobble start/pause/stop, history
- * add/remove, playback delete.
- */
 import type { Ctx } from '../context';
 import type { TraktAuth } from '../config/schema';
 import type { IdBundle } from '../meta/types';
@@ -14,7 +9,6 @@ import type { MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, WatchSnapshot, Wat
 
 const API = 'https://api.trakt.tv';
 const PAGE = 50;
-/** Avoid recording negligible resume positions; starts must still open at 0%. */
 const MIN_SCROBBLE = 1;
 
 interface TraktIds { trakt?: number; slug?: string; imdb?: string; tmdb?: number; tvdb?: number }
@@ -46,16 +40,11 @@ interface Session {
   token: string;
 }
 
-/* ----------------------------------------------------------------------------
- * Auth
- * -------------------------------------------------------------------------- */
-
 function auth(ctx: Ctx): TraktAuth | undefined {
   const a = ctx.cfg.trackers.trakt;
   return a && a.clientId && a.accessToken ? a : undefined;
 }
 
-/** Rotate only when durable storage can preserve the replacement pair. */
 async function session(ctx: Ctx): Promise<Session | null> {
   const a = auth(ctx);
   return a ? { token: (await credentials(ctx, 'trakt', a)).accessToken } : null;
@@ -71,25 +60,18 @@ function headers(ctx: Ctx, token: string): Record<string, string> {
 }
 
 async function get<T>(ctx: Ctx, s: Session, path: string, ttl: number): Promise<T | null> {
-  // session() resolves the current durable credential pair before reads.
   const result = await fetchJson<T>(`${API}${path}`, { headers: headers(ctx, s.token), ttl, cacheScope: `trakt:${ctx.scope}:${await fingerprint(s.token)}` });
   if (ctx.env.DB && result === null) throw new Error('trakt read unavailable');
   return result;
 }
 
-/** One provider write per delivery attempt, using the resolved session token. */
 async function write(ctx: Ctx, s: Session, method: 'POST' | 'DELETE', path: string, payload?: unknown): Promise<boolean> {
   const res = await sendRequest(`${API}${path}`, {
     method, headers: headers(ctx, s.token),
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
-  // Trakt rejects a recently completed duplicate scrobble with 409.
   return res.ok || (path.startsWith('/scrobble/') && res.status === 409);
 }
-
-/* ----------------------------------------------------------------------------
- * Shape helpers
- * -------------------------------------------------------------------------- */
 
 function bundleOf(ids: TraktIds | undefined, tmdbType?: 'movie' | 'tv'): IdBundle {
   const out: IdBundle = {};
@@ -130,10 +112,6 @@ function toPreview(entry: ListEntry, want: 'movie' | 'series'): MetaPreview | nu
   };
 }
 
-/* ----------------------------------------------------------------------------
- * Snapshot
- * -------------------------------------------------------------------------- */
-
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const s = await session(ctx);
   if (!s) return emptySnapshot();
@@ -141,7 +119,6 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const [playback, movies, shows] = await Promise.all([
     get<PlaybackItem[]>(ctx, s, '/sync/playback', 30),
     get<WatchedMovieItem[]>(ctx, s, '/sync/watched/movies', 60),
-    // The default (no `extended`) form carries seasons[].episodes[] with plays; noseasons drops them.
     get<WatchedShowItem[]>(ctx, s, '/sync/watched/shows', 60),
   ]);
 
@@ -187,10 +164,6 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   return out;
 }
 
-/* ----------------------------------------------------------------------------
- * Writes
- * -------------------------------------------------------------------------- */
-
 function scrobbleBody(ev: ScrobbleEvent, progress: number): unknown | null {
   const ids = idsForWrite(ev.ids);
   if (!ids) return null;
@@ -216,7 +189,6 @@ function historyBody(ev: MarkEvent): unknown | null {
   if (ev.kind === 'movie') return { movies: [{ ids }] };
   if (ev.kind === 'series') return { shows: [{ ids }] };
   if (ev.season === undefined || ev.episode === undefined) return null;
-  // An episode must name its season: a bare show would touch the whole show.
   return { shows: [{ ids, seasons: [{ number: ev.season, episodes: [{ number: ev.episode }] }] }] };
 }
 
@@ -224,7 +196,6 @@ function sameTitle(entry: ResumeEntry, ev: MarkEvent): boolean {
   const a = stremioIdOf(entry.ids);
   const b = stremioIdOf(ev.ids);
   if (!a || a !== b) {
-    // Different canonical ids can still be the same title; compare any shared id.
     const shared = (entry.ids.imdb && entry.ids.imdb === ev.ids.imdb) || (entry.ids.tmdb && entry.ids.tmdb === ev.ids.tmdb) || (entry.ids.tvdb && entry.ids.tvdb === ev.ids.tvdb);
     if (!shared) return false;
   }
@@ -240,7 +211,6 @@ async function mark(ctx: Ctx, ev: MarkEvent): Promise<void> {
   if (!body) return;
   if (!(await write(ctx, s, 'POST', ev.watched ? '/sync/history' : '/sync/history/remove', body))) throw new Error('Trakt history update rejected');
   if (!ev.watched) {
-    // Un-marking also drops the paused position so it leaves "continue watching".
     const playback = await get<PlaybackItem[]>(ctx, s, '/sync/playback', 0);
     const snap = emptySnapshot();
     for (const p of playback ?? []) {
@@ -258,17 +228,6 @@ async function clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void> {
   if (!s || entry.ref === undefined || entry.ref === null || entry.ref === '') return;
   await write(ctx, s, 'DELETE', `/sync/playback/${encodeURIComponent(String(entry.ref))}`);
 }
-
-/* ----------------------------------------------------------------------------
- * Catalogs
- *
- * Catalog ids (colon separated so they survive a URL path segment):
- *   trakt:watchlist:<movie|series>
- *   trakt:recs:<movie|series>
- *   trakt:list:<movie|series>:me:<listId>          (own lists from /users/me/lists)
- *   trakt:list:<movie|series>:<user>:<slug>        (cfg.lists.trakt "user/slug")
- *   trakt:list:<movie|series>:<numericId>          (cfg.lists.trakt "12345")
- * -------------------------------------------------------------------------- */
 
 const KINDS: Array<'movie' | 'series'> = ['movie', 'series'];
 
@@ -339,7 +298,6 @@ async function catalogItems(ctx: Ctx, catalogId: string, skip: number): Promise<
   const rows = (await get<ListEntry[] | TraktMovie[]>(ctx, s, target.path, 300)) ?? [];
   const out: MetaPreview[] = [];
   for (const row of rows) {
-    // Recommendations return bare movie/show objects; lists wrap them in {type, movie|show}.
     const entry: ListEntry = 'ids' in row ? (target.kind === 'movie' ? { movie: row as TraktMovie } : { show: row as TraktShow }) : (row as ListEntry);
     const preview = toPreview(entry, target.kind);
     if (preview) out.push(preview);

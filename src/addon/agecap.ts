@@ -1,7 +1,3 @@
-/**
- * Age-cap filtering for catalog rows. Catalog previews carry no certification,
- * so it is looked up lazily and only when the user actually set a cap.
- */
 import type { Ctx } from '../context';
 import type { ContentType, MetaPreview } from '../stremio/types';
 import { parseStremioId } from '../stremio/ids';
@@ -22,7 +18,6 @@ export function hasAgeCap(ctx: Ctx): boolean {
 interface ReleaseDatesPayload { results?: Array<{ iso_3166_1: string; release_dates?: Array<{ certification?: string }> }> }
 interface ContentRatingsPayload { results?: Array<{ iso_3166_1: string; rating?: string }> }
 
-/** US certification straight from TMDB; one request per title, cached a week. */
 async function tmdbCertification(ctx: Ctx, type: ContentType, tmdbId: number): Promise<string | undefined> {
   if (!ctx.tmdbKey) return undefined;
   if (type === 'movie') {
@@ -40,7 +35,6 @@ async function certificationFor(ctx: Ctx, type: ContentType, item: MetaPreview):
   if (parsed.source === 'tmdb' && parsed.num) {
     return tmdbCertification(ctx, type === 'movie' ? 'movie' : 'series', parsed.num);
   }
-  // Anything else goes through the resolved meta, which the meta layer caches.
   try {
     const meta = await metaApi.resolveMeta(ctx, type, item.id);
     return meta?.certification || undefined;
@@ -49,10 +43,6 @@ async function certificationFor(ctx: Ctx, type: ContentType, item: MetaPreview):
   }
 }
 
-/**
- * Drop rows above the configured cap. Anime rows are filtered upstream with sfw
- * flags, so only movie/series rows pay for a certification lookup.
- */
 export async function applyAgeCap(ctx: Ctx, type: ContentType, items: MetaPreview[]): Promise<MetaPreview[]> {
   if (!hasAgeCap(ctx) || items.length === 0) return items;
   const cap = ctx.cfg.ageCap.trim();

@@ -15,7 +15,6 @@ interface RatingRow {
 export interface MovieLensSyncStatus {checkedAt:string;nextAt:number;fingerprint?:string;sent:number;successCount?:number;alreadyRatedCount?:number;errorCount?:number;error?:string}
 const HEADER=['Const','Your Rating','Date Rated','Title','URL','Title Type','IMDb Rating','Runtime (mins)','Year','Genres','Num Votes','Release Date','Directors'];
 const csvCell=(value:unknown)=>'"'+String(value??'').replace(/"/g,'""')+'"';
-/** Multi-part anime films can carry several IMDb IDs. Newer ratings win ties across sources. */
 export function normalizeRatings(groups:RatingRow[][]):Rating[] {
   const result=new Map<string,Rating>();
   for(const rows of groups)for(const row of rows) {
@@ -72,7 +71,6 @@ export async function importRatingsCsv(ctx:Ctx,csv:string):Promise<Pick<MovieLen
 }
 async function syncKey(ctx:Ctx):Promise<string>{return `movielens-sync:v1:${ctx.scope}:${(await sha256(ctx.cfg.movieLens?.username??'')).slice(0,24)}`;}
 export async function movieLensSyncStatus(ctx:Ctx):Promise<MovieLensSyncStatus|null>{return stateGet(ctx,await syncKey(ctx));}
-/** Scheduled imports are opt-in. Persist the fingerprint only after MovieLens confirms the request. */
 export async function syncMovieLens(ctx:Ctx,manual=false):Promise<MovieLensSyncStatus|null> {
   if(ctx.profile&&!ctx.profile.sharesHistory)return null;
   if(!ctx.cfg.movieLens?.username||!ctx.cfg.movieLens.password||!manual&&!ctx.cfg.movieLens.syncRatings)return null;

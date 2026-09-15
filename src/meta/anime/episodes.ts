@@ -1,13 +1,3 @@
-/**
- * Episode lists for anime metas.
- *
- * Anime ids carry a single absolute episode number (mal:123:5). Jikan, Kitsu and AniList each
- * know a different slice of an episode (Jikan: titles / air dates / filler flags, Kitsu:
- * thumbnails / synopses, AniList: streaming thumbnails / future airing times); rows from every
- * provider that answered are merged per episode number.
- *
- * Franchise IDs use authoritative TMDB/TVDB episodes or explicit Anime-Lists mappings.
- */
 import type { Ctx } from '../../context';
 import type { MetaVideo } from '../../stremio/types';
 import { episodeId } from '../../stremio/ids';
@@ -34,15 +24,10 @@ export interface EpisodeRow {
 }
 
 export interface EpisodeSources {
-  /** Rows in precedence order: the first row that has a field wins. */
   rows: EpisodeRow[][];
-  /** Known episode count (from the title record) — pads the list when providers stop short. */
   count?: number | null;
-  /** First air date, used to estimate weekly dates for episodes no provider dated. */
   firstAired?: string;
-  /** Roughly weekly show? Enables date estimation. */
   weekly?: boolean;
-  /** Fallback thumbnail (series background) for undated / unaired entries. */
   fallbackThumb?: string;
 }
 
@@ -50,7 +35,6 @@ export interface BuiltEpisodes { videos: MetaVideo[]; hasFuture: boolean; lastAi
 
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
-/** Merge provider rows into MetaVideos for a single anime title id (mal:/anilist:/kitsu:). */
 export function assembleEpisodes(titleId: string, src: EpisodeSources, season?: number): BuiltEpisodes {
   const merged = new Map<number, EpisodeRow>();
   for (const list of src.rows) {
@@ -101,10 +85,6 @@ export function assembleEpisodes(titleId: string, src: EpisodeSources, season?: 
 
 export interface TitleRecords { mal?: JikanAnime | null; anilist?: AlMedia | null; kitsu?: KitsuAnimeAttrs | null }
 
-/**
- * Gather episode rows for one anime from whichever providers the caller managed to resolve.
- * The primary provider's rows come first so its titles win; the other providers fill gaps.
- */
 export async function gatherEpisodeRows(
   ctx: Ctx,
   ids: { mal?: number; anilist?: number; kitsu?: number },
@@ -128,25 +108,18 @@ export async function gatherEpisodeRows(
   return order.map((n) => results.find((r) => r.name === n)?.rows || []).filter((r) => r.length > 0);
 }
 
-/** Project entry-relative episodes using published mappings. Never invent a season
- * from the order of MAL IDs: split cours and OVAs do not have that ordering. */
 export function projectAnimeVideos(titleId:string,entry:AnimeMapping,built:MetaVideo[],maps:EpisodeMap[],space:EpisodeSpace,externalId:number):MetaVideo[] {
   if(!entry.anidb)return [];
   return built.flatMap(v=>toExternalEpisodes(maps,space,{anidb:entry.anidb!,season:1,episode:v.episode!})
     .filter(target=>target.id===externalId).map(target=>({...v,id:episodeId(titleId,target.season,target.episode),season:target.season,episode:target.episode,numbering:space,trackerAnime:undefined})));
 }
 
-/**
- * Videos for an IMDb/TVDB-keyed series that spans several MAL entries. Episode numbers continue
- * across entries that share a season (split cours), ids are `tt123:season:episode`.
- */
 export async function franchiseEpisodes(ctx: Ctx, titleId: string, rows: AnimeMapping[], fallbackThumb?: string): Promise<BuiltEpisodes> {
   const parsed=parseStremioId(titleId);
   const preferred=ctx.cfg.providers.series==='tvdb'?'tvdb':'tmdb';
   const space:EpisodeSpace=parsed.source==='tmdb'?'tmdb':parsed.source==='tvdb'?'tvdb':rows.some(r=>r[preferred])?preferred:preferred==='tmdb'?'tvdb':'tmdb';
   const externalId=parsed.source===space?parsed.num:rows.find(r=>r[space])?.[space];
   if(!externalId)return {videos:[],hasFuture:false};
-  // The provider's own list is authoritative, including specials and missing anime mappings.
   let official:MetaVideo[]=[];
   if(space==='tvdb'&&ctx.cfg.keys.tvdb)official=(await tvdbEpisodes(ctx,externalId)).map(e=>({...episodeToVideo(titleId,e,fallbackThumb),numbering:'tvdb'}));
   if(space==='tmdb'&&ctx.tmdbKey)official=(await tmdbMeta(ctx,'tv',externalId,titleId))?.videos?.map(v=>({...v,numbering:'tmdb'}))??[];
@@ -177,7 +150,6 @@ async function singleEntryEpisodes(ctx: Ctx, titleId: string, entry: AnimeMappin
     weekly: entry.kind === 'TV',
     fallbackThumb,
   }, season);
-  // Renumber so the season keeps counting across split cours.
   for (const v of built.videos) {
     v.trackerAnime = { mal: entry.mal, anilist: entry.anilist, kitsu: entry.kitsu, anidb: entry.anidb, episode: v.episode! };
     v.episode = (v.episode || 0) + offset;

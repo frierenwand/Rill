@@ -9,7 +9,6 @@ import { anilistPreview, anilistQuery, type AlMedia } from '../meta/anime/anilis
 import { fetchJson } from '../util/cache';
 import { socialItems } from './social-discovery';
 
-/** Date expressions stay in settings, so a saved discover catalog moves with the calendar. */
 export function discoverDate(value:string, now=new Date()):string {
   const match=/^\{?today(?:([+-])(\d+)([dwmy]))?\}?$/i.exec(value);
   if(!match) return value;

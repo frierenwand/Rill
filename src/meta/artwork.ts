@@ -1,8 +1,3 @@
-/**
- * Merge poster/background/logo from several sources in the order the user picked.
- * Sources that cost a request (fanart, tvdb) are only fetched when a slot actually
- * asks for them and the cheaper sources came up empty.
- */
 import type { Ctx } from '../context';
 import type { ContentType } from '../stremio/types';
 import { fanartArtwork, hasFanart, type FanartArtwork } from './fanart';
@@ -13,14 +8,12 @@ import type { IdBundle } from './types';
 export interface ArtworkSet { poster?: string; background?: string; logo?: string }
 export type ArtSource = 'tmdb' | 'fanart' | 'tvdb' | 'rpdb' | 'metahub';
 
-/** Artwork the meta provider already had in hand (no extra request needed). */
 export interface ProvidedArtwork { tmdb?: TmdbArtwork; tvdb?: TvdbArtwork; fanart?: FanartArtwork }
 
 export function metahubUrl(kind: 'poster' | 'background' | 'logo', imdb: string | undefined): string | undefined {
   return imdb ? `https://images.metahub.space/${kind}/medium/${imdb}/img` : undefined;
 }
 
-/** RPDB poster with the rating badge. imdb ids first; tmdb ids need the media kind. */
 export function rpdbPoster(key: string | undefined, ids: IdBundle, type: ContentType): string | undefined {
   if (!key) return undefined;
   if (ids.imdb) return `https://api.ratingposterdb.com/${key}/imdb/poster-default/${ids.imdb}.jpg`;
@@ -34,7 +27,6 @@ export async function mergeArtwork(ctx: Ctx, type: ContentType, ids: IdBundle, p
   const kind = type === 'movie' ? 'movie' : 'series';
   const { posters, backgrounds, logos } = ctx.cfg.artwork;
 
-  // Lazy, once-per-call loaders for the sources that cost a request.
   let tmdbP: Promise<TmdbArtwork> | undefined;
   let tvdbP: Promise<TvdbArtwork> | undefined;
   let fanartP: Promise<FanartArtwork> | undefined;

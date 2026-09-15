@@ -1,25 +1,3 @@
-/**
- * Jellyfin ids are GUIDs; Stremio ids are strings. Rill has no table to map one
- * to the other, so every GUID it hands out is a self-describing 16-byte record:
- *
- *   byte 0      kind        1 movie, 2 series, 3 season, 4 episode, 5 view, 6 misc
- *   byte 1      hi nibble   flags (bit 0: anime context)
- *               lo nibble   id source: 1 imdb, 2 tmdb, 3 tvdb, 4 kitsu, 5 mal,
- *                           6 anilist, 7 anidb (0 for view/misc)
- *   bytes 2-9   numeric id, u64 big-endian           (view/misc: see below)
- *   bytes 10-11 season, u16, 0xffff when absent
- *   bytes 12-13 episode, u16, 0xffff when absent
- *   bytes 14-15 checksum: FNV-1a over bytes 0-13, folded to 16 bits
- *
- * Views (catalogs) and misc entities (genres, people) have no number to carry.
- * For those bytes 2-5 hold a 32-bit FNV-1a hash of the full label and bytes
- * 6-13 hold the first 8 bytes of the label itself, so a decoder can either
- * match the hash against the labels it knows or fall back to the hint.
- *
- * Input accepts dashed and undashed forms in any case; output is 32 lowercase
- * hex characters. The response layer dashes them for clients whose SDK insists
- * on a well-formed UUID.
- */
 import { parseStremioId, type IdSource } from '../stremio/ids';
 
 export type GuidKind = 'movie' | 'series' | 'season' | 'episode' | 'view' | 'misc';
@@ -33,7 +11,6 @@ const SOURCE_OF: Record<number, IdSource> = { 1: 'imdb', 2: 'tmdb', 3: 'tvdb', 4
 const FLAG_ANIME = 0x1;
 const NONE = 0xffff;
 
-/** A title-shaped guid: movie, series, season or episode. */
 export interface TitleGuid {
   kind: 'movie' | 'series' | 'season' | 'episode';
   source: IdSource;
@@ -43,20 +20,14 @@ export interface TitleGuid {
   episode?: number;
 }
 
-/** A label-shaped guid: a view (catalog) or a misc entity such as a genre. */
 interface LabelBase {
-  /** Sub-kind for misc: 'genre' | 'person' | 'studio' | ''. Views carry ''. */
   sub: string;
   hash: number;
   hint: string;
-  /** Preserve a UTF-8 prefix ending mid-codepoint when re-encoding an issued ID. */
   hintBytes?: number[];
 }
 export interface ViewGuid extends LabelBase { kind: 'view' }
 export interface MiscGuid extends LabelBase { kind: 'misc' }
-// Two interfaces rather than one with `kind: 'view' | 'misc'`: TypeScript only
-// drops a union member per equality check, so a two-literal discriminant would
-// survive `!== 'view' && !== 'misc'` and never narrow to TitleGuid.
 export type LabelGuid = ViewGuid | MiscGuid;
 
 export type Guid = TitleGuid | LabelGuid;
@@ -94,7 +65,6 @@ function fromHex(hex: string): Uint8Array {
   return out;
 }
 
-/** Strip dashes and braces and lowercase; returns '' for anything that is not 32 hex. */
 export function plainGuid(raw: unknown): string {
   const s = String(raw ?? '').replace(/[-{}]/g, '').toLowerCase();
   return /^[0-9a-f]{32}$/.test(s) ? s : '';
@@ -157,7 +127,6 @@ function encodeLabel(kind: 'view' | 'misc', sub: string, label: string): string 
   return packLabel(kind, sub, fnv1a32(label), label);
 }
 
-/** A decoded label guid re-encodes from its stored hash, not by re-hashing the truncated hint. */
 export function encodeGuid(g: Guid): string {
   if (g.kind === 'view' || g.kind === 'misc') return packLabel(g.kind, g.sub, g.hash, g.hint,g.hintBytes);
   return encodeTitle(g);
@@ -193,11 +162,8 @@ export function decodeGuid(raw: unknown): Guid | null {
   return g;
 }
 
-// ---------- Stremio <-> guid helpers ----------
-
 const ANIME_SOURCES = new Set<IdSource>(['kitsu', 'mal', 'anilist', 'anidb']);
 
-/** Numeric root of a Stremio title id, or null when it has no number to pack. */
 export function titleRoot(stremioId: string): { source: IdSource; num: number } | null {
   const p = parseStremioId(stremioId);
   if (p.source === 'other' || p.num === undefined || !Number.isFinite(p.num)) return null;
@@ -205,7 +171,6 @@ export function titleRoot(stremioId: string): { source: IdSource; num: number } 
   return { source: p.source, num: p.num };
 }
 
-/** Rebuild the Stremio title id from a packed source + number. */
 export function stremioTitleId(source: IdSource, num: number): string {
   if (source === 'imdb') return `tt${String(num).padStart(7, '0')}`;
   return `${source}:${num}`;
@@ -233,7 +198,6 @@ export function episodeIdOf(series: TitleGuid, season: number, episode: number):
   return encodeTitle({ kind: 'episode', source: series.source, num: series.num, anime: series.anime, season, episode });
 }
 
-/** The series guid an episode or season belongs to. */
 export function parentSeriesOf(g: TitleGuid): TitleGuid {
   return { kind: 'series', source: g.source, num: g.num, anime: g.anime };
 }
@@ -254,7 +218,6 @@ export function personIdOf(name: string): string {
   return encodeLabel('misc', 'person', name);
 }
 
-/** Stremio id a title guid refers to (the series id for seasons and episodes). */
 export function stremioIdOfGuid(g: TitleGuid): string {
   return stremioTitleId(g.source, g.num);
 }

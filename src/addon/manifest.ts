@@ -1,7 +1,3 @@
-/**
- * Stremio manifest for a user's config. Every catalog listed here is one the
- * user enabled (or a default set when they never touched the picker).
- */
 import { BRAND_LOGO, BRAND_NAME } from '../brand';
 import type { Ctx } from '../context';
 import type { Manifest, ManifestCatalog } from '../stremio/types';
@@ -10,10 +6,8 @@ import { enabledCatalogDefinitions, type CatalogDefinition } from './catalogs';
 export const ADDON_ID = 'community.rill';
 export const ADDON_VERSION = '0.1.0';
 
-/** Every id family Rill can answer meta for. */
 export const ID_PREFIXES = ['tt', 'tmdb:', 'tvdb:', 'tvmaze:', 'tvdbc:', 'tmdbc:', 'kitsu:', 'mal:', 'anilist:', 'anidb:'];
 
-/** Inline logo so clients never need a second request to render the addon tile. */
 export const LOGO_DATA_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BRAND_LOGO)}`;
 
 export function catalogToManifestEntry(def: CatalogDefinition): ManifestCatalog {

@@ -10,7 +10,6 @@ import { syncMovieLens } from '../addon/movielens-sync';
 import { advanceRecommendations } from './recommendation-jobs';
 import { ensureSchema } from './migrate';
 
-/** One bounded batch per minute; history synchronization is due every 30 minutes. */
 export async function scheduled(_event: ScheduledController, env: Env): Promise<void> {
   if (!env.DB) throw new Error('Scheduled synchronization requires DB');
   await ensureSchema(env.DB);

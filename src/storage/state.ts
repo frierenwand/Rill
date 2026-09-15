@@ -2,7 +2,6 @@ import type { Ctx } from '../context';
 import { cacheDelete, cacheGet, cachePut } from '../util/cache';
 import { decodeConfig } from '../config/codec';
 
-/** Durable when bound. Cache fallback exists only for legacy installations. */
 export async function stateGet<T>(ctx: Ctx, key: string): Promise<T | null> {
   if (!ctx.env.DB) return cacheGet<T>(key);
   const row = await ctx.env.DB.prepare('SELECT value FROM state WHERE key = ? AND expires > ?').bind(key, Date.now()).first<{ value: string }>();

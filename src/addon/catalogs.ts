@@ -1,16 +1,3 @@
-/**
- * Catalog definitions and the page fetcher behind /catalog/*.
- *
- * Id families (the part before the first dot picks the source):
- *   tmdb.<kind>        TMDB lists and discover (needs a TMDB key)
- *   mal.<kind>         MyAnimeList via Jikan (keyless)
- *   anilist.<kind>     AniList GraphQL (keyless)
- *   tracker.<id>       personal lists from the primary tracker
- *   mdblist.<ref>      an MDBList list (numeric id or user/slug)
- *   trakt.list.<id>    a public Trakt list from cfg.lists.trakt
- *   addon.<n>.<id>     catalog <id> of the n-th external meta addon
- *   rill.search       the search catalog for each type
- */
 import type { Ctx } from '../context';
 import { metaAddons } from '../config/schema';
 import type { ContentType, ManifestCatalog, MetaPreview } from '../stremio/types';
@@ -41,9 +28,7 @@ export interface CatalogDefinition {
   id: string;
   type: CatalogType;
   name: string;
-  /** Section label for the configure UI. */
   group: string;
-  /** Credentials this catalog cannot work without. */
   needs?: CatalogNeed[];
   extra?: ManifestCatalog['extra'];
   genres?: string[];
@@ -56,11 +41,6 @@ const JIKAN_PAGE = 25;
 const ANILIST_PAGE = 20;
 const TRAKT_PAGE = 20;
 const TMDB_API = 'https://api.themoviedb.org/3';
-
-
-// ---------------------------------------------------------------------------
-// Definitions
-// ---------------------------------------------------------------------------
 
 const SKIP = { name: 'skip' } as const;
 function genreExtra(options: string[], required = false): NonNullable<ManifestCatalog['extra']>[number] {
@@ -77,7 +57,6 @@ function pageOf(skip: number | undefined, size: number): number {
   return Math.floor(Math.max(0, skip ?? 0) / size) + 1;
 }
 
-/** Which credentials this config satisfies. */
 function satisfied(ctx: Ctx): Set<CatalogNeed> {
   const s = new Set<CatalogNeed>(['mal', 'anilist', 'kitsu']);
   const { keys, trackers } = ctx.cfg;
@@ -90,7 +69,6 @@ function satisfied(ctx: Ctx): Set<CatalogNeed> {
   return s;
 }
 
-/** TMDB genre names for a media kind; one cached request per kind and language. */
 async function tmdbGenres(ctx: Ctx, kind: 'movie' | 'tv'): Promise<Array<{ id: number; name: string }>> {
   if (!ctx.tmdbKey) return [];
   const url = `${TMDB_API}/genre/${kind}/list?api_key=${ctx.tmdbKey}&language=${encodeURIComponent(ctx.cfg.language)}`;
@@ -122,7 +100,6 @@ function tmdbDefinitions(movieGenres: string[], tvGenres: string[], language: st
     ...both('streaming', 'Streaming On', (type) => withGenres(T(type, 'tmdb.streaming', 'Streaming On'), providerNames, true)),
   ];
 }
-
 
 function animeDefinitions(): CatalogDefinition[] {
   const M = (id: string, name: string): Omit<CatalogDefinition, 'extra'> => ({ id, type: 'anime', name, group: 'MyAnimeList' });
@@ -187,7 +164,6 @@ async function mdblistDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
     }
   };
   for (const l of mine) add(String(l.id), l.name, l.mediatype, 'MDBList: my lists');
-  // Lists the user typed in by id or user/slug: one cached detail call each.
   for (const ref of ctx.cfg.lists.mdblist) {
     const clean = ref.replace(/^mdblist\./, '').trim();
     if (!clean || seen.has(`mdblist.${clean}|movie`) || seen.has(`mdblist.${clean}|series`)) continue;
@@ -250,7 +226,6 @@ async function addonDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
   return out;
 }
 
-/** Every catalog this config could serve, in a stable display order. */
 export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
   return memo(`catalog-defs:v4:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
     const have = satisfied(ctx);
@@ -274,7 +249,6 @@ export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinitio
   });
 }
 
-/** What a fresh config shows before the user touches the picker. */
 function defaultOn(def: CatalogDefinition, hasTmdb: boolean): boolean {
   const head = def.id.split('.')[0];
   if(def.id.includes('.custom.'))return true;
@@ -287,7 +261,6 @@ function defaultOn(def: CatalogDefinition, hasTmdb: boolean): boolean {
   return false;
 }
 
-/** Definitions the user enabled, in the order they chose (or the default set). */
 export async function enabledCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
   const all = await listCatalogDefinitions(ctx);
   const toggles = ctx.cfg.catalogs;
@@ -302,10 +275,6 @@ export async function enabledCatalogDefinitions(ctx: Ctx): Promise<CatalogDefini
   }
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Items
-// ---------------------------------------------------------------------------
 
 function cleanGenre(extra: CatalogExtra): string | undefined {
   const g = extra.genre?.trim();
@@ -399,7 +368,6 @@ async function tmdbItems(ctx: Ctx, type: ContentType, kind: string, extra: Catal
     default: return [];
   }
 }
-
 
 async function malItems(ctx: Ctx, kind: string, extra: CatalogExtra): Promise<MetaPreview[]> {
   const page = pageOf(extra.skip, JIKAN_PAGE);
@@ -503,7 +471,6 @@ async function trackerItems(ctx: Ctx, catalogId: string, extra: CatalogExtra): P
   return tracker.catalogItems(ctx, catalogId, extra.skip ?? 0);
 }
 
-/** One page of a catalog as Stremio previews: dispatched by id family, capped, de-duplicated. */
 export async function catalogPage(ctx: Ctx, type: ContentType, id: string, extra: CatalogExtra = {}): Promise<{ items: MetaPreview[]; consumed: number }> {
   if(id==='tvdb.collections')return collectionsPage(ctx,Math.max(0,extra.skip??0));
   if(/^tmdb\.collection\.\d+$/.test(id)) {
@@ -529,12 +496,11 @@ export async function catalogPage(ctx: Ctx, type: ContentType, id: string, extra
   } else if (head === 'addon') {
     items = await addonItems(ctx, type, rest, extra);
   } else if (extra.search) {
-    // A search on a catalog that is not the search catalog still means "find this title".
     items = await unifiedSearch(ctx, type, extra.search, extra.skip ?? 0);
   } else if (head === 'tmdb') {
     items = await tmdbItems(ctx, type, rest, extra);
   } else if (head === 'cinemeta') {
-    items = []; // Add Cinemeta explicitly as a metadata addon to expose its catalogs.
+    items = [];
   } else if (head === 'mal') {
     items = await malItems(ctx, rest, extra);
   } else if (head === 'anilist') {

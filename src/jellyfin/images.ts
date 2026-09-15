@@ -1,9 +1,3 @@
-/**
- * Artwork. Jellyfin clients load images with a plain <img>, so these routes
- * are anonymous and answer with a redirect to the provider's own URL. Sizing
- * parameters (fillWidth, maxHeight, quality) are accepted and ignored. The tag, when a
- * client echoes it, is the artwork URL itself and short-circuits the lookup in index.ts.
- */
 import type { Meta } from '../stremio/types';
 import { decodeGuid } from './ids';
 import type { Library } from './library';
@@ -27,7 +21,6 @@ function pickTitleImage(meta: Meta, kind: ImageKind): string | undefined {
   }
 }
 
-/** The URL an item's image lives at, or null. */
 export async function imageUrlFor(lib: Library, itemId: string, kindRaw: string): Promise<string | null> {
   const kind = kindRaw.toLowerCase() as ImageKind;
   const g = decodeGuid(itemId);

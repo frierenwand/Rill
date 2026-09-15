@@ -3,7 +3,6 @@ import { b64urlDecode, b64urlEncode } from '../util/bytes';
 
 const PREFIX = 'c1.';
 
-/** JSON -> deflate-raw -> base64url, prefixed with a version tag. */
 export async function encodeConfig(cfg: RillConfig): Promise<string> {
   const json = new TextEncoder().encode(JSON.stringify(cfg));
   const cs = new CompressionStream('deflate-raw');
@@ -23,7 +22,6 @@ export async function decodeConfig(token: string): Promise<RillConfig | null> {
       const json = await new Response(ds.readable).text();
       return normalizeConfig(JSON.parse(json));
     }
-    // Plain base64url JSON is accepted too, for hand-written configs.
     const json = new TextDecoder().decode(b64urlDecode(token));
     return normalizeConfig(JSON.parse(json));
   } catch {

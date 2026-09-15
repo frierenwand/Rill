@@ -1,7 +1,3 @@
-/**
- * Small helpers shared by the tracker implementations. Nothing here talks to a
- * specific service; each tracker file owns its own endpoints and payload shapes.
- */
 import type { IdBundle } from '../meta/types';
 import type { ContentType } from '../stremio/types';
 import type { ResumeEntry, WatchSnapshot } from './types';
@@ -30,17 +26,12 @@ export function isoOrNow(v: unknown): string {
   return nowIso();
 }
 
-/** Epoch millis of an ISO stamp, 0 when unparsable. */
 export function epoch(v: string | undefined): number {
   if (!v) return 0;
   const t = Date.parse(v);
   return Number.isFinite(t) ? t : 0;
 }
 
-/**
- * A Stremio-style id for a bundle: imdb first, then tmdb, then the anime spaces.
- * Kept local so the tracker module needs nothing from the meta module.
- */
 export function stremioIdOf(ids: IdBundle): string | null {
   if (ids.imdb) return ids.imdb;
   if (ids.tmdb) return `tmdb:${ids.tmdb}`;
@@ -53,7 +44,6 @@ export function stremioIdOf(ids: IdBundle): string | null {
   return null;
 }
 
-/** Stable key for "this title" (movie) or "this episode" used by caches and de-duplication. */
 export function titleKey(ids: IdBundle, kind: 'movie' | 'episode' | 'series', season?: number, episode?: number): string {
   const base = stremioIdOf(ids) ?? 'unknown';
   if (kind === 'episode') return `${base}:${season ?? 0}:${episode ?? 0}`;
@@ -64,7 +54,6 @@ export function resumeKey(e: ResumeEntry): string {
   return titleKey(e.ids, e.kind, e.season, e.episode);
 }
 
-/** Type a preview should carry for a bundle that we know nothing else about. */
 export function previewType(kind: 'movie' | 'series' | 'anime'): ContentType {
   return kind;
 }
@@ -75,10 +64,6 @@ export interface WriteResult {
   body: unknown;
 }
 
-/**
- * A non-GET call (or a GET we must never cache). Never touches the Cache API.
- * Resolves with the status instead of throwing so callers can react to 401/409/422.
- */
 export async function sendRequest(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<WriteResult> {
   const { timeoutMs = 12000, ...rest } = init;
   const ctrl = new AbortController();
@@ -98,13 +83,11 @@ export async function sendRequest(url: string, init: RequestInit & { timeoutMs?:
   }
 }
 
-/** Short fingerprint for cache scoping so two users with different tokens never share a GET. */
 export async function fingerprint(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest).slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Pick the newest of two ISO stamps. */
 export function newer(a: string | undefined, b: string | undefined): string {
   return epoch(a) >= epoch(b) ? (a ?? nowIso()) : (b ?? nowIso());
 }

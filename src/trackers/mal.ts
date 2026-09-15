@@ -1,11 +1,4 @@
 import { credentials } from '../storage/credentials';
-/**
- * MyAnimeList (api.myanimelist.net/v2). MAL holds list state, not playback
- * state: progress is a count of finished episodes. Only stops above the
- * watched threshold and explicit marks are written. Episode numbers are used
- * as given (MAL counts absolute episodes per entry; the caller is expected to
- * pass the number in the entry's own numbering).
- */
 import type { Ctx } from '../context';
 import type { MalAuth } from '../config/schema';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
@@ -27,7 +20,6 @@ interface AnimeDetail { id: number; num_episodes?: number; my_list_status?: List
 
 function auth(ctx: Ctx): MalAuth | undefined {
   const a = ctx.cfg.trackers.mal;
-  // Durable installations can refresh expired credentials before use.
   if (!a || !a.accessToken) return undefined;
   if (!ctx.env.DB && a.expiresAt && (a.expiresAt < 1e12 ? a.expiresAt * 1000 : a.expiresAt) <= Date.now()) return undefined;
   return a;
@@ -43,7 +35,6 @@ async function get<T>(ctx: Ctx, a: MalAuth, path: string, ttl: number): Promise<
   return result;
 }
 
-/** Every page of a list status, capped so a huge list cannot run away. */
 async function listAll(ctx: Ctx, a: MalAuth, status: MalStatus, fields: string, ttl: number, maxPages = 10): Promise<ListRow[]> {
   const rows: ListRow[] = [];
   for (let i = 0; i < maxPages; i++) {
@@ -74,7 +65,6 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
     const ids = { mal };
     for (let e = 1; e <= seen; e++) out.episodes.push({ ids, season: 1, episode: e, plays: 1, lastAt });
     if (seen > 0) out.shows.push({ ids, lastAt, lastSeason: 1, lastEpisode: seen });
-    // A one-episode entry marked complete is treated as a watched movie as well.
     if (ls.status === 'completed' && Number(row.node.num_episodes) === 1) out.movies.push({ ids, plays: 1, lastAt });
   }
   out.fetchedAt = nowIso();
@@ -82,7 +72,6 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
 }
 
 async function current(ctx: Ctx, a: MalAuth, mal: number): Promise<{ watched: number; total: number | null; status?: MalStatus } | null> {
-  // Short TTL: this read decides whether a write is needed, so it must be near-live.
   const d = await get<AnimeDetail>(ctx, a, `/anime/${mal}?fields=id,num_episodes,my_list_status{status,num_episodes_watched}`, 0);
   if (!d) return null;
   return { watched: Number(d.my_list_status?.num_episodes_watched) || 0, total: Number(d.num_episodes) || null, status: d.my_list_status?.status };
@@ -95,7 +84,6 @@ async function setProgress(a: MalAuth, mal: number, watched: number, total: numb
   if (!result.ok) throw new Error('MAL update rejected');
 }
 
-/** Episode number an event refers to (movies are single-episode entries). */
 function episodeOf(kind: 'movie' | 'episode' | 'series', episode?: number): number | undefined {
   if (kind === 'movie') return 1;
   if (kind === 'episode') return episode && episode > 0 ? episode : undefined;
@@ -132,7 +120,6 @@ async function mark(ctx: Ctx, ev: MarkEvent): Promise<void> {
   if (ev.watched) {
     if (ep > cur.watched) await setProgress(a, mal, ep, cur.total);
   } else if (cur.watched >= ep) {
-    // Progress is a counter: un-marking an episode rewinds to just before it.
     await setProgress(a, mal, ep - 1, cur.total);
   }
 }

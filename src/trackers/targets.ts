@@ -6,7 +6,6 @@ import type { IdBundle } from '../meta/types';
 import type { MarkEvent, ScrobbleEvent } from './types';
 
 type Event = ScrobbleEvent | MarkEvent;
-/** Preserve display IDs in the caller; each sink gets only IDs with matching numbering. */
 export async function trackerTargets<T extends Event>(ctx: Ctx, ev: T, name: TrackerName): Promise<T[]> {
   if (ev.kind !== 'episode' || !ev.numbering || !ev.episode) return [ev];
   const animeSink = name === 'mal' || name === 'anilist';
@@ -21,7 +20,6 @@ export async function trackerTargets<T extends Event>(ctx: Ctx, ev: T, name: Tra
     if (animeSink) return [{ ...ev, ids: animeIds }];
     if (!animeIds.anidb) throw new Error('Anime episode has no AniDB mapping');
     const rows = await loadEpisodeMaps(ctx);
-    // PMDB accepts only TMDB; others can identify a show by TVDB alone.
     const space = name === 'publicmetadb' ? 'tmdb' : 'tvdb';
     const mapped = toExternalEpisodes(rows, space, { anidb: animeIds.anidb, season: ev.season ?? 1, episode: ev.episode });
     if (!mapped.length) throw new Error(`No ${space.toUpperCase()} episode mapping`);
@@ -54,12 +52,11 @@ export async function trackerTargets<T extends Event>(ctx: Ctx, ev: T, name: Tra
   }
   const space = ev.numbering;
   const id = ev.ids[space];
-  if (!id) return []; // No reliable external anchor; never use a franchise's first anime ID.
+  if (!id) return [];
   const rows = await loadEpisodeMaps(ctx);
   const mapped = toAnimeEpisodes(rows, space, { id, season: ev.season ?? 1, episode: ev.episode });
   const results: T[] = [];
   for (const anime of mapped) {
-    // AniDB specials belong to a different episode namespace, not the main list counter.
     if (anime.season !== 1) continue;
     const ids = await mappingForAnimeId(ctx, { anidb: anime.anidb });
     if (!ids) continue;

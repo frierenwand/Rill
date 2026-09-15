@@ -1,7 +1,3 @@
-/**
- * MDBList: the user's own lists, popular public lists, and list items.
- * All calls are keyed by cfg.keys.mdblist; nothing here works without it.
- */
 import type { Ctx } from '../context';
 import type { ContentType, MetaPreview } from '../stremio/types';
 import { fetchJson } from '../util/cache';
@@ -16,7 +12,6 @@ export interface MdbListSummary {
   name: string;
   slug?: string;
   user_name?: string;
-  /** 'movie' | 'show' | '' for mixed lists. */
   mediatype?: string;
   items?: number;
   likes?: number;
@@ -48,7 +43,6 @@ function scoped(ctx: Ctx): string {
   return `mdblist:${ctx.scope}`;
 }
 
-/** Lists owned by the key holder. */
 export async function mdbUserLists(ctx: Ctx): Promise<MdbListSummary[]> {
   const k = key(ctx);
   if (!k) return [];
@@ -56,7 +50,6 @@ export async function mdbUserLists(ctx: Ctx): Promise<MdbListSummary[]> {
   return Array.isArray(data) ? data.filter((l) => l && typeof l.id === 'number' && l.name) : [];
 }
 
-/** MDBList's own "top lists" leaderboard of popular public lists. */
 export async function mdbTopLists(ctx: Ctx): Promise<MdbListSummary[]> {
   const k = key(ctx);
   if (!k) return [];
@@ -64,7 +57,6 @@ export async function mdbTopLists(ctx: Ctx): Promise<MdbListSummary[]> {
   return Array.isArray(data) ? data.filter((l) => l && typeof l.id === 'number' && l.name) : [];
 }
 
-/** Details for one list by numeric id or "user/slug". */
 export async function mdbListInfo(ctx: Ctx, ref: string): Promise<MdbListSummary | null> {
   const k = key(ctx);
   if (!k) return null;
@@ -74,11 +66,6 @@ export async function mdbListInfo(ctx: Ctx, ref: string): Promise<MdbListSummary
   return one && typeof one.id === 'number' ? one : null;
 }
 
-/**
- * One page of a list, already shaped as Stremio previews. `wanted` narrows a
- * mixed list to the catalog's own type; the endpoint accepts a mediatype filter
- * so the page stays full and offsets stay honest.
- */
 export async function mdbListPage(ctx: Ctx, listId: string, wanted: ContentType, skip: number): Promise<MetaPreview[]> {
   const k = key(ctx);
   if (!k) return [];

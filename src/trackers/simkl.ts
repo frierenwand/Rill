@@ -1,4 +1,3 @@
-/** Simkl playback sessions use /scrobble; explicit watched changes use /sync/history. */
 import type { Ctx } from '../context';
 import type { SimklAuth } from '../config/schema';
 import type { IdBundle } from '../meta/types';
@@ -25,7 +24,6 @@ interface LibraryItem {
   movie?: SimklTitle;
   show?: SimklTitle;
   seasons?: Array<{ number: number; episodes?: SimklEpisode[] }>;
-  /** Anime lists episodes flat, without seasons. */
   episodes?: SimklEpisode[];
 }
 interface LibraryPayload { movies?: LibraryItem[]; shows?: LibraryItem[]; anime?: LibraryItem[] }
@@ -93,7 +91,6 @@ function posterOf(t: SimklTitle | undefined): string | undefined {
   return t?.poster ? `https://simkl.in/posters/${t.poster}_m.jpg` : undefined;
 }
 
-/** Items come back under a key named after the kind; a bare array is also tolerated. */
 function rowsOf(payload: LibraryPayload | LibraryItem[] | null, kind: SimklKind): LibraryItem[] {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
@@ -125,7 +122,6 @@ async function library(ctx: Ctx, a: SimklAuth, kind: SimklKind, status: Status, 
 }
 
 export interface ViewingSignal {ids:IdBundle;kind:'movie'|'series';anime:boolean;title?:string;year?:number;at:string;state:string;rating?:number}
-/** Preserve explicit ratings and dropped/held/planned states for taste inference. */
 export async function simklSignals(ctx:Ctx):Promise<ViewingSignal[]> {
   const a=auth(ctx);if(!a||ctx.profile&&!ctx.profile.sharesHistory)return [];
   const statuses:Status[]=['completed','watching','hold','dropped','plantowatch'];
@@ -137,10 +133,6 @@ export async function simklSignals(ctx:Ctx):Promise<ViewingSignal[]> {
     }));
   }))).flat();
 }
-
-/* ----------------------------------------------------------------------------
- * Snapshot
- * -------------------------------------------------------------------------- */
 
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const a = auth(ctx);
@@ -175,10 +167,8 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
       if (t >= best) { best = t; lastSeason = season; lastEpisode = number; lastAt = stamp; }
     };
     for (const season of item.seasons ?? []) for (const ep of season.episodes ?? []) push(season.number, ep.number, ep.watched_at);
-    // Anime is listed flat; treat the run as season 1 (absolute numbering).
     for (const ep of item.episodes ?? []) push(ep.season ?? 1, ep.number, ep.watched_at);
     if (!item.seasons?.length && !item.episodes?.length && anime && item.status === 'completed') {
-      // A finished anime without an episode array only carries a count.
       const count = Number(item.watched_episodes_count) || Number(item.total_episodes_count) || 0;
       for (let i = 1; i <= count; i++) out.episodes.push({ ids, season: 1, episode: i, plays: 1, lastAt });
       lastSeason = count ? 1 : undefined; lastEpisode = count || undefined;
@@ -212,10 +202,6 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   return out;
 }
 
-/* ----------------------------------------------------------------------------
- * Writes
- * -------------------------------------------------------------------------- */
-
 function historyBody(ids: IdBundle, kind: 'movie' | 'episode' | 'series', season?: number, episode?: number): unknown | null {
   const idsOut = idsForWrite(ids);
   if (!idsOut) return null;
@@ -223,9 +209,7 @@ function historyBody(ids: IdBundle, kind: 'movie' | 'episode' | 'series', season
   if (kind === 'series') return { shows: [{ ids: idsOut }] };
   if (episode === undefined) return null;
   const animeOnly = !ids.imdb && !ids.tmdb && !ids.tvdb;
-  // Anime on Simkl is addressed by absolute episode number without a season.
   if (animeOnly || season === undefined) return { shows: [{ ids: idsOut, episodes: [{ number: episode }] }] };
-  // A show sent without seasons would be touched as a whole, so always name both.
   return { shows: [{ ids: idsOut, seasons: [{ number: season, episodes: [{ number: episode }] }] }] };
 }
 
@@ -249,10 +233,6 @@ async function mark(ctx: Ctx, ev: MarkEvent): Promise<void> {
   const body = historyBody(ev.ids, ev.kind, ev.season, ev.episode);
   if (!body || !(await post(a, ev.watched ? '/sync/history' : '/sync/history/remove', body))) throw new Error('Simkl history update rejected');
 }
-
-/* ----------------------------------------------------------------------------
- * Catalogs: simkl:ptw:<movie|series|anime>
- * -------------------------------------------------------------------------- */
 
 const PTW: Array<{ type: 'movie' | 'series' | 'anime'; kind: SimklKind; name: string }> = [
   { type: 'movie', kind: 'movies', name: 'Simkl Plan to Watch (Movies)' },

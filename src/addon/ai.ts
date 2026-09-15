@@ -7,7 +7,6 @@ import { tmdbGet,previewFromListItem,type TmdbListItem } from '../meta/tmdb';
 import { applyAgeCap } from './agecap';
 import { mapLimit } from '../util/concurrency';
 
-/** Explicit prefix avoids running a paid request for ordinary title searches. */
 export function aiQuery(ctx:Ctx,query:string):string|null {
   return ctx.cfg.recommendations?.aiSearch&&/^ai:\s*\S/i.test(query)?query.replace(/^ai:\s*/i,'').trim():null;
 }

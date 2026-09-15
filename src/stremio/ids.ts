@@ -1,27 +1,12 @@
-/**
- * Stremio id conventions Rill understands.
- *   tt1234567            IMDb movie/series
- *   tt1234567:1:2        IMDb series episode (season:episode)
- *   tmdb:123 / tmdb:123:1:2
- *   tvdb:123 / tvdb:123:1:2
- *   kitsu:123 / kitsu:123:5      (anime, absolute episode)
- *   mal:123 / mal:123:5
- *   anilist:123 / anilist:123:5
- *   anidb:123
- */
 export type IdSource = 'imdb' | 'tmdb' | 'tvdb' | 'tvmaze' | 'tvdbc' | 'tmdbc' | 'kitsu' | 'mal' | 'anilist' | 'anidb' | 'other';
 
 export interface ParsedId {
   source: IdSource;
-  /** Bare id, e.g. 'tt1234567' or '123'. */
   key: string;
-  /** Numeric part when the id is numeric (imdb digits included). */
   num?: number;
   season?: number;
   episode?: number;
-  /** Full id of the title without episode suffix. */
   title: string;
-  /** Original raw string. */
   raw: string;
 }
 
@@ -35,7 +20,6 @@ export function parseStremioId(raw: string): ParsedId {
   if (pref) {
     const source = pref[1] as IdSource;
     const num = Number(pref[2]);
-    // tmdb/tvdb carry season:episode; anime sources carry a single absolute episode.
     if (source === 'tmdb' || source === 'tvdb' || source==='tvmaze') {
       return { source, key: pref[2], num, season: pref[3] ? Number(pref[3]) : undefined, episode: pref[4] ? Number(pref[4]) : undefined, title: `${source}:${pref[2]}`, raw: s };
     }

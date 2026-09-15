@@ -1,13 +1,3 @@
-/**
- * Anime id mapping: mal <-> anilist <-> kitsu <-> anidb <-> imdb <-> tmdb <-> tvdb.
- *
- * Primary source is Fribb's anime-lists (github). The file is ~6-7 MB so it is fetched
- * once, squashed into a compact row array and that compact blob is memoised in the
- * Cache API for a day. Hot requests parse the small blob only.
- *
- * Gaps are filled, in order, by Kitsu's mappings endpoint, AniList (idMal), Jikan's
- * external links and TMDB's /find (through the meta agent's tmdbFind).
- */
 import type { Ctx } from '../../context';
 import type { IdBundle } from '../types';
 import { memo, fetchJson } from '../../util/cache';
@@ -17,15 +7,13 @@ import { kitsuExternalIds, kitsuLookupByExternal } from './kitsu';
 import { malExternalIds } from './mal';
 import { animeKind, type AnimeKind } from './shared';
 
-/** The mini anime-list file carries the same fields as the full one, minus whitespace. */
 const FRIBB_URL = 'https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-mini.json';
 const INDEX_KEY = 'anime:fribb:index:v1';
 const INDEX_TTL = 24 * 3600;
 
-/** Compact row: [mal, anilist, kitsu, anidb, imdb, tmdb, tvdb, kind, tmdbKind, tvdbSeason]. 0 / -1 mean unknown. */
 export type MappingRow = [number, number, number, number, string | string[] | 0, number, number, KindCode, TmdbKind, number];
 type KindCode = 'T' | 'M' | 'O' | 'N' | 'S' | 'U';
-type TmdbKind = 0 | 1 | 2; // none | tv | movie
+type TmdbKind = 0 | 1 | 2;
 
 const enum Col { Mal = 0, Anilist = 1, Kitsu = 2, Anidb = 3, Imdb = 4, Tmdb = 5, Tvdb = 6, Kind = 7, TmdbKind = 8, TvdbSeason = 9 }
 
@@ -41,12 +29,9 @@ interface FribbEntry {
   season?: { tvdb?: number; tmdb?: number } | null;
 }
 
-/** A row unpacked into a friendlier shape. */
 export interface AnimeMapping extends IdBundle {
   kind: AnimeKind;
-  /** TVDB season this entry lives in (0 = specials); undefined when Fribb does not know. */
   tvdbSeason?: number;
-  /** All imdb ids Fribb lists for the entry (multi-part films). */
   imdbAll: string[];
 }
 
@@ -109,7 +94,6 @@ async function downloadIndex(): Promise<MappingRow[]> {
   return squash(raw);
 }
 
-/** Per-request parse cache so a single request never parses the blob twice. Keyed on the Ctx object. */
 const perRequest = new WeakMap<object, Promise<MappingRow[]>>();
 
 export function loadMappingIndex(ctx?: Ctx): Promise<MappingRow[]> {
@@ -139,7 +123,6 @@ function rowHasImdb(row: MappingRow, imdb: string): boolean {
   return v === imdb || (Array.isArray(v) && v.includes(imdb));
 }
 
-/** Rows that share an external (imdb / tmdb / tvdb) id: the whole franchise as Fribb sees it. */
 export async function mappingsForExternal(ctx: Ctx | undefined, ids: IdBundle): Promise<AnimeMapping[]> {
   const rows = await loadMappingIndex(ctx);
   const hits: MappingRow[] = [];
@@ -155,11 +138,9 @@ export async function mappingsForExternal(ctx: Ctx | undefined, ids: IdBundle): 
   return hits.map(unpackRow);
 }
 
-/** Row for a specific anime-side id, if Fribb knows it. */
 export async function mappingForAnimeId(ctx: Ctx | undefined, ids: IdBundle): Promise<AnimeMapping | null> {
   if (!ids.mal && !ids.anilist && !ids.kitsu && !ids.anidb) return null;
   const rows = await loadMappingIndex(ctx);
-  // Prefer the row that agrees with the most supplied ids; ties go to the first row.
   let best: MappingRow | null = null;
   let bestScore = 0;
   for (const row of rows) {
@@ -175,7 +156,6 @@ export async function mappingForAnimeId(ctx: Ctx | undefined, ids: IdBundle): Pr
 
 const KIND_RANK: Record<AnimeKind, number> = { TV: 0, ONA: 1, MOVIE: 2, OVA: 3, SPECIAL: 4, MUSIC: 5, UNKNOWN: 6 };
 
-/** Order franchise rows the way a viewer expects: season 1 first, TV before OVA, then by MAL id (roughly chronological). */
 export function sortFranchise(rows: AnimeMapping[]): AnimeMapping[] {
   return [...rows].sort((a, b) => {
     const sa = a.tvdbSeason === undefined ? 1e6 : a.tvdbSeason === 0 ? 1e5 : a.tvdbSeason;
@@ -186,7 +166,6 @@ export function sortFranchise(rows: AnimeMapping[]): AnimeMapping[] {
   });
 }
 
-/** Pick the representative entry for an external id: a movie for movies, otherwise the first TV season. */
 export function pickRepresentative(rows: AnimeMapping[], wantMovie: boolean | undefined): AnimeMapping | null {
   if (rows.length === 0) return null;
   if (wantMovie === true) return rows.find((r) => r.kind === 'MOVIE') || rows[0];
@@ -205,24 +184,18 @@ function hasAnimeId(ids: IdBundle): boolean {
   return Boolean(ids.mal || ids.anilist || ids.kitsu || ids.anidb);
 }
 
-/**
- * Fill every id we can learn. Cheap Fribb lookups first; network fallbacks only for what is still missing.
- */
 export async function mapAnimeIds(ctx: Ctx, input: IdBundle): Promise<IdBundle> {
   const ids: IdBundle = { ...input };
 
-  // 1. Fribb by anime id.
   let row = await mappingForAnimeId(ctx, ids);
   if (row) fill(ids, row);
 
-  // 2. Fribb by external id.
   if (!row && (ids.imdb || ids.tmdb || ids.tvdb)) {
     const rows = await mappingsForExternal(ctx, ids);
     row = pickRepresentative(rows, ids.tmdbType ? ids.tmdbType === 'movie' : undefined);
     if (row) fill(ids, row);
   }
 
-  // 3. Kitsu mappings: kitsu -> mal / anilist / anidb / tvdb, or the reverse for a known mal/anilist/anidb.
   if (!hasAnimeId(ids)) return ids;
   if (ids.kitsu && (!ids.mal || !ids.anilist || !ids.anidb)) {
     fill(ids, await kitsuExternalIds(ctx, ids.kitsu));
@@ -238,34 +211,28 @@ export async function mapAnimeIds(ctx: Ctx, input: IdBundle): Promise<IdBundle> 
     }
   }
 
-  // 4. AniList carries idMal in both directions.
   if ((ids.mal && !ids.anilist) || (ids.anilist && !ids.mal)) {
     fill(ids, await anilistIdsFor(ctx, { mal: ids.mal, anilist: ids.anilist }));
   }
 
-  // 5. Jikan external links yield anidb / anilist / kitsu urls.
   if (ids.mal && (!ids.anidb || !ids.anilist || !ids.kitsu)) {
     fill(ids, await malExternalIds(ctx, ids.mal));
   }
 
-  // 6. A late Fribb pass now that more anime ids are known (may reveal imdb/tmdb/tvdb).
   if (!row && hasAnimeId(ids)) {
     row = await mappingForAnimeId(ctx, ids);
     if (row) fill(ids, row);
   }
 
-  // 7. TMDB find bridges imdb <-> tmdb (and tvdb when the meta agent knows it).
   if ((ids.imdb && !ids.tmdb) || (ids.tmdb && !ids.imdb) || (ids.tvdb && !ids.tmdb)) {
     try {
       fill(ids, await tmdbFind(ctx, ids));
     } catch {
-      /* tmdb module may be missing or keyless; ids stay as they are */
     }
   }
   return ids;
 }
 
-/** True when Fribb lists the external id as anime. Used by isAnime without needing a Ctx. */
 export async function isKnownAnime(ids: IdBundle): Promise<boolean> {
   if (hasAnimeId(ids)) return true;
   if (!ids.imdb && !ids.tmdb && !ids.tvdb) return false;

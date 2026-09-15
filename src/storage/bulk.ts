@@ -13,8 +13,6 @@ export async function queueBulk(ctx: Ctx, events: MarkEvent[]): Promise<void> {
   const stamped=events.map(e => ({...e,at:new Date(now).toISOString()}));
   const statements=[ctx.env.DB.prepare('INSERT INTO bulk_actions(id,scope,profile_id,events,created) VALUES(?,?,?,?,?)')
     .bind(id,ctx.scope,ctx.profile?.id ?? null,JSON.stringify(stamped),now)];
-  // Insert every destination up front in a few SQL statements. A later unwatch
-  // therefore follows the entire earlier bulk operation, including unprocessed episodes.
   for(const tracker of trackerApi.sinks(ctx)) {
     const selected=stamped.filter(e => ctx.cfg.trackers.media?.[tracker.name]?.[e.kind === 'movie' ? 'movie' : 'series'] !== false);
     if (!selected.length) continue;
@@ -25,7 +23,6 @@ export async function queueBulk(ctx: Ctx, events: MarkEvent[]): Promise<void> {
   await ctx.env.DB.batch(statements);
 }
 
-/** Resume a bounded chunk, leaving the remaining episodes for the next scheduled run. */
 export async function advanceBulk(ctx: Ctx, limit=20): Promise<void> {
   const db=ctx.env.DB;
   if (!db) return;
@@ -40,7 +37,6 @@ export async function advanceBulk(ctx: Ctx, limit=20): Promise<void> {
     const end=Math.min(events.length,row.position+limit);
     for(let i=row.position;i<end;i++) {
       if(!hasDatabaseBudget(db,4)) break;
-      // Original timestamps ensure later explicit decisions win even before this batch runs.
       await saveHistory(scoped,events[i],'mark');
       await db.prepare('UPDATE bulk_actions SET position=?,lease_until=? WHERE id=? AND lease=?').bind(i+1,Date.now()+180_000,row.id,lease).run();
     }

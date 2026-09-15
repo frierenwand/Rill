@@ -31,7 +31,6 @@ async function tvdbList(ctx: Ctx, ref: string): Promise<TvdbList | null> {
   return found?.id ? tvdbGet(ctx, `/lists/${found.id}/extended`, 3600) : null;
 }
 
-/** One detail request per title; catalog construction never downloads whole episode lists. */
 export async function sourcePreview(ctx: Ctx, type: 'movie' | 'series', id: string, title: string): Promise<MetaPreview> {
   const n = Number(id.split(':')[1]);
   if (id.startsWith('tmdb:') && ctx.tmdbKey) {
@@ -83,7 +82,6 @@ export async function sourceDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> 
   }
   for (const [i,ref] of (ctx.cfg.lists.letterboxd ?? []).entries()) {
     const data = await letterList(ref).catch(()=>null);
-    // Keep configured lists visible during a provider outage.
     for (const type of ['movie','series'] as const) {
       if (type==='series' && !data?.data?.items?.some(r=>r.type==='show')) continue;
       out.push({id:`letterboxd.${i}`,type,name:data?.data?.title || `Letterboxd ${i+1}`,group:'Letterboxd',extra});

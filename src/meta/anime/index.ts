@@ -1,10 +1,3 @@
-/**
- * animeApi: metas, search and id mapping for anime titles.
- *
- * The provider chosen in cfg.providers.anime (mal | anilist | kitsu) supplies the text and
- * artwork; the others fill gaps (description, background, episodes). IMDb/TMDB/TVDB ids that
- * Fribb knows as anime are answered too, laid out season by season.
- */
 import type { Ctx } from '../../context';
 import type { AnimeApi, IdBundle } from '../types';
 import type { Meta, MetaPreview } from '../../stremio/types';
@@ -44,7 +37,6 @@ async function fetchRecords(ctx: Ctx, ids: IdBundle): Promise<Records> {
   return out;
 }
 
-/** Fill undefined / empty fields of `base` from `extra`, never overriding what the primary said. */
 function backfill(base: Meta, extra: Meta | null): void {
   if (!extra) return;
   const keys: Array<keyof Meta> = ['description', 'poster', 'background', 'logo', 'genres', 'imdbRating', 'releaseInfo', 'year', 'runtime', 'released', 'cast', 'director', 'writer', 'country', 'certification', 'trailers', 'status', 'network'];
@@ -62,7 +54,6 @@ function kindOf(rec: Records): AnimeKind {
   return animeKind(rec.mal?.type || rec.anilist?.format || rec.kitsu?.res.attributes.subtype);
 }
 
-/** Build a meta for a single anime entry, addressed by an anime-side Stremio id. */
 async function buildEntryMeta(ctx: Ctx, titleId: string, ids: IdBundle): Promise<Meta | null> {
   const rec = await fetchRecords(ctx, ids);
   const order = providerOrder(ctx);
@@ -100,7 +91,6 @@ async function buildEntryMeta(ctx: Ctx, titleId: string, ids: IdBundle): Promise
   return meta;
 }
 
-/** Meta for an IMDb/TMDB/TVDB id that Fribb recognises as anime: the franchise laid out in seasons. */
 async function buildFranchiseMeta(ctx: Ctx, titleId: string, ids: IdBundle, rows: AnimeMapping[]): Promise<Meta | null> {
   const parsed = parseStremioId(titleId);
   const wantMovie = ids.tmdbType === 'movie' ? true : ids.tmdbType === 'tv' ? false : rows.every((r) => r.kind === 'MOVIE') ? true : undefined;
@@ -162,7 +152,6 @@ async function animeSearch(ctx: Ctx, query: string, opts: { skip?: number; limit
   const providers = wanted.length ? wanted : (['mal'] as Provider[]);
   const runners: Record<Provider, (c: Ctx, q: string, o: typeof opts) => Promise<MetaPreview[]>> = { mal: malSearch, anilist: anilistSearch, kitsu: kitsuSearch };
   const lists = await mapLimit(providers, 3, (p) => runners[p](ctx, query, opts).catch(() => [] as MetaPreview[]));
-  // Interleave so the first page mixes providers, then drop duplicates by name+year.
   const out: MetaPreview[] = [];
   const longest = Math.max(0, ...lists.map((l) => l.length));
   for (let i = 0; i < longest; i++) for (const l of lists) if (l[i]) out.push(l[i]);

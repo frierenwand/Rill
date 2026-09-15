@@ -1,7 +1,3 @@
-/**
- * AniList GraphQL (https://graphql.anilist.co). POSTs are memoised under a hash of the
- * query + variables. AniList's edge rejects requests without a Referer, so one is sent.
- */
 import type { Ctx } from '../../context';
 import type { IdBundle } from '../types';
 import type { Meta, MetaLink, MetaPreview } from '../../stremio/types';
@@ -73,7 +69,6 @@ const DETAIL_FIELDS = `${PREVIEW_FIELDS}
   airingSchedule(notYetAired: true, perPage: 25) { nodes { episode airingAt } }
   nextAiringEpisode { episode airingAt }`;
 
-/** POST a query, memoised by content hash. Returns the `data` object or null. */
 export async function anilistQuery<T>(ctx: Ctx, query: string, variables: Record<string, unknown>, ttl: number): Promise<T | null> {
   const key = `anime:anilist:q:v1:${await stableHash([query, variables])}`;
   const out = await memo<T | null>(key, ttl, async () => {
@@ -97,7 +92,6 @@ export async function anilistDetails(ctx: Ctx, ids: { anilist?: number; mal?: nu
   return data?.Media?.id ? data.Media : null;
 }
 
-/** Cheap id bridge used by the mapper. */
 export async function anilistIdsFor(ctx: Ctx, ids: { anilist?: number; mal?: number }): Promise<Partial<IdBundle>> {
   if (!ids.anilist && !ids.mal) return {};
   const arg = ids.anilist ? 'id: $id' : 'idMal: $idMal';
@@ -124,14 +118,6 @@ export async function anilistSearch(ctx: Ctx, text: string, opts: { skip?: numbe
 
 export type AnilistListKind = 'trending' | 'popular' | 'top' | 'season' | 'upcoming' | 'airing' | 'genre' | 'tag' | 'schedule';
 
-/**
- * Catalog lists.
- *  trending / popular / top:  params.format optional (TV, MOVIE, OVA, ONA, SPECIAL)
- *  season:                    params.season = "fall 2025" (defaults to now)
- *  upcoming / airing:         status filters sorted by popularity
- *  genre:                     params.genre = "Action"   tag: params.tag = "Isekai"
- *  schedule:                  params.day = monday..sunday, everything airing that day
- */
 export async function anilistList(ctx: Ctx, kind: AnilistListKind, params: Record<string, string>, page: number): Promise<MetaPreview[]> {
   const p = Math.max(1, Math.floor(page || 1));
   const vars: Record<string, unknown> = { page: p, perPage: PAGE_SIZE };
@@ -178,8 +164,6 @@ export async function anilistList(ctx: Ctx, kind: AnilistListKind, params: Recor
   const data = await anilistQuery<AlPage<AlMedia>>(ctx, query, vars, TTL_LISTS);
   return (data?.Page?.media || []).map(anilistPreview);
 }
-
-// ---------- shaping ----------
 
 export function anilistTitle(m: AlMedia, lang?: string): string {
   const t = m.title || {};
@@ -258,7 +242,6 @@ export function anilistMeta(m: AlMedia, lang?: string): Meta {
   return meta;
 }
 
-/** Episode rows from streamingEpisodes ("Episode 3 - Title") plus airing schedule dates. */
 export function anilistEpisodeRows(m: AlMedia): Array<{ episode: number; title?: string; thumbnail?: string; released?: string }> {
   const byNumber = new Map<number, { episode: number; title?: string; thumbnail?: string; released?: string }>();
   const streaming = [...(m.streamingEpisodes || [])];

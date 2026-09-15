@@ -1,7 +1,3 @@
-/**
- * TVmaze: keyless. Used as an episode-list fallback and, above all, as the source of
- * precise air timestamps (airstamp) that TMDB/TVDB only give as dates.
- */
 import type { Ctx } from '../context';
 import { episodeId } from '../stremio/ids';
 import type { Meta, MetaPreview, MetaVideo } from '../stremio/types';
@@ -38,7 +34,6 @@ export function stripHtml(s: string | null | undefined): string | undefined {
   return text || undefined;
 }
 
-/** Show by imdb or tvdb id. The lookup endpoint redirects to /shows/:id; fetch follows it. */
 export async function tvmazeLookup(ctx: Ctx, ids: IdBundle): Promise<TvmazeShow | null> {
   if(ids.tvmaze)return tvmazeShow(ctx,ids.tvmaze);
   const query = ids.imdb ? `imdb=${ids.imdb}` : ids.tvdb ? `thetvdb=${ids.tvdb}` : null;
@@ -78,7 +73,6 @@ export function previewFromShow(s: TvmazeShow): MetaPreview {
   };
 }
 
-/** Air timestamps keyed "season:episode" (specials keyed "0:n" in list order). */
 export async function tvmazeAirDates(ctx: Ctx, ids: IdBundle): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const show = await tvmazeLookup(ctx, ids);
@@ -109,7 +103,6 @@ export function episodeToVideo(canonicalId: string, e: TvmazeEpisode, index: num
   };
 }
 
-/** Meta from TVmaze alone: series only. `ids` needs imdb or tvdb. */
 export async function tvmazeMeta(ctx: Ctx, ids: IdBundle, canonicalId: string, opts: { withEpisodes?: boolean } = {}): Promise<Meta | null> {
   const found = await tvmazeLookup(ctx, ids);
   if (!found) return null;

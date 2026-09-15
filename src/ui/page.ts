@@ -1,11 +1,3 @@
-/**
- * The configure page: one HTML document, inline CSS and vanilla JS, no dependencies.
- *
- * Layout is a single centred column. The configuration lives only in D1 on the Worker; the browser keeps nothing and is
- * turned into an install token by POSTing to /api/config/encode on this same origin; nothing the
- * user types ever leaves that origin except through the tracker OAuth helpers, which forward to
- * the provider the user picked.
- */
 import { BRAND_LOGO } from '../brand';
 import { DEFAULT_CONFIG } from '../config/schema';
 
@@ -31,10 +23,6 @@ function options(list: Array<[string, string]>): string {
 
 const PROVIDER_OPTS: Array<[string, string]> = [['tmdb', 'TMDB'], ['tvdb', 'TVDB'], ['cinemeta', 'Cinemeta'], ['tvmaze', 'TVmaze']];
 const ANIME_OPTS: Array<[string, string]> = [['mal', 'MyAnimeList'], ['anilist', 'AniList'], ['kitsu', 'Kitsu'], ['tmdb', 'TMDB'], ['tvdb', 'TVDB']];
-
-// ---------------------------------------------------------------------------------------------
-// CSS
-// ---------------------------------------------------------------------------------------------
 
 const CSS = `
 :root { --fg:#f3f3f3; --bg:#0a0a0a; --mute:#9d9d9d; --line:#2b2b2b; --faint:#1d1d1d; --accent:#eeeeee; color-scheme:dark; }
@@ -325,10 +313,6 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
-// ---------------------------------------------------------------------------------------------
-// Markup
-// ---------------------------------------------------------------------------------------------
-
 function body(): string {
   return `
 <main>
@@ -351,7 +335,6 @@ function body(): string {
   <div class="drawer-mode"><span class="t">Mode</span><div class="seg" role="group" aria-label="Settings mode"><button type="button" data-mode="simple" aria-pressed="false">Simple</button><button type="button" data-mode="advanced" aria-pressed="false">Advanced</button></div></div>
 </aside>
 <div class="workspace"><div id="panels">
-
 
 <section id="s-general">
   <h2><small>1</small>General</h2>
@@ -592,10 +575,6 @@ function body(): string {
 </main>`;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Client script (no template literals inside, so it can live in one)
-// ---------------------------------------------------------------------------------------------
-
 const JS = String.raw`
 (function () {
   'use strict';
@@ -606,7 +585,6 @@ const JS = String.raw`
     resume: 'Continue watching', nextup: 'Next up', latest: 'Recently added', upcoming: 'Upcoming'
   };
 
-  // Consistent section rails: heading on the left, working controls on the right.
   document.querySelectorAll('#panels > section').forEach(function(section) {
     if (section.id === 's-age') return;
     var heading = section.querySelector('h2');
@@ -618,7 +596,6 @@ const JS = String.raw`
     section.appendChild(content);
   });
   document.querySelector('#s-general .section-content').appendChild(document.getElementById('s-age'));
-  // Group existing controls without recreating inputs or losing their values.
   var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
   Object.keys(groups).forEach(function(key) {
     var panel = document.createElement('div');
@@ -676,7 +653,6 @@ const JS = String.raw`
   window.addEventListener('hashchange', function() { selectTab(location.hash.slice(1), false); });
   selectTab(location.hash.slice(1), false);
 
-  // ---- state -------------------------------------------------------------------------------
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function isObj(v) { return v && typeof v === 'object' && !Array.isArray(v); }
   function merge(base, over) {
@@ -688,7 +664,6 @@ const JS = String.raw`
     });
     return out;
   }
-  // Nothing is persisted in the browser: the Worker's database is the only copy of the configuration.
   var memory = {};
   function ssGet(key) { return memory[key] || null; }
   function ssSet(key, val) { memory[key] = val; }
@@ -730,7 +705,6 @@ const JS = String.raw`
   function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return arr; var t = arr[i]; arr[i] = arr[j]; arr[j] = t; return arr; }
   function when(ms) { return ms ? new Date(ms).toLocaleString() : ''; }
 
-  // ---- network (same origin only) ---------------------------------------------------------------
   function api(path, body) {
     return fetch(ORIGIN + path, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), cache: 'no-store'
@@ -742,7 +716,6 @@ const JS = String.raw`
     }).catch(function () { return { error: 'Network error.' }; });
   }
 
-  // ---- change pipeline ----------------------------------------------------------------------------
   var encTimer = null, catTimer = null, lastCatKey = '';
   function catalogKey() {
     return JSON.stringify([cfg.advanced, cfg.keys, cfg.addons, cfg.lists, cfg.customCatalogs, cfg.movieLens, cfg.recommendations, cfg.providers, cfg.language, cfg.ageCap, trackerFingerprint()]);
@@ -767,7 +740,6 @@ const JS = String.raw`
     if (account.signedIn && account.loaded) { clearTimeout(saveTimer); saveTimer = setTimeout(saveRemote, 800); }
   }
 
-  // ---- owner account: settings live in D1 and follow you across devices ----------------------
   var account = { durable: false, exists: false, signedIn: false, loaded: false, username: '' }, saveTimer = null, wantedTab = location.hash.slice(1);
   function adoptServerConfig(config) {
     if (!config) return;
@@ -822,7 +794,6 @@ const JS = String.raw`
     });
   });
 
-  // ---- mobile drawer --------------------------------------------------------------------------------
   var drawer = $('drawer'), backdrop = $('drawer-backdrop'), drawerTimer = null;
   function openDrawer() {
     clearTimeout(drawerTimer); renderDrawerNav(); renderAccount();
@@ -895,7 +866,6 @@ const JS = String.raw`
     $('jf-hint').textContent = 'Sign in as “' + cfg.jellyfin.username + '”' + (cfg.jellyfin.password ? ' with your password.' : ' with no password.');
   }
 
-  // ---- catalogs --------------------------------------------------------------------------------------
   function loadCatalogs() {
     lastCatKey = catalogKey();
     $('cat-status').textContent = 'Loading catalogs…';
@@ -1022,8 +992,6 @@ const JS = String.raw`
   renderCustomCatalogs();
   function swapCatalog(a, b) { var t = cfg.catalogs[a]; cfg.catalogs[a] = cfg.catalogs[b]; cfg.catalogs[b] = t; renderCatalogs(); changed(); }
 
-  // ---- ordered pick lists ---------------------------------------------------------------------------
-  // ---- requirements: lock anything that needs a key or account until it exists ----------------------
   var NEEDS = {
     tmdb: { label: 'TMDB key', tab: 'meta', field: 'k-tmdb', ok: function () { return !!cfg.keys.tmdb; } },
     tvdb: { label: 'TVDB key', tab: 'meta', field: 'k-tvdb', ok: function () { return !!cfg.keys.tvdb; } },
@@ -1099,7 +1067,6 @@ const JS = String.raw`
     });
   }
 
-  // ---- simple bindings ------------------------------------------------------------------------------
   function fillInputs() {
     all('[data-k]').forEach(function (n) {
       var v = get(n.getAttribute('data-k'));
@@ -1150,7 +1117,6 @@ const JS = String.raw`
     });
   }
 
-  // ---- addon probe ----------------------------------------------------------------------------------
   function bindProbes() {
     all('[data-probe]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1178,7 +1144,6 @@ const JS = String.raw`
     });
   }
 
-  // ---- trackers --------------------------------------------------------------------------------------
   var polls = {};
   function stopPoll(name) { if (polls[name]) { clearTimeout(polls[name]); polls[name] = null; } }
   function status(name, text, on) { var n = $(name + '-status'); n.textContent = text || ''; n.className = 'status' + (on ? ' on' : ''); }
@@ -1220,7 +1185,6 @@ const JS = String.raw`
     $('mal-open').disabled = !ui.mal.clientId;
   }
 
-  // Trakt device code
   $('trakt-connect').addEventListener('click', function () {
     var id = ui.trakt.clientId, secret = ui.trakt.clientSecret;
     if (!id || !secret) { status('trakt', 'Enter the client id and secret first.'); return; }
@@ -1259,7 +1223,6 @@ const JS = String.raw`
   });
   $('trakt-disconnect').addEventListener('click', function () { stopPoll('trakt'); delete cfg.trackers.trakt; $('trakt-code').hidden = true; dropTracker('trakt'); });
 
-  // Simkl PIN
   $('simkl-connect').addEventListener('click', function () {
     var id = ui.simkl.clientId;
     if (!id) { status('simkl', 'Enter the client id first.'); return; }
@@ -1289,7 +1252,6 @@ const JS = String.raw`
   });
   $('simkl-disconnect').addEventListener('click', function () { stopPoll('simkl'); delete cfg.trackers.simkl; $('simkl-code').hidden = true; dropTracker('simkl'); });
 
-  // MAL PKCE (plain challenge, the only method MAL accepts)
   function malVerifier() {
     var bytes = new Uint8Array(64); crypto.getRandomValues(bytes);
     var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
@@ -1320,7 +1282,6 @@ const JS = String.raw`
   });
   $('mal-disconnect').addEventListener('click', function () { delete cfg.trackers.mal; dropTracker('mal'); });
 
-  // AniList implicit grant: the user pastes the token AniList shows on its pin page
   $('anilist-save').addEventListener('click', function () {
     var tok = $('anilist-token').value.trim();
     try { if (tok.indexOf('access_token=') >= 0) tok = /access_token=([^&]+)/.exec(tok)[1]; } catch (e) {}
@@ -1339,7 +1300,6 @@ const JS = String.raw`
     renderTrackerStates(); changed();
   }
 
-  // ---- install: copy, load, reset ------------------------------------------------------------------
   function copyText(text, note) {
     function done(ok) { note.textContent = ok ? 'Copied' : 'Select and copy by hand'; setTimeout(function () { note.textContent = ''; }, 1800); }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
@@ -1433,7 +1393,6 @@ const JS = String.raw`
     renderProfiles();changed();
   });
 
-  // ---- boot --------------------------------------------------------------------------------------------
   var activePicker = null;
   var pickerId = 0;
   function closePicker(focus) {
@@ -1453,7 +1412,6 @@ const JS = String.raw`
     if (activePicker && !activePicker.menu.contains(e.target)) closePicker(false);
   }, true);
 
-  // Keep native selects as the data source for existing config and profile bindings.
   function enhanceSelects() {
     if (!('showPopover' in HTMLElement.prototype)) return;
     all('select').forEach(function(select) {
@@ -1543,10 +1501,6 @@ const JS = String.raw`
 })();
 `;
 
-// ---------------------------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------------------------
-
 export function renderPage(): string {
   const defaults = JSON.stringify(DEFAULT_CONFIG).replace(/</g, '\\u003c');
   const script = JS.replace('__DEFAULTS__', defaults);
@@ -1568,7 +1522,6 @@ ${body()}
 </html>`;
 }
 
-/** An abstract monochrome mark; also used as the favicon. */
 export function renderLogo(): string {
   return BRAND_LOGO;
 }

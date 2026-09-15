@@ -1,5 +1,3 @@
-/** D1's free tier allows 50 statements per invocation, including batch statements.
- * Keep five statements available for lease release and durable retry checkpoints. */
 export class DatabaseBudgetExceeded extends Error {
   constructor(){super('Database work will continue on the next scheduled run');}
 }

@@ -1,7 +1,3 @@
-/**
- * Stremio addon routes. Mounted by src/index.ts under /:cfg/*; the integrator
- * has already decoded the config and put a Ctx on the Hono context.
- */
 import { Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { ContentType, Meta, Stream, Subtitle } from '../stremio/types';
@@ -20,7 +16,6 @@ type AddonEnv = { Variables: { ctx: Ctx } };
 
 export const addonRouter = new Hono<AddonEnv>();
 
-/** Seconds of shared-cache freshness per resource; streams change fastest. */
 const MAX_AGE = { manifest: 3600, catalog: 900, meta: 3600, stream: 60, subtitles: 600, empty: 30 } as const;
 
 const CONTENT_TYPES = new Set<ContentType>(['movie', 'series', 'anime', 'channel', 'tv']);
@@ -29,13 +24,11 @@ function stremioType(raw: string): ContentType {
   return CONTENT_TYPES.has(raw as ContentType) ? (raw as ContentType) : 'movie';
 }
 
-/** Strip the trailing ".json" a Stremio path segment may carry. */
 function bare(segment: string): string {
   const s = safeDecode(segment);
   return s.endsWith('.json') ? s.slice(0, -5) : s;
 }
 
-/** Parse a Stremio extra segment: "search=foo&skip=100&genre=Drama". */
 function parseExtra(segment: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!segment) return out;
@@ -100,7 +93,6 @@ async function catalogResponse(ctx: Ctx, type: string, id: string, rawExtra: Rec
   } catch {
     metas = [];
   }
-  // Searches and personal lists are user-specific and change often; keep them short-lived.
   const age = extra.search ? MAX_AGE.empty : metas.length ? MAX_AGE.catalog : MAX_AGE.empty;
   return json({ metas }, age);
 }
@@ -129,8 +121,6 @@ addonRouter.get('/stream/:type/:id', async (c) => {
   const ctx = c.get('ctx');
   const type = stremioType(c.req.param('type'));
   const id = bare(c.req.param('id'));
-  // Rill serves no streams of its own; it aggregates the user's stream addons.
-  // Subtitles ride along only when a subtitle addon is configured, so this stays one round.
   const [streams, subtitles] = await Promise.all([
     externalStreams(ctx, type, id).catch(() => [] as Stream[]),
     ctx.cfg.addons.subtitle.length ? externalSubtitles(ctx, type, id).catch(() => [] as Subtitle[]) : Promise.resolve([] as Subtitle[]),

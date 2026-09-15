@@ -23,7 +23,6 @@ export function parseCandidates(text:string):Candidate[] {
   const clean=text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
   let rows:unknown[]=[];
   try{rows=JSON.parse(clean).picks??[];}catch {
-    // Salvage complete JSON objects without accepting an incomplete final object.
     let depth=0,start=-1,quoted=false,escaped=false;
     const from=clean.indexOf('[',clean.indexOf('"picks"'));
     for(let i=Math.max(0,from);i<clean.length;i++) {
@@ -94,7 +93,6 @@ export async function recommendationItems(ctx:Ctx,kind:Kind,skip:number):Promise
   const fingerprint=(await sha256(JSON.stringify({provider:settings.provider,model:settings.model,sources:settings.sources,staleDays:settings.staleDays,stalledWeight:settings.stalledWeight,primary:ctx.cfg.trackers.primary,simkl:ctx.cfg.trackers.simkl?.accessToken}))).slice(0,24);
   const taste=await stored<Taste>(ctx,`taste:v1:${scope}:${fingerprint}`,7*86400,async()=>{
     const eligible=[...history.values()].filter(r=>r.state!=='plantowatch').sort((a,b)=>b.at.localeCompare(a.at));
-    // Include low scores and abandoned titles as well as recent/high-rated watches.
     const negative=eligible.filter(r=>['hold','dropped'].includes(r.state)||r.rating&&r.rating<=4).slice(0,50);
     const praised=eligible.filter(r=>r.rating&&r.rating>=8).sort((a,b)=>b.rating!-a.rating!).slice(0,50);
     const sample=[...new Set([...eligible.slice(0,75),...negative,...praised,...eligible])].slice(0,200);

@@ -62,7 +62,6 @@ export async function movieLensItems(ctx:Ctx,type:ContentType,id:string,extra:Ca
   const list=/^movielens\.list\.(\d+)\.(\d+)$/.exec(id);
   const rows=await memo(`movielens:items:${await sessionKey(ctx)}:${id}:${JSON.stringify(p)}`,3600,async()=> {
     if(list) {
-      // List responses can ignore pageSize. Preserve their native page boundaries.
       const collected:MovieRow[]=[];
       for(let n=1;n<=50;n++) {
         const data=await movieLensRead<{searchData?:{searchResults?:MovieRow[]}}>(ctx,`users/${list[1]}/lists/${list[2]}?page=${n}`);

@@ -24,7 +24,6 @@ export async function queueRecommendations(ctx:Ctx,rebuild=false):Promise<Job> {
   }
   return (await recommendationJob(ctx,id))!;
 }
-/** Each scheduled invocation finishes one media kind, checkpointed before releasing its lease. */
 export async function advanceRecommendations(ctx:Ctx):Promise<boolean> {
   const db=ctx.env.DB;if(!db)return false;
   const owner=crypto.randomUUID(),now=Date.now();

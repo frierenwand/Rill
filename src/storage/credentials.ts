@@ -7,7 +7,6 @@ type Service = 'trakt' | 'mal';
 type Auth = TraktAuth | MalAuth;
 const expires = (a: Auth) => a.expiresAt ? (a.expiresAt < 1e12 ? a.expiresAt * 1000 : a.expiresAt) : Infinity;
 
-/** Every refresh reads the durable pair, takes a lease and saves both replacements. */
 const reads=new WeakMap<Ctx,Map<Service,Promise<Auth>>>();
 export function credentials<T extends Auth>(ctx:Ctx,service:Service,initial:T):Promise<T> {
   let services=reads.get(ctx);if(!services){services=new Map();reads.set(ctx,services);}

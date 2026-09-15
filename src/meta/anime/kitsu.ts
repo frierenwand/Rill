@@ -1,7 +1,3 @@
-/**
- * Kitsu JSON:API (https://kitsu.io/api/edge). Details, episodes, search, category lists,
- * and the mappings endpoints used as an id fallback.
- */
 import type { Ctx } from '../../context';
 import type { IdBundle } from '../types';
 import type { Meta, MetaLink, MetaPreview } from '../../stremio/types';
@@ -18,8 +14,8 @@ const TTL_DETAILS = 12 * 3600;
 const TTL_LISTS = 3600;
 const TTL_EPISODES = 6 * 3600;
 const TTL_IDS = 7 * 24 * 3600;
-const PAGE_SIZE = 20; // Kitsu's hard maximum
-const MAX_EPISODE_PAGES = 60; // 1200 episodes
+const PAGE_SIZE = 20;
+const MAX_EPISODE_PAGES = 60;
 
 export interface KitsuImage { original?: string; large?: string; medium?: string; small?: string }
 export interface KitsuAnimeAttrs {
@@ -100,12 +96,6 @@ export async function kitsuSearch(ctx: Ctx, text: string, opts: { skip?: number;
 
 export type KitsuListKind = 'trending' | 'popular' | 'top' | 'category' | 'season' | 'airing' | 'upcoming';
 
-/**
- * Catalog lists.
- *  trending: Kitsu's /trending/anime (single page)     popular: sort=-userCount     top: sort=-averageRating
- *  category: params.category = slug ("adventure")     season: params.season = "fall 2025"
- *  airing / upcoming: filter[status]=current|upcoming   params.subtype (TV, movie, OVA...) optional on all
- */
 export async function kitsuList(ctx: Ctx, kind: KitsuListKind, params: Record<string, string>, page: number): Promise<MetaPreview[]> {
   const p = Math.max(1, Math.floor(page || 1));
   if (kind === 'trending') {
@@ -128,7 +118,6 @@ export async function kitsuList(ctx: Ctx, kind: KitsuListKind, params: Record<st
   return (doc?.data || []).filter((r) => ctx.cfg.search.includeAdult || !r.attributes.nsfw).map((r) => kitsuPreview(r, ctx.lang));
 }
 
-/** kitsu -> mal / anilist / anidb / tvdb / imdb via /anime/{id}/mappings. */
 export async function kitsuExternalIds(ctx: Ctx, kitsuId: number): Promise<Partial<IdBundle>> {
   void ctx;
   const doc = await kitsuGet<KitsuDoc<KitsuResource<KitsuMappingAttrs>[]>>(`/anime/${kitsuId}/mappings`, TTL_IDS);
@@ -147,7 +136,6 @@ export async function kitsuExternalIds(ctx: Ctx, kitsuId: number): Promise<Parti
   return out;
 }
 
-/** Reverse lookup: which kitsu anime carries this external id. */
 export async function kitsuLookupByExternal(ctx: Ctx, site: 'myanimelist/anime' | 'anilist/anime' | 'anidb', externalId: number): Promise<number | undefined> {
   void ctx;
   const qs = new URLSearchParams({ 'filter[externalSite]': site, 'filter[externalId]': String(externalId), include: 'item', 'fields[anime]': 'slug' });
@@ -159,9 +147,6 @@ export async function kitsuLookupByExternal(ctx: Ctx, site: 'myanimelist/anime' 
   return undefined;
 }
 
-// ---------- shaping ----------
-
-/** Pick a title in the user's language, then English, then romaji, then canonical. */
 export function kitsuTitle(a: KitsuAnimeAttrs, lang?: string): string {
   const t = a.titles || {};
   const base = (lang || 'en').toLowerCase().slice(0, 2);
