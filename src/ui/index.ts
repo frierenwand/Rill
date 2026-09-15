@@ -18,7 +18,6 @@ import { renderPage, renderLogo } from './page';
 import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
 import { syncMovieLens,movieLensSyncStatus,importRatingsCsv } from '../addon/movielens-sync';
 import { aiCatalog } from '../addon/ai';
-import { importLayout,exportLayout,saveLayout,loadLayout } from '../addon/layouts';
 
 export const uiRouter = new Hono<{ Variables: { ctx?: Ctx }; Bindings: Env }>();
 
@@ -207,20 +206,6 @@ uiRouter.post('/api/catalogs/generate',async c=>{
   const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config);
   try{return c.json({catalog:await aiCatalog(await buildCtx(cfg,c.env,new URL(c.req.url).origin),field(body,'query'),field(body,'provider'),field(body,'type'))});}
   catch(error){return c.json({error:error instanceof Error?error.message:'The catalog could not be generated.'},400);}
-});
-
-uiRouter.post('/api/collections/:action',async c=>{
-  const body=await readBody(c.req.raw),cfg=normalizeConfig(body.config);
-  const ctx=await buildCtx(cfg,c.env,new URL(c.req.url).origin);
-  try {
-    switch(c.req.param('action')) {
-      case 'import':return c.json(importLayout(body.layout));
-      case 'save':return c.json({layout:await saveLayout(ctx,body.layout)});
-      case 'load':return c.json({layout:await loadLayout(ctx)});
-      case 'export':if(!['nuvio','fusion'].includes(field(body,'target')))return c.json({error:'Choose Nuvio or Fusion.'},400);return c.json(exportLayout(ctx,body.layout,body.target as 'nuvio'|'fusion',body.share!==false));
-      default:return c.json({error:'Unknown collection action.'},404);
-    }
-  }catch(error){return c.json({error:error instanceof Error?error.message:'Collection operation failed.'},400);}
 });
 
 uiRouter.post('/api/probe', async (c) => {

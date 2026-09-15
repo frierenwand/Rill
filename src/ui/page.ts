@@ -8,7 +8,6 @@
  */
 import { BRAND_LOGO } from '../brand';
 import { DEFAULT_CONFIG } from '../config/schema';
-import { LAYOUT_HTML,LAYOUT_SCRIPT } from './layouts';
 
 const LANGUAGES = [
   'en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES', 'es-MX', 'it-IT', 'pt-BR', 'pt-PT', 'nl-NL', 'sv-SE', 'da-DK', 'nb-NO',
@@ -243,12 +242,11 @@ function body(): string {
 <header>
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
-    ${[['general','General'],['meta','Metadata'],['catalogs','Catalogs'],['collections','Collections'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}">${label}</button>`).join('')}
+    ${[['general','General'],['meta','Metadata'],['catalogs','Catalogs'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}">${label}</button>`).join('')}
   </nav>
 </header>
 <div class="workspace"><div id="panels">
 
-${LAYOUT_HTML}
 
 <section id="s-general">
   <h2><small>1</small>General</h2>
@@ -506,7 +504,7 @@ const JS = String.raw`
   });
   document.querySelector('#s-general .section-content').appendChild(document.getElementById('s-age'));
   // Group existing controls without recreating inputs or losing their values.
-  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], collections:['collections'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
+  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
   Object.keys(groups).forEach(function(key) {
     var panel = document.createElement('div');
     panel.id = 'panel-' + key;
@@ -668,7 +666,6 @@ const JS = String.raw`
       catDefs = Array.isArray(r.catalogs) ? r.catalogs : [];
       renderProfiles();
       if(!$('custom-catalogs').contains(document.activeElement)) renderCustomCatalogs();
-      if(typeof layoutDraft!=='undefined'&&!$('layout-editor').contains(document.activeElement))renderLayout();
       $('cat-status').textContent = catDefs.length ? '' : 'No catalogs available with the current settings.';
       reconcileCatalogs();
       renderCatalogs();
@@ -785,8 +782,6 @@ const JS = String.raw`
   $('ml-csv').addEventListener('change',async function(){var file=this.files[0];if(!file)return;if(file.size>5000000){$('ml-result').textContent='Choose a file smaller than 5 MB.';return;}this.disabled=true;try{movieLensResult(await api('/api/movielens/import',{config:cfg,csv:await file.text()}));}finally{this.disabled=false;this.value='';}});
   renderCustomCatalogs();
   function swapCatalog(a, b) { var t = cfg.catalogs[a]; cfg.catalogs[a] = cfg.catalogs[b]; cfg.catalogs[b] = t; renderCatalogs(); changed(); }
-
-  ${LAYOUT_SCRIPT}
 
   // ---- ordered pick lists ---------------------------------------------------------------------------
   function renderOrder(box) {

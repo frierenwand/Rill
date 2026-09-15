@@ -79,7 +79,7 @@ See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 ## Layout
 
 ```
-src/addon      Stremio manifest, catalogs, search, discovery, collections, layouts, recommendations
+src/addon      Stremio manifest, catalogs, search, discovery, collections, recommendations
 src/jellyfin   Jellyfin REST facade: auth, library, playback, sessions, people, segments
 src/meta       Metadata providers and anime mapping
 src/trackers   Trakt, Simkl, MDBList, MAL, AniList, PublicMetaDB
