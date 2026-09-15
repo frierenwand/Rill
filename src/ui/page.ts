@@ -113,9 +113,6 @@ button { appearance:none; font:inherit; font-size:13px; font-weight:550; border:
 button:hover { background:#2d2d2d; border-color:#5d5d5d; box-shadow:0 3px 12px #0003; }
 button:active:not(:disabled) { transform:translateY(1px); }
 button:disabled { opacity:.4; cursor:default; }
-#connect-nav { background:var(--accent); color:#141414; border:1px solid #ffffff; padding:10px 16px; border-radius:8px; font-weight:650; box-shadow:0 0 20px #eeeeee0b; }
-#connect-nav:after { content:'↗'; padding-left:12px; font-size:15px; }
-#connect-nav:hover { background:#ffffff; box-shadow:0 0 22px #eeeeee20; }
 .tabs { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-top:22px; padding:0 0 16px; border-bottom:0; }
 .tabs button { flex:none; background:none; border:1px solid transparent; border-radius:6px; padding:7px 11px; color:#969696; }
 .tabs button:hover { color:var(--fg); background:#171717; }
@@ -247,8 +244,6 @@ input:focus,select:focus,textarea:focus { border-color:#aaaaaa; box-shadow:0 0 0
 .select-menu,.out .u,textarea { scrollbar-width:thin; scrollbar-color:#494949 transparent; }
 .tabs button { position:relative; min-height:40px; border-radius:6px; font-weight:500; }
 .tabs button[aria-selected=true] { background:#242424; border-color:transparent; box-shadow:none; }
-#connect-nav { box-shadow:none; }
-#connect-nav:hover { box-shadow:none; }
 .setting-row,.out,.service-card { box-shadow:none; border-color:#222; }
 .setting-row { border-color:#282828; }
 .hint,.note { font-size:13px; line-height:1.75; }
@@ -287,7 +282,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(min-width:701px) { #s-tracking .two { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); } }
 @media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble label { padding:12px 9px; gap:7px; font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
-@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, #connect-nav, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #scrobble { grid-template-columns:repeat(2,minmax(0,1fr)); } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 `;
 
@@ -300,7 +295,7 @@ function body(): string {
 <main>
 <div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="connect-nav">Connect apps</button><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
+  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
   <div class="tabs-row">
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
     ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
@@ -639,7 +634,6 @@ const JS = String.raw`
     });
   });
   window.addEventListener('hashchange', function() { selectTab(location.hash.slice(1), false); });
-  document.getElementById('connect-nav').addEventListener('click', function() { location.hash = 'install'; selectTab('install', true); });
   selectTab(location.hash.slice(1), false);
 
   // ---- state -------------------------------------------------------------------------------
