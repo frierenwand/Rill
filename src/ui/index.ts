@@ -18,6 +18,7 @@ import { renderPage, renderLogo } from './page';
 import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
 import { syncMovieLens,movieLensSyncStatus,importRatingsCsv } from '../addon/movielens-sync';
 import { aiCatalog } from '../addon/ai';
+import { mountAccountRoutes } from './account';
 
 export const uiRouter = new Hono<{ Variables: { ctx?: Ctx }; Bindings: Env }>();
 
@@ -140,6 +141,8 @@ uiRouter.use('/api/*', async (c, next) => {
 // ---------------------------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------------------------
+
+mountAccountRoutes(uiRouter, buildCtx);
 
 uiRouter.post('/api/config/encode', async (c) => {
   const body = await readBody(c.req.raw);

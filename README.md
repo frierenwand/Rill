@@ -42,6 +42,8 @@ The settings page has two modes, switched at the top.
 
 Tip for operators: setting the optional `TMDB_KEY` secret lets Simple-mode users resolve titles that addons identify only by TMDB id.
 
+**Your settings follow you.** Set a Jellyfin username and a password of at least 8 characters, then click **Save to server** in the header. From then on the settings page asks for that username and password, every change saves to your Worker's database automatically, and any device that signs in sees the same configuration. Nobody else can open your settings page. Until you do this, settings stay in the browser you are using.
+
 Then connect your apps:
 
 1. **Stremio:** install the manifest link from the Connect tab.

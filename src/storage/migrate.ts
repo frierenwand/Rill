@@ -3,6 +3,7 @@ import m0002 from '../../migrations/0002_bulk.sql';
 import m0003 from '../../migrations/0003_preferences.sql';
 import m0004 from '../../migrations/0004_people.sql';
 import m0005 from '../../migrations/0005_recommendation_jobs.sql';
+import m0006 from '../../migrations/0006_owner.sql';
 
 /** Migrations in order. The bookkeeping table matches Wrangler's, so `wrangler d1 migrations apply`
  * and this runtime path can be mixed freely. */
@@ -12,6 +13,7 @@ const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0003_preferences.sql', m0003],
   ['0004_people.sql', m0004],
   ['0005_recommendation_jobs.sql', m0005],
+  ['0006_owner.sql', m0006],
 ];
 
 const done = new WeakMap<D1Database, Promise<void>>();

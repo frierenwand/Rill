@@ -72,7 +72,7 @@ let installKey: string | undefined;
 
 /** RILL_SECRET when set; otherwise a random key generated once per installation and kept in D1.
  * Legacy storage-less deployments derive a key from the configured credentials. */
-async function signingSecret(ctx: Ctx): Promise<string> {
+export async function signingSecret(ctx: Ctx): Promise<string> {
   const fromEnv = ctx.env?.RILL_SECRET?.trim();
   if (fromEnv) return fromEnv;
   if (ctx.env.DB) {

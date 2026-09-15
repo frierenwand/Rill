@@ -49,6 +49,14 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .brand img { width:28px; height:28px; }
 .wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
 .header-actions { display:flex; align-items:center; gap:20px; }
+#account-bar { display:inline-flex; align-items:center; gap:10px; font-size:12px; color:var(--mute); }
+#account-bar .acct { color:var(--fg); }
+#login-gate { position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
+#login-gate[hidden] { display:none; }
+#login-form { width:100%; max-width:360px; }
+#login-form .brand { margin-bottom:18px; }
+#login-form input { width:100%; }
+#login-submit { width:100%; background:var(--accent); color:#141414; border:1px solid #ffffff; padding:11px 16px; border-radius:8px; font-weight:650; }
 .mode { display:inline-flex; border:1px solid #eeeeee29; border-radius:6px; overflow:hidden; }
 .mode label { cursor:pointer; }
 .mode input { position:absolute; opacity:0; pointer-events:none; }
@@ -247,8 +255,9 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 function body(): string {
   return `
 <main>
+<div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
+  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div><span id="account-bar"></span><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
     ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
   </nav>
@@ -667,7 +676,69 @@ const JS = String.raw`
     clearTimeout(encTimer);
     encTimer = setTimeout(encode, 400);
     if (catalogKey() !== lastCatKey) { clearTimeout(catTimer); catTimer = setTimeout(loadCatalogs, 900); }
+    if (account.signedIn) { clearTimeout(saveTimer); saveTimer = setTimeout(saveRemote, 800); }
   }
+
+  // ---- owner account: settings live in D1 and follow you across devices ----------------------
+  var account = { durable: false, exists: false, signedIn: false, username: '' }, saveTimer = null;
+  function adoptServerConfig(config) {
+    if (!config) return;
+    var key = cfg.installationKey;
+    cfg = merge(DEFAULTS, config);
+    if (!cfg.installationKey) cfg.installationKey = key;
+    lastCatKey = '';
+    lsSet(LS_CFG, cfg);
+    renderAll(); encode(); loadCatalogs();
+    $('draft-status').textContent = 'Synced with your server';
+  }
+  function renderAccount() {
+    var bar = $('account-bar'); clear(bar);
+    if (account.durable) {
+      if (account.signedIn) {
+        bar.appendChild(el('span', { class: 'acct', text: account.username }));
+        bar.appendChild(el('button', { type: 'button', class: 'q', text: 'Log out', onclick: logout }));
+      } else if (!account.exists) {
+        bar.appendChild(el('button', { type: 'button', class: 'q', text: 'Save to server', title: 'Store these settings on your Worker so they follow you to every device', onclick: protect }));
+      }
+    }
+    $('login-gate').hidden = !(account.exists && !account.signedIn);
+    if (!$('login-gate').hidden) $('login-user').focus();
+  }
+  function saveRemote() {
+    return api('/api/account/save', { config: cfg }).then(function (r) {
+      if (r.error) { $('draft-status').textContent = r.error; return r; }
+      $('draft-status').textContent = 'Saved to your server';
+      if (r.config && r.config.installationKey) cfg.installationKey = r.config.installationKey;
+      if (r.token) { token = r.token; renderInstall(); }
+      return r;
+    });
+  }
+  function protect() {
+    if (!cfg.jellyfin.username || (cfg.jellyfin.password || '').length < 8) {
+      alert('Set a Jellyfin username and a password of at least 8 characters first. They also protect this page.');
+      location.hash = 'jellyfin'; selectTab('jellyfin', true); return;
+    }
+    saveRemote().then(function (r) {
+      if (r.error) { alert(r.error); return; }
+      account.exists = true; account.signedIn = true; account.username = r.username || cfg.jellyfin.username;
+      renderAccount();
+    });
+  }
+  function logout() {
+    api('/api/account/logout').then(function () { account.signedIn = false; account.username = ''; renderAccount(); });
+  }
+  $('login-form').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('login-submit').click(); } });
+  $('login-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var status = $('login-status'); status.textContent = 'Signing in…';
+    api('/api/account/login', { username: $('login-user').value, password: $('login-pass').value }).then(function (r) {
+      if (r.error) { status.textContent = r.error; return; }
+      status.textContent = ''; $('login-pass').value = '';
+      account.signedIn = true; account.username = r.username || '';
+      adoptServerConfig(r.config);
+      renderAccount();
+    });
+  });
   function uiChanged() { lsSet(LS_UI, ui); renderAuthLinks(); }
 
   function encode() {
@@ -1272,6 +1343,11 @@ const JS = String.raw`
   renderAll();
   encode();
   loadCatalogs();
+  api('/api/account/status').then(function (r) {
+    account = { durable: !!r.durable, exists: !!r.exists, signedIn: !!r.signedIn, username: r.username || '' };
+    renderAccount();
+    if (account.signedIn) api('/api/account/load').then(function (l) { if (!l.error) adoptServerConfig(l.config); });
+  });
 })();
 `;
 
