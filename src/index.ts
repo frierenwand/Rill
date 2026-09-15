@@ -6,12 +6,14 @@ import { sha256 } from './util/bytes';
 import { addonRouter } from './addon/index';
 import { jellyfinRouter, handleJellyfinSocket } from './jellyfin/index';
 import { uiRouter } from './ui/index';
+import { ensureSchema } from './storage/migrate';
 
 type App = { Bindings: Env; Variables: { ctx: Ctx } };
 
 const app = new Hono<App>();
 
 app.use('*', async (c, next) => {
+  if (c.env.DB) await ensureSchema(c.env.DB);
   await next();
   c.res.headers.set('Access-Control-Allow-Origin', c.req.header('origin') || '*');
   c.res.headers.set('Access-Control-Allow-Headers', '*');

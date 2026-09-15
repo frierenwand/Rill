@@ -66,9 +66,23 @@ export function tokenOf(req: Request): string {
   return url.searchParams.get('api_key') || url.searchParams.get('ApiKey') || url.searchParams.get('apikey') || '';
 }
 
+const SIGNING_KEY = "install:signing-key";
+const FOREVER = 100 * 365 * 86400;
+let installKey: string | undefined;
+
+/** RILL_SECRET when set; otherwise a random key generated once per installation and kept in D1.
+ * Legacy storage-less deployments derive a key from the configured credentials. */
 async function signingSecret(ctx: Ctx): Promise<string> {
   const fromEnv = ctx.env?.RILL_SECRET?.trim();
   if (fromEnv) return fromEnv;
+  if (ctx.env.DB) {
+    if (installKey) return installKey;
+    const fresh = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)));
+    // INSERT OR IGNORE keeps the first writer's key if two isolates race on first start.
+    await ctx.env.DB.prepare("INSERT OR IGNORE INTO state(key,value,expires) VALUES(?,?,?)").bind(SIGNING_KEY, JSON.stringify(fresh), Date.now() + FOREVER * 1000).run();
+    installKey = (await stateGet<string>(ctx, SIGNING_KEY)) ?? fresh;
+    return installKey;
+  }
   return sha256(`rill:${ctx.cfg.jellyfin.username}:${ctx.cfg.jellyfin.password}`);
 }
 

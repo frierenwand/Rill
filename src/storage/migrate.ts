@@ -1,0 +1,39 @@
+import m0001 from '../../migrations/0001_durable.sql';
+import m0002 from '../../migrations/0002_bulk.sql';
+import m0003 from '../../migrations/0003_preferences.sql';
+import m0004 from '../../migrations/0004_people.sql';
+import m0005 from '../../migrations/0005_recommendation_jobs.sql';
+
+/** Migrations in order. The bookkeeping table matches Wrangler's, so `wrangler d1 migrations apply`
+ * and this runtime path can be mixed freely. */
+const MIGRATIONS: Array<[name: string, sql: string]> = [
+  ['0001_durable.sql', m0001],
+  ['0002_bulk.sql', m0002],
+  ['0003_preferences.sql', m0003],
+  ['0004_people.sql', m0004],
+  ['0005_recommendation_jobs.sql', m0005],
+];
+
+const done = new WeakMap<D1Database, Promise<void>>();
+
+/** Apply pending migrations once per isolate. Costs one SELECT per isolate start after the first deploy. */
+export function ensureSchema(db: D1Database): Promise<void> {
+  let p = done.get(db);
+  if (!p) {
+    p = apply(db).catch((err) => { done.delete(db); throw err; });
+    done.set(db, p);
+  }
+  return p;
+}
+
+async function apply(db: D1Database): Promise<void> {
+  await db.prepare('CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)').run();
+  const rows = await db.prepare('SELECT name FROM d1_migrations').all<{ name: string }>();
+  const applied = new Set(rows.results.map((r) => r.name));
+  for (const [name, sql] of MIGRATIONS) {
+    if (applied.has(name)) continue;
+    const statements = sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s));
+    statements.push(db.prepare('INSERT OR IGNORE INTO d1_migrations(name) VALUES(?)').bind(name));
+    await db.batch(statements);
+  }
+}

@@ -8,10 +8,12 @@ import { sha256 } from '../util/bytes';
 import { budgetDatabase, cleanupDatabase, DatabaseBudgetExceeded, hasDatabaseBudget } from './budget';
 import { syncMovieLens } from '../addon/movielens-sync';
 import { advanceRecommendations } from './recommendation-jobs';
+import { ensureSchema } from './migrate';
 
 /** One bounded batch per minute; history synchronization is due every 30 minutes. */
 export async function scheduled(_event: ScheduledController, env: Env): Promise<void> {
   if (!env.DB) throw new Error('Scheduled synchronization requires DB');
+  await ensureSchema(env.DB);
   const db=budgetDatabase(env.DB,env.D1_QUERY_BUDGET==='1000'?1000:50);
   env={...env,DB:db};
   const now = Date.now();

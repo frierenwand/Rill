@@ -4,11 +4,13 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
-  // Replace database_id with the ID of the D1 database you create in the Cloudflare dashboard.
-  "d1_databases": [{ "binding": "DB", "database_name": "rill", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "migrations" }],
+  // Migrations are bundled and applied by the Worker itself on first start.
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"] }],
+  // No database_id: Cloudflare provisions the D1 database automatically on deploy.
+  "d1_databases": [{ "binding": "DB", "database_name": "rill", "migrations_dir": "migrations" }],
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true },
-  // RILL_SECRET (recommended) and TMDB_KEY (optional) are set as secrets in the
-  // Cloudflare dashboard under Settings -> Variables and Secrets. Do not put them here.
+  // Optional secrets (Settings -> Variables and Secrets): RILL_SECRET to override the
+  // auto-generated signing key, TMDB_KEY for a server-wide TMDB key. Do not put them here.
   "vars": {}
 }

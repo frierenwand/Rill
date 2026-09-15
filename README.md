@@ -9,53 +9,28 @@ Rill is a single Cloudflare Worker that does two things:
 
 There is no server to run. Cloudflare D1 (serverless SQLite) stores history, profiles, sessions, refreshed OAuth credentials and the tracker delivery queue. The Worker Cache API is only a disposable accelerator.
 
-## Requirements
+## Deploy
 
-- A free Cloudflare account.
-- A GitHub account (for dashboard deploys) or Node.js 20+ (for CLI deploys).
-- Optional API keys: TMDB (recommended), Gemini or OpenRouter (only if you want AI recommendations).
+Click **Deploy to Cloudflare** above and sign in. Cloudflare copies this repository into your GitHub account, creates the D1 database, deploys the Worker and gives you a `*.workers.dev` URL. Rill creates its own tables and signing key on first start. Pushes to your copy redeploy automatically.
 
-## One-click deploy
+That is all. The free plan is enough for a personal installation.
 
-Click **Deploy to Cloudflare** above. Cloudflare copies this repository into your GitHub account, creates the `rill` D1 database, applies the migrations and deploys the Worker. Pushes to your copy redeploy automatically.
+Optional secrets, under the Worker's **Settings → Variables and Secrets**:
 
-After the first deploy open the Worker's **Settings → Variables and Secrets** and add:
+| Name | Purpose |
+| --- | --- |
+| `TMDB_KEY` | Server-wide TMDB API key, used when a configuration has none. You can also enter it in the settings page instead. |
+| `RILL_SECRET` | Override the auto-generated Jellyfin token signing key, for example to keep sessions valid across database resets. |
 
-| Name | Required | Purpose |
-| --- | --- | --- |
-| `RILL_SECRET` | Recommended | Long random string used to sign Jellyfin login tokens. |
-| `TMDB_KEY` | Optional | Server-wide TMDB API key used when a configuration has none. |
-
-Then click **Deploy** once more so the secrets take effect, and open `https://rill.<your-subdomain>.workers.dev` to configure.
-
-## Manual deploy from the Cloudflare dashboard
-
-1. **Fork** this repository to your GitHub account.
-2. **Create the database.** In the Cloudflare dashboard open **Storage & Databases → D1 SQL Database → Create**, name it `rill`, and copy its **Database ID**.
-3. **Set the database ID.** Edit `wrangler.jsonc`, replace the placeholder `database_id` with the ID you copied, and commit the change.
-4. **Create the Worker.** Open **Workers & Pages → Create → Import a repository**, choose your fork, leave the build command empty and set the deploy command to `npm run deploy`. This applies the D1 migrations and deploys the Worker.
-5. **Add secrets** as in the table above, then deploy once more.
-
-## Deploy with the Wrangler CLI
+### Deploy with the Wrangler CLI instead
 
 ```bash
 npm install
 npx wrangler login
-npx wrangler d1 create rill
-```
-
-Paste the returned `database_id` into `wrangler.jsonc`, then:
-
-```bash
-npx wrangler secret put RILL_SECRET
 npm run deploy
 ```
 
-Optional:
-
-```bash
-npx wrangler secret put TMDB_KEY
-```
+Wrangler provisions the D1 database on the first deploy. Node.js 20 or newer is required.
 
 ## Configure
 
@@ -69,11 +44,10 @@ Configuration links carry credentials. Share the Worker URL, never the install l
 
 ```bash
 npm install
-npx wrangler d1 migrations apply DB --local
 npm run dev
 ```
 
-Put local secrets in a `.dev.vars` file (see `.dev.vars.example`). It is git-ignored.
+Tables are created automatically in the local database. Optional local secrets go in a `.dev.vars` file (see `.dev.vars.example`).
 
 ## Free plan notes
 
