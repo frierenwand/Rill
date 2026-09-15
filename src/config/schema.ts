@@ -45,7 +45,7 @@ export interface RillConfig {
   artwork: { posters: Array<'tmdb' | 'fanart' | 'tvdb' | 'rpdb' | 'metahub'>; backgrounds: Array<'tmdb' | 'fanart' | 'tvdb' | 'metahub'>; logos: Array<'fanart' | 'tmdb' | 'tvdb' | 'metahub'> };
   keys: { tmdb?: string; tvdb?: string; fanart?: string; rpdb?: string; publicmetadb?: string; mdblist?: string };
   /** External Stremio addons the user pastes in (manifest URLs). */
-  addons: { meta: string[]; stream: string[]; subtitle: string[] };
+  addons: { catalog: string[]; meta: string[]; stream: string[]; subtitle: string[] };
   /** Rill's own catalog switches, persisted in manifest order. */
   catalogs: CatalogToggle[];
   /** MDBList / Trakt list ids the user wants as catalogs. */
@@ -72,7 +72,7 @@ export const DEFAULT_CONFIG: RillConfig = {
   providers: { movie: 'tmdb', series: 'tmdb', anime: 'mal' },
   artwork: { posters: ['tmdb', 'fanart', 'metahub'], backgrounds: ['tmdb', 'fanart', 'metahub'], logos: ['fanart', 'tmdb', 'metahub'] },
   keys: {},
-  addons: { meta: [], stream: [], subtitle: [] },
+  addons: { catalog: [], meta: [], stream: [], subtitle: [] },
   catalogs: [],
   lists: { mdblist: [], trakt: [], publicmetadb: [], publicmetadbPicks: [] },
   trackers: { primary: 'off', scrobbleTo: [], media: Object.fromEntries(['trakt','simkl','mdblist','publicmetadb','mal','anilist'].map(name => [name, { movie: true, series: true }])) },
@@ -94,7 +94,7 @@ export function normalizeConfig(input: unknown): RillConfig {
   cfg.providers = { ...cfg.providers, ...(src.providers ?? {}) };
   cfg.artwork = { ...cfg.artwork, ...(src.artwork ?? {}) };
   cfg.keys = { ...(src.keys ?? {}) };
-  cfg.addons = { meta: arr(src.addons?.meta), stream: arr(src.addons?.stream), subtitle: arr(src.addons?.subtitle) };
+  cfg.addons = { catalog: arr(src.addons?.catalog), meta: arr(src.addons?.meta), stream: arr(src.addons?.stream), subtitle: arr(src.addons?.subtitle) };
   cfg.catalogs = Array.isArray(src.catalogs) ? src.catalogs.filter((c) => c && typeof c.id === 'string') : [];
   cfg.lists = { mdblist: arr(src.lists?.mdblist), trakt: arr(src.lists?.trakt), publicmetadb: arr(src.lists?.publicmetadb), publicmetadbPicks: arr(src.lists?.publicmetadbPicks) };
   cfg.lists.tvdb = arr(src.lists?.tvdb);
@@ -128,3 +128,8 @@ export function normalizeConfig(input: unknown): RillConfig {
 
 function str(v: unknown, d: string): string { return typeof v === 'string' && v.length ? v : d; }
 function arr(v: unknown): string[] { return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : []; }
+
+/** Catalog and metadata addons share the Stremio manifest format; both may answer catalogs and details. */
+export function metaAddons(cfg: RillConfig): string[] {
+  return [...new Set([...cfg.addons.catalog, ...cfg.addons.meta])];
+}

@@ -7,6 +7,7 @@
  * the watch snapshot for that request only.
  */
 import { catalogPage, enabledCatalogDefinitions, type CatalogDefinition } from '../addon/catalogs';
+import { metaAddons } from '../config/schema';
 import { aiQuery,aiSearch } from '../addon/ai';
 import { trackerTargets } from '../trackers/targets';
 import { externalMeta } from '../stremio/client';
@@ -468,7 +469,7 @@ export class Library {
         } catch {
           meta = null;
         }
-        if (!meta && this.ctx.cfg.addons.meta.length) {
+        if (!meta && metaAddons(this.ctx.cfg).length) {
           meta = await externalMeta(this.ctx, type, stremioId).catch(() => null);
           if (!meta && type === 'anime') meta = await externalMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'series', stremioId).catch(() => null);
         }

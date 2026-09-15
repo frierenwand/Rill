@@ -3,6 +3,7 @@
  * Manifests and catalog/meta responses are cached; streams are cached briefly.
  */
 import type { Ctx } from '../context';
+import { metaAddons } from '../config/schema';
 import { fetchJson, memo } from '../util/cache';
 import { mapLimit, uniq } from '../util/concurrency';
 import type { ContentType, Manifest, Meta, MetaPreview, Stream, Subtitle } from './types';
@@ -56,7 +57,7 @@ export async function addonMeta(base: string, type: ContentType, id: string): Pr
 
 /** Meta from the first configured meta addon that answers. */
 export async function externalMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
-  for (const url of ctx.cfg.addons.meta) {
+  for (const url of metaAddons(ctx.cfg)) {
     const base = addonBase(url);
     if (!base) continue;
     const manifest = await getManifest(url);
@@ -106,7 +107,7 @@ export async function externalSubtitles(ctx: Ctx, type: ContentType, id: string,
 /** Catalogs exposed by the user's external meta addons, for aggregation into Rill's manifest. */
 export async function externalCatalogs(ctx: Ctx): Promise<Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }>> {
   const out: Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }> = [];
-  for (const url of ctx.cfg.addons.meta) {
+  for (const url of metaAddons(ctx.cfg)) {
     const base = addonBase(url);
     const manifest = base ? await getManifest(url) : null;
     if (!base || !manifest) continue;

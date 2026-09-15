@@ -36,7 +36,7 @@ Wrangler provisions the D1 database on the first deploy. Node.js 20 or newer is 
 
 The settings page has two modes, switched at the top.
 
-**Simple** (default) needs no API keys and no accounts. Paste your Stremio metadata, stream and subtitle addons, set a Jellyfin password and you are done. Catalogs and details come from your metadata addons, with Cinemeta and Metahub filling in details and artwork automatically.
+**Simple** (default) needs no API keys and no accounts. Paste your Stremio catalog, metadata, stream and subtitle addons, switch the catalogs you want on or off and order them, set a Jellyfin password and you are done. Cinemeta and Metahub fill in details and artwork automatically.
 
 **Advanced** adds Scrobbling, Metadata and Catalogs: Trakt, Simkl, MDBList, MyAnimeList and AniList tracking; TMDB, TVDB, Fanart and RPDB keys with provider and artwork priority; anime lists; list sources such as MDBList, Letterboxd, TVDB and MovieLens; custom and merged catalogs; AI recommendations. API-backed catalogs only appear in your apps while Advanced is on.
 

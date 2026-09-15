@@ -12,6 +12,7 @@
  *   rill.search       the search catalog for each type
  */
 import type { Ctx } from '../context';
+import { metaAddons } from '../config/schema';
 import type { ContentType, ManifestCatalog, MetaPreview } from '../stremio/types';
 import { addonBase, addonCatalog, externalCatalogs } from '../stremio/client';
 import { fetchJson, memo } from '../util/cache';
@@ -227,9 +228,10 @@ async function traktListDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
 }
 
 async function addonDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
-  if (!ctx.cfg.addons.meta.length) return [];
+  const urls = metaAddons(ctx.cfg);
+  if (!urls.length) return [];
   const indexByBase = new Map<string, number>();
-  ctx.cfg.addons.meta.forEach((url, i) => { const b = addonBase(url); if (b && !indexByBase.has(b)) indexByBase.set(b, i); });
+  urls.forEach((url, i) => { const b = addonBase(url); if (b && !indexByBase.has(b)) indexByBase.set(b, i); });
   let found: Awaited<ReturnType<typeof externalCatalogs>> = [];
   try { found = await externalCatalogs(ctx); } catch { found = []; }
   const out: CatalogDefinition[] = [];
@@ -489,7 +491,7 @@ async function addonItems(ctx: Ctx, type: ContentType, rest: string, extra: Cata
   if (dot <= 0) return [];
   const n = Number(rest.slice(0, dot));
   const catalogId = rest.slice(dot + 1);
-  const url = ctx.cfg.addons.meta[n];
+  const url = metaAddons(ctx.cfg)[n];
   const base = url ? addonBase(url) : null;
   if (!base) return [];
   return addonCatalog(base, type, catalogId, { search: extra.search, genre: cleanGenre(extra), skip: extra.skip });

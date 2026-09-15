@@ -293,10 +293,12 @@ function body(): string {
 <section id="s-catalogs">
   <h2><small>3</small>Catalogs</h2>
   <p class="note">Choose catalogs and arrange their order in your apps.</p>
+  <div id="catalog-picker">
   <div class="catalog-toolbar"><input type="text" id="catalog-filter" aria-label="Filter catalogs" placeholder="Search catalogs" autocomplete="off" spellcheck="false"><span id="catalog-count" role="status"></span></div>
   <div id="catalogs"></div>
   <p id="catalog-empty" hidden>No matching catalogs.</p>
   <p class="status" id="cat-status"></p>
+  </div>
   <h3>Your lists</h3>
   <div class="two">
     <div class="f"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Needs the MDBList key above.</p></div>
@@ -346,6 +348,13 @@ function body(): string {
   <h2><small>4</small>Addons</h2>
   <p class="note">Paste Stremio addon manifest links, one per line. Catalogs and details come from your metadata addons, with Cinemeta filling in automatically. Streams and subtitles come from the addons below.</p>
   <p class="mode-note" id="addons-mode-note">Simple mode. Switch to <strong>Advanced</strong> at the top for scrobbling, API keys, anime lists, custom catalogs and AI recommendations.</p>
+  <div class="f">
+    <label class="t" for="a-catalog">Catalogs</label>
+    <textarea id="a-catalog" data-lines="addons.catalog" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
+    <div class="b"><button type="button" data-probe="addons.catalog">Check</button></div>
+    <div class="probe" data-probe-out="addons.catalog"></div>
+  </div>
+  <div id="addon-catalog-picker" hidden><h3>Your catalogs</h3><p class="note">Turn catalogs on or off and drag them into the order your apps should show.</p></div>
   <div class="f">
     <label class="t" for="a-meta">Metadata</label>
     <textarea id="a-meta" data-lines="addons.meta" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
@@ -539,6 +548,10 @@ const JS = String.raw`
     document.getElementById('mode-' + (advanced ? 'advanced' : 'simple')).checked = true;
     all('[data-advanced]').forEach(function(tab) { tab.hidden = !advanced; });
     var note = document.getElementById('addons-mode-note'); if (note) note.hidden = advanced;
+    var picker = document.getElementById('catalog-picker'), simpleHost = document.getElementById('addon-catalog-picker'), advancedHost = document.getElementById('s-catalogs').querySelector('.section-content') || document.getElementById('s-catalogs');
+    if (advanced) { if (picker.parentNode !== advancedHost) advancedHost.insertBefore(picker, advancedHost.querySelector('h3')); }
+    else if (picker.parentNode !== simpleHost) simpleHost.appendChild(picker);
+    simpleHost.hidden = advanced;
     var current = all('[data-tab]').filter(function(t) { return t.getAttribute('aria-selected') === 'true'; })[0];
     if (current && current.hidden) { location.hash = 'general'; selectTab('general', false); }
   }
