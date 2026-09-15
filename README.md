@@ -36,9 +36,11 @@ Wrangler provisions the D1 database on the first deploy. Node.js 20 or newer is 
 
 The settings page has two modes, switched at the top.
 
-**Simple** (default) needs no API keys. Paste your Stremio addons, connect the trackers you want to scrobble to, set a Jellyfin password and you are done. Catalogs come from your metadata addons and connected trackers; title details and search use Cinemeta.
+**Simple** (default) needs no API keys and no accounts. Paste your Stremio metadata, stream and subtitle addons, set a Jellyfin password and you are done. Catalogs and details come from your metadata addons, with Cinemeta and Metahub filling in details and artwork automatically.
 
-**Advanced** adds the Metadata and Catalogs tabs: TMDB, TVDB, Fanart and RPDB keys, provider and artwork priority, anime lists from MyAnimeList, AniList and Kitsu, list sources such as MDBList, Letterboxd, TVDB and MovieLens, custom and merged catalogs, and AI recommendations. API-backed catalogs only appear in your apps while Advanced is on.
+**Advanced** adds Scrobbling, Metadata and Catalogs: Trakt, Simkl, MDBList, MyAnimeList and AniList tracking; TMDB, TVDB, Fanart and RPDB keys with provider and artwork priority; anime lists; list sources such as MDBList, Letterboxd, TVDB and MovieLens; custom and merged catalogs; AI recommendations. API-backed catalogs only appear in your apps while Advanced is on.
+
+Tip for operators: setting the optional `TMDB_KEY` secret lets Simple-mode users resolve titles that addons identify only by TMDB id.
 
 Then connect your apps:
 

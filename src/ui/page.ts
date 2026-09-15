@@ -250,7 +250,7 @@ function body(): string {
 <header>
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div><span id="draft-status" role="status">Saved on this device</span><button type="button" id="connect-nav">Connect apps</button></div></div>
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
-    ${[['general','General'],['addons','Addons'],['tracking','Scrobbling'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'?' data-advanced':''}>${label}</button>`).join('')}
+    ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
   </nav>
 </header>
 <div class="workspace"><div id="panels">
@@ -278,7 +278,7 @@ function body(): string {
   <label class="t">Backgrounds</label>
   <div class="list" data-order="artwork.backgrounds" data-options="tmdb,fanart,tvdb,metahub"></div>
   <label class="t">Logos</label>
-  <div class="list" data-order="artwork.logos" data-options="fanart,tmdb,tvdb"></div>
+  <div class="list" data-order="artwork.logos" data-options="fanart,tmdb,tvdb,metahub"></div>
   <h3>API keys</h3>
   <div class="two">
     <div class="f"><label class="t" for="k-tmdb">TMDB</label><input type="password" id="k-tmdb" data-k="keys.tmdb" class="key" autocomplete="off"></div>
@@ -344,8 +344,8 @@ function body(): string {
 
 <section id="s-addons">
   <h2><small>4</small>Addons</h2>
-  <p class="note">Paste Stremio addon manifest links below, one per line. Catalogs from your metadata addons appear in your apps automatically; details fall back to Cinemeta.</p>
-  <p class="mode-note" id="addons-mode-note">Simple mode. Switch to <strong>Advanced</strong> at the top for TMDB, TVDB, anime lists, custom catalogs and AI recommendations.</p>
+  <p class="note">Paste Stremio addon manifest links, one per line. Catalogs and details come from your metadata addons, with Cinemeta filling in automatically. Streams and subtitles come from the addons below.</p>
+  <p class="mode-note" id="addons-mode-note">Simple mode. Switch to <strong>Advanced</strong> at the top for scrobbling, API keys, anime lists, custom catalogs and AI recommendations.</p>
   <div class="f">
     <label class="t" for="a-meta">Metadata</label>
     <textarea id="a-meta" data-lines="addons.meta" placeholder="https://…/manifest.json" spellcheck="false"></textarea>

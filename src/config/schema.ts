@@ -42,7 +42,7 @@ export interface RillConfig {
   /** Provider order for each media kind. First wins, others fill gaps. */
   providers: { movie: MetaProvider; series: MetaProvider; anime: AnimeProvider };
   /** Artwork sources, in priority order. */
-  artwork: { posters: Array<'tmdb' | 'fanart' | 'tvdb' | 'rpdb' | 'metahub'>; backgrounds: Array<'tmdb' | 'fanart' | 'tvdb' | 'metahub'>; logos: Array<'fanart' | 'tmdb' | 'tvdb'> };
+  artwork: { posters: Array<'tmdb' | 'fanart' | 'tvdb' | 'rpdb' | 'metahub'>; backgrounds: Array<'tmdb' | 'fanart' | 'tvdb' | 'metahub'>; logos: Array<'fanart' | 'tmdb' | 'tvdb' | 'metahub'> };
   keys: { tmdb?: string; tvdb?: string; fanart?: string; rpdb?: string; publicmetadb?: string; mdblist?: string };
   /** External Stremio addons the user pastes in (manifest URLs). */
   addons: { meta: string[]; stream: string[]; subtitle: string[] };
@@ -70,7 +70,7 @@ export const DEFAULT_CONFIG: RillConfig = {
   name: 'Rill',
   language: 'en-US',
   providers: { movie: 'tmdb', series: 'tmdb', anime: 'mal' },
-  artwork: { posters: ['tmdb', 'fanart', 'metahub'], backgrounds: ['tmdb', 'fanart', 'metahub'], logos: ['fanart', 'tmdb'] },
+  artwork: { posters: ['tmdb', 'fanart', 'metahub'], backgrounds: ['tmdb', 'fanart', 'metahub'], logos: ['fanart', 'tmdb', 'metahub'] },
   keys: {},
   addons: { meta: [], stream: [], subtitle: [] },
   catalogs: [],
