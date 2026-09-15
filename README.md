@@ -1,5 +1,7 @@
 # Rill
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mrtxiv/Rill)
+
 Rill is a single Cloudflare Worker that does two things:
 
 - **Stremio addon** serving metadata, search and catalogs from TMDB, TVDB, TVmaze, Trakt, Simkl, MDBList, Letterboxd, MovieLens, FlixPatrol, PublicMetaDB, MAL, AniList and Kitsu, plus your own custom and merged catalogs.
@@ -13,25 +15,26 @@ There is no server to run. Cloudflare D1 (serverless SQLite) stores history, pro
 - A GitHub account (for dashboard deploys) or Node.js 20+ (for CLI deploys).
 - Optional API keys: TMDB (recommended), Gemini or OpenRouter (only if you want AI recommendations).
 
-## Deploy from the Cloudflare dashboard (no CLI)
+## One-click deploy
 
-1. **Fork or push** this repository to your GitHub account.
+Click **Deploy to Cloudflare** above. Cloudflare copies this repository into your GitHub account, creates the `rill` D1 database, applies the migrations and deploys the Worker. Pushes to your copy redeploy automatically.
+
+After the first deploy open the Worker's **Settings → Variables and Secrets** and add:
+
+| Name | Required | Purpose |
+| --- | --- | --- |
+| `RILL_SECRET` | Recommended | Long random string used to sign Jellyfin login tokens. |
+| `TMDB_KEY` | Optional | Server-wide TMDB API key used when a configuration has none. |
+
+Then click **Deploy** once more so the secrets take effect, and open `https://rill.<your-subdomain>.workers.dev` to configure.
+
+## Manual deploy from the Cloudflare dashboard
+
+1. **Fork** this repository to your GitHub account.
 2. **Create the database.** In the Cloudflare dashboard open **Storage & Databases → D1 SQL Database → Create**, name it `rill`, and copy its **Database ID**.
 3. **Set the database ID.** Edit `wrangler.jsonc`, replace the placeholder `database_id` with the ID you copied, and commit the change.
-4. **Create the Worker.** Open **Workers & Pages → Create → Import a repository**, choose the repo, leave the build command empty and set the deploy command to:
-   ```
-   npm run deploy
-   ```
-   This applies the D1 migrations and deploys the Worker. Pushes to the default branch redeploy automatically.
-5. **Add secrets.** After the first deploy open the Worker's **Settings → Variables and Secrets** and add:
-
-   | Name | Required | Purpose |
-   | --- | --- | --- |
-   | `RILL_SECRET` | Recommended | Long random string used to sign Jellyfin login tokens. |
-   | `TMDB_KEY` | Optional | Server-wide TMDB API key used when a configuration has none. |
-
-   Then click **Deploy** once more so the secrets take effect.
-6. Open `https://rill.<your-subdomain>.workers.dev` to configure.
+4. **Create the Worker.** Open **Workers & Pages → Create → Import a repository**, choose your fork, leave the build command empty and set the deploy command to `npm run deploy`. This applies the D1 migrations and deploys the Worker.
+5. **Add secrets** as in the table above, then deploy once more.
 
 ## Deploy with the Wrangler CLI
 
