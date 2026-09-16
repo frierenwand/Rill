@@ -15,6 +15,20 @@ Click **Deploy to Cloudflare** above and sign in. Cloudflare copies this reposit
 
 That is all. The free plan is enough for a personal installation.
 
+### Updates
+
+Your copy checks this repository once a day, merges new commits and Cloudflare redeploys the Worker. Database changes apply themselves on the next request. Nothing to configure. To update right away, open **Actions → Sync with upstream → Run workflow** in your copy.
+
+GitHub pauses scheduled workflows in repositories with no activity for 60 days. If the Actions tab shows a banner saying so, click **Enable** and the updates resume.
+
+If your copy predates this file, add it once and updates run from then on:
+
+```bash
+git clone https://github.com/YOUR_USER/Rill && cd Rill
+curl -fsSLo .github/workflows/sync.yml --create-dirs https://raw.githubusercontent.com/mrtxiv/Rill/main/.github/workflows/sync.yml
+git add .github && git commit -m "Sync with upstream" && git push
+```
+
 Optional secrets, under the Worker's **Settings → Variables and Secrets**:
 
 | Name | Purpose |
