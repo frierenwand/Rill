@@ -172,8 +172,7 @@ async function reply(c: C, body: unknown, status = 200): Promise<Response> {
   };
   visit(body);
   if (records.length && c.get('jf').claims) {
-    const favorites = await lib(c).favorites();
-    for (const record of records) record.IsFavorite = favorites.has(plainGuid(record.ItemId ?? record.Key));
+    await lib(c).decorateUserData(records);
   }
   return c.json(dashIds(body) as never, status as never);
 }
@@ -370,6 +369,8 @@ function applyFilters(items: Dto[], filters: string[]): Dto[] {
   if (filters.includes('IsResumable')) out = out.filter((i) => Number(ud(i).PlaybackPositionTicks ?? 0) > 0);
   if (filters.includes('IsFavorite')) out = out.filter((i) => ud(i).IsFavorite === true);
   if (filters.includes('IsNotFavorite')) out = out.filter((i) => ud(i).IsFavorite !== true);
+  if (filters.includes('Likes')) out = out.filter((i) => ud(i).Likes === true);
+  if (filters.includes('Dislikes')) out = out.filter((i) => ud(i).Likes === false);
   return out;
 }
 
@@ -439,12 +440,12 @@ async function listItems(c: C): Promise<Response> {
       const item = await singleItem(L, plainGuid(raw), false);
       if (item) items.push(item);
     }
-    const filtered = sortWithin(applyFilters(await L.decorateFavorites(filterByType(items, wanted)), filters), sortBy, descending);
+    const filtered = sortWithin(applyFilters(await L.decoratePreferences(filterByType(items, wanted)), filters), sortBy, descending);
     return reply(c, listOf(filtered.slice(start, start + limit), filtered.length, start));
   }
 
-  // Saved favorites are the source of this list, independent of current catalog pages.
-  if (filters.includes('IsFavorite') && !parentRaw) {
+  // Saved preferences are the source of this list, independent of current catalog pages.
+  if (filters.some(filter => ['IsFavorite', 'Likes', 'Dislikes'].includes(filter)) && !parentRaw) {
     const excluded = new Set(qList(jf, 'ExcludeItemTypes'));
     const included = new Set(qList(jf, 'IncludeItemTypes'));
     const typeOf = (id: string): string => {
@@ -455,7 +456,9 @@ async function listItems(c: C): Promise<Response> {
       if (g.kind === 'misc') return g.sub === 'genre' ? 'Genre' : 'Person';
       return g.kind[0].toUpperCase() + g.kind.slice(1);
     };
-    const ids = [...await L.favorites()].filter(id => (!included.size || included.has(typeOf(id))) && !excluded.has(typeOf(id)));
+    const saved = filters.includes('IsFavorite') ? [...await L.favorites()] : [...await L.ratings()]
+      .filter(([, likes]) => (!filters.includes('Likes') || likes) && (!filters.includes('Dislikes') || !likes)).map(([id]) => id);
+    const ids = saved.filter(id => (!included.size || included.has(typeOf(id))) && !excluded.has(typeOf(id)));
     const resolved = await mapLimit(ids, 4, id => singleItem(L, id, false));
     const media = new Set(qList(jf, 'MediaTypes'));
     const genre = (await genreExtra(L, jf))?.toLowerCase();
@@ -464,7 +467,7 @@ async function listItems(c: C): Promise<Response> {
       (!media.size || media.has(String(item.MediaType ?? 'Unknown'))) &&
       (!term || String(item.Name ?? '').toLowerCase().includes(term.toLowerCase())) &&
       (!genre || (item.Genres as string[] | undefined)?.some(name => name.toLowerCase() === genre)));
-    const filtered = sortWithin(applyFilters(await L.decorateFavorites(items), filters), sortBy, descending);
+    const filtered = sortWithin(applyFilters(await L.decoratePreferences(items), filters), sortBy, descending);
     return reply(c, listOf(filtered.slice(start, start + limit), filtered.length, start));
   }
 
@@ -476,12 +479,12 @@ async function listItems(c: C): Promise<Response> {
 
   if (!parentRaw) {
     if (!qBool(jf, 'Recursive', false)) {
-      const views = applyFilters(await L.decorateFavorites(await L.views()), filters);
+      const views = applyFilters(await L.decoratePreferences(await L.views()), filters);
       return reply(c, listOf(views.slice(start, start + limit), views.length, start));
     }
     if (wanted?.has('BoxSet') && !wanted.has('Movie') && !wanted.has('Series')) {
       const sets = (await visibleCollections(L)).flatMap((col) => col.folders.map((f) => boxSetDto(L, col, f)));
-      const items = sortWithin(applyFilters(await L.decorateFavorites(sets), filters), sortBy, descending);
+      const items = sortWithin(applyFilters(await L.decoratePreferences(sets), filters), sortBy, descending);
       return reply(c, listOf(items.slice(start, start + limit), items.length, start));
     }
     const genre = await genreExtra(L, jf);
@@ -517,7 +520,7 @@ async function listItems(c: C): Promise<Response> {
   if (parent.kind === 'misc' && parent.sub === 'collection') {
     const col = await collectionOf(L, parent);
     if (!col) return reply(c, listOf([], 0, start));
-    const items = sortWithin(applyFilters(await L.decorateFavorites(col.folders.map((f) => boxSetDto(L, col, f))), filters), sortBy, descending);
+    const items = sortWithin(applyFilters(await L.decoratePreferences(col.folders.map((f) => boxSetDto(L, col, f))), filters), sortBy, descending);
     return reply(c, listOf(items.slice(start, start + limit), items.length, start));
   }
   if (parent.kind === 'misc' && parent.sub === 'boxset') {
@@ -947,16 +950,38 @@ for (const path of ['/users/:uid/favoriteitems/:id', '/userfavoriteitems/:id']) 
   inner.delete(path, favoriteHandler(false));
 }
 
+const ratingHandler = (clear: boolean) => async (c: C) => {
+  const L = lib(c);
+  if (!L.ctx.env.DB) return reply(c, { Message: 'Durable storage is required to save ratings' }, 503);
+  const raw = clear ? undefined : c.get('jf').q('Likes')?.trim().toLowerCase();
+  if (raw !== undefined && raw !== 'true' && raw !== 'false') return reply(c, { Message: 'Likes must be true or false' }, 400);
+  const likes = raw === undefined ? null : raw === 'true';
+  const { id, g } = itemGuid(c);
+  if (!g) return notFound(c);
+  const item = await singleItem(L, id, false);
+  if (!item && likes !== null) return notFound(c);
+  await L.setRating(id, likes);
+  return reply(c, item?.UserData ?? userData(id));
+};
+for (const path of ['/users/:uid/items/:id/rating', '/useritems/:id/rating']) {
+  inner.post(path, ratingHandler(false));
+  inner.delete(path, ratingHandler(true));
+}
+
 const userDataHandler = async (c: C) => {
   const L = lib(c), body = c.get('jf').body;
   const { id, g } = itemGuid(c);
   if (!g) return notFound(c);
   const favorite = body.IsFavorite ?? body.isFavorite;
-  if (typeof favorite === 'boolean') {
-    if (!L.ctx.env.DB) return reply(c, { Message: 'Durable storage is required to save favorites' }, 503);
+  const likes = 'Likes' in body ? body.Likes : body.likes;
+  const hasRating = likes !== undefined;
+  if (hasRating && likes !== null && typeof likes !== 'boolean') return reply(c, { Message: 'Likes must be true, false or null' }, 400);
+  if (typeof favorite === 'boolean' || hasRating) {
+    if (!L.ctx.env.DB) return reply(c, { Message: 'Durable storage is required to save preferences' }, 503);
     const item = await singleItem(L, id, false);
     if (!item) return notFound(c);
-    await L.setFavorite(id, favorite);
+    if (typeof favorite === 'boolean') await L.setFavorite(id, favorite);
+    if (hasRating) await L.setRating(id, likes as boolean | null);
     if (body.Played === undefined && body.played === undefined && body.PlaybackPositionTicks === undefined && body.playbackPositionTicks === undefined) {
       return reply(c, item.UserData ?? userData(id));
     }

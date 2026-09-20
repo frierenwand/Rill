@@ -21,6 +21,7 @@ import {
   fnv1a32,
   isAnimeSource,
   parentSeriesOf,
+  plainGuid,
   seasonIdOf,
   stremioIdOfGuid,
   titleRoot,
@@ -33,6 +34,7 @@ import type { JfRequest } from './request';
 import { rememberPeople } from './people';
 import { enrichWithTmdb } from './enrichment';
 import { favoriteIds, saveFavorite } from '../storage/favorites';
+import { itemRatings, saveRating } from '../storage/ratings';
 
 export const SHELF_LIMIT = 20;
 export const SHELF_CONCURRENCY = 4;
@@ -263,6 +265,7 @@ export class Library {
   private catalogsPromise?: Promise<CatalogRef[]>;
   private watchPromise?: Promise<WatchIndex>;
   private favoritesPromise?: Promise<Set<string>>;
+  private ratingsPromise?: Promise<Map<string, boolean>>;
   private readonly metas = new Map<string, Promise<Meta | null>>();
   private readonly keyBook = new Map<string, string[]>();
 
@@ -282,13 +285,33 @@ export class Library {
     this.favoritesPromise = undefined;
   }
 
-  async decorateFavorites(items: Dto[]): Promise<Dto[]> {
+  ratings(): Promise<Map<string, boolean>> {
+    this.ratingsPromise ??= itemRatings(this.ctx);
+    return this.ratingsPromise;
+  }
+
+  async setRating(id: string, likes: boolean | null): Promise<void> {
+    await saveRating(this.ctx, id, likes);
+    this.ratingsPromise = undefined;
+  }
+
+  async decorateUserData(records: Dto[]): Promise<void> {
+    if (!records.length) return;
+    const [favorites, ratings] = await Promise.all([this.favorites(), this.ratings()]);
+    for (const record of records) {
+      const id = plainGuid(record.ItemId ?? record.Key);
+      record.IsFavorite = favorites.has(id);
+      record.Likes = ratings.get(id) ?? null;
+    }
+  }
+
+  async decoratePreferences(items: Dto[]): Promise<Dto[]> {
     if (!items.length) return items;
-    const favorites = await this.favorites();
     for (const item of items) {
       const id = String(item.Id ?? '');
-      item.UserData = { ...userData(id), ...(item.UserData as Dto | undefined), IsFavorite: favorites.has(id) };
+      item.UserData = { ...userData(id), ...(item.UserData as Dto | undefined) };
     }
+    await this.decorateUserData(items.map(item => item.UserData as Dto));
     return items;
   }
 
@@ -630,7 +653,7 @@ export class Library {
       item.UserData = userData(id, { played: unplayed === 0, playCount: unplayed === 0 ? 1 : 0, unplayed, lastPlayed: lastAt || undefined });
       (item.UserData as Dto).PlayedPercentage = (watched / pool.length) * 100;
     }
-    return this.decorateFavorites(items);
+    return this.decoratePreferences(items);
   }
 
   guidOfBundle(ids: IdBundle, kind: 'movie' | 'series'): TitleGuid | null {
