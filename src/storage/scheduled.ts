@@ -10,10 +10,13 @@ import { syncMovieLens } from '../addon/movielens-sync';
 import { advanceRecommendations } from './recommendation-jobs';
 import { ensureSchema } from './migrate';
 import { reconcileDropped } from './dropped';
+import { dailyUpdate } from './updates';
 
-export async function scheduled(_event: ScheduledController, env: Env): Promise<void> {
+export async function scheduled(event: ScheduledController, env: Env): Promise<void> {
   if (!env.DB) throw new Error('Scheduled synchronization requires DB');
   await ensureSchema(env.DB);
+  try { await dailyUpdate(event, env); }
+  catch { console.warn('Daily Rill update failed. Check the Deploy Hook or retry a build in Cloudflare.'); }
   const db=budgetDatabase(env.DB,env.D1_QUERY_BUDGET==='1000'?1000:50);
   env={...env,DB:db};
   const now = Date.now();

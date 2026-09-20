@@ -16,7 +16,7 @@ Have a [GitHub account](https://github.com/signup) and a [Cloudflare account](ht
 - Choose where to create your GitHub repository and give it a name. Cloudflare makes the copy for you.
 - Keep the suggested Worker and database names, or choose unused names. Leave the detected settings as they are, then select **Deploy**.
 
-Wait for the deployment to succeed. Cloudflare handles the build and database setup. [About this deployment flow](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
+Wait for the deployment to succeed. Cloudflare handles the build and database setup. Each build fetches the latest Rill code. [About this deployment flow](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
 
 <details>
 <summary>If you’re asked for build settings</summary>
@@ -26,7 +26,7 @@ Use these values for this project:
 | Setting | Value |
 | --- | --- |
 | Root directory | Repository root (`/`) |
-| Build command | Leave empty |
+| Build command | `npm run build` |
 | Deploy command | `npm run deploy` |
 | D1 database binding | `DB` |
 | Required variables or secrets | None for deployment and first login |
@@ -60,23 +60,30 @@ Your username can contain 1–32 letters, numbers, dots, dashes or underscores.
 
 ### Updates
 
-**Installing with Deploy to Cloudflare does not guarantee automatic updates from the original Rill repository.** An inspected installation created by this flow contained neither the GitHub Actions workflow nor the original Git history. Such a copy has no **Sync with upstream** action or **Sync fork** button. Copying the existing workflow into it is insufficient: that workflow requires shared Git history to merge updates.
+**Update now:** in Cloudflare, open your Worker → **Deployments**, open the latest build, and select **Retry build**. Every build fetches the latest code from the original Rill repository and deploys it using your existing Worker and database settings. Wait for the build to succeed.
 
-These installations currently need a separate update setup that supports their imported repository and preserves their Worker name, D1 database binding, and database ID in `wrangler.jsonc`. An update procedure for that installation path has not yet been verified.
+**Update daily:** enable this once, entirely in Cloudflare:
 
-For a fork or clone that **retains the original Git history and includes `.github/workflows/sync.yml`**, the workflow checks for updates daily at **04:17 UTC** while GitHub Actions is enabled. To run that workflow manually:
+1. Open your Worker → **Settings → Builds → Deploy Hooks**. Create a hook named **Daily updates** for your production branch (normally `main`) and copy its URL.
+2. Under **Settings → Variables and Secrets**, add a **Secret** named `RILL_UPDATE_HOOK` and paste that URL as its value. Save and deploy the change.
+3. Leave your Worker's existing scheduled trigger enabled. Rill will request an update build every day at **04:17 UTC**.
 
-1. Open **your own copy** of the repository on GitHub and select **Actions**. Enable workflows if GitHub prompts you to do so.
-2. Select **Sync with upstream** in the sidebar.
-3. Select **Run workflow**, choose the branch connected to your Cloudflare deployment (normally `main`), then confirm **Run workflow**.
-4. Wait for the workflow to finish successfully. If it pulls new changes, Cloudflare should automatically build and deploy them.
-5. In Cloudflare, open **Workers & Pages → your Worker → Deployments** and confirm that the new deployment succeeded.
+Cloudflare's install button does not create this hook automatically; the one-time setup is needed for daily updates. Keep its URL private. Remove the `RILL_UPDATE_HOOK` secret to turn daily updates off. [About Cloudflare Deploy Hooks](https://developers.cloudflare.com/workers/ci-cd/builds/deploy-hooks/).
 
-Redeploying from Cloudflare alone uses the code already in your GitHub copy; it does not fetch updates from the original Rill repository.
+Updates change your running installation; your GitHub copy is not synced. Builds use the original Rill application code, so edits to application code in your copy are not included. Your installation's `wrangler.jsonc`, existing database, and Cloudflare secrets are retained. Failed builds leave the currently deployed version running.
 
-If the sync fails, open its run in GitHub Actions and check the error. Changes you made to the same files as the original repository may need to be resolved manually. If the workflow reports **Already up to date**, there are no new changes to deploy. The workflow intentionally skips the original `mrtxiv/Rill` repository; it only updates downstream copies.
+<details>
+<summary>Installed before this update feature?</summary>
 
-[About running GitHub workflows manually](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+In Cloudflare → your Worker → **Settings → Build**, set **Build command** to:
+
+```sh
+git fetch https://github.com/mrtxiv/Rill.git main && git restore --source=FETCH_HEAD -- scripts package.json package-lock.json && npm run build
+```
+
+Set **Deploy command** to `npm run deploy`, save, then **Retry build**. Keep these settings for future builds. After it succeeds, you can enable daily updates using the steps above. No GitHub Actions setup is needed.
+
+</details>
 
 <details>
 <summary>Need help deploying?</summary>

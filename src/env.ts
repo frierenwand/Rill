@@ -3,4 +3,5 @@ export interface Env {
   RILL_SECRET?: string;
   TMDB_KEY?: string;
   D1_QUERY_BUDGET?: string;
+  RILL_UPDATE_HOOK?: string;
 }
