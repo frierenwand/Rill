@@ -861,7 +861,7 @@ async function videoHandler(c: C): Promise<Response> {
   const jf = c.get('jf');
   const { id, g } = itemGuid(c);
   if (!g || (g.kind !== 'movie' && g.kind !== 'episode')) return notFound(c);
-  const { sources } = await resolveSources(lib(c), g, id);
+  const { sources } = await resolveSources(lib(c), g, id, { includeSubtitles: false });
   const chosen = pickSource(sources, jf.q('MediaSourceId'), id);
   if (!chosen || typeof chosen.Path !== 'string') return reply(c, { Message: chosen === null && sources.length ? 'Media source not found' : 'No playable stream' }, 404);
   return new Response(null, { status: 302, headers: { location: chosen.Path, 'cache-control': 'no-store' } });

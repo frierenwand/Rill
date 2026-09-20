@@ -91,14 +91,21 @@ export async function externalStreams(ctx: Ctx, type: ContentType, ids: string |
   const hit = await cacheGet<SourcedStream[]>(key);
   if (hit?.length) return hit;
   const results = await mapLimit(ctx.cfg.addons.stream, 6, async (url) => {
-    const base = addonBase(url);
-    if (!base) return [] as SourcedStream[];
-    const manifest = await getManifest(url);
-    const asked = pickSupported(manifest, 'stream', [type, fallbackType], candidates);
-    if (!asked) return [];
-    const data = await fetchJson<{ streams?: Stream[] }>(`${base}/stream/${asked.type}/${encodeURIComponent(asked.id)}.json`, { ttl: 0, timeoutMs: 20000 });
-    const name = manifest?.name || base;
-    return (data?.streams ?? []).map((s) => ({ ...s, addon: name }));
+    try {
+      const base = addonBase(url);
+      if (!base) return [] as SourcedStream[];
+      const manifest = await getManifest(url);
+      const asked = pickSupported(manifest, 'stream', [type, fallbackType], candidates);
+      if (!asked) return [];
+      const data = await fetchJson<{ streams?: Stream[] }>(`${base}/stream/${asked.type}/${encodeURIComponent(asked.id)}.json`, { ttl: 0, timeoutMs: 20000 });
+      const name = manifest?.name || base;
+      return (Array.isArray(data?.streams) ? data.streams : [])
+        .filter((s) => s && typeof s === 'object' && !Array.isArray(s))
+        .map((s) => ({ ...s, addon: name }));
+    } catch {
+      // One invalid add-on response must not discard other add-ons' results.
+      return [] as SourcedStream[];
+    }
   });
   const streams = uniq(results.flat(), (s) => s.url || s.infoHash || s.externalUrl || s.ytId || JSON.stringify(s));
   if (streams.length) await cachePut(key, streams, 120);

@@ -17,13 +17,15 @@ export interface ResolvedSources {
   streamId: string;
 }
 
-export async function resolveSources(lib: Library, g: TitleGuid, itemId: string): Promise<ResolvedSources> {
+export async function resolveSources(lib: Library, g: TitleGuid, itemId: string, options: { includeSubtitles?: boolean } = {}): Promise<ResolvedSources> {
   const empty = { sources: [], streamType: '', streamId: '' };
-  if (g.kind !== 'movie' && g.kind !== 'episode') return empty;
+  if ((g.kind !== 'movie' && g.kind !== 'episode') || g.source === 'tmdbc' || g.source === 'tvdbc') return empty;
   const ctx = lib.ctx;
   const show = g.kind === 'episode' ? await lib.show(g) : null;
   const meta = g.kind === 'movie' ? await lib.meta(g) : show?.meta ?? null;
-  if (g.kind === 'movie' && !meta) return empty;
+  // A stream add-on can resolve the item ID without metadata, but age restrictions
+  // must still fail closed when metadata is unavailable or was filtered out.
+  if (!meta && ctx.cfg.ageCap && ctx.cfg.ageCap.toLowerCase() !== 'none') return empty;
   if(meta?.collection)return empty;
   const streamType = lib.streamTypeOf(g);
   const streamIds = lib.streamIdsOf(show, g, meta);
@@ -39,7 +41,7 @@ export async function resolveSources(lib: Library, g: TitleGuid, itemId: string)
   if (!usable.length) return { sources: [], streamType, streamId };
 
   const runtime = runtimeTicks(meta?.runtime);
-  const subs = ctx.cfg.addons.subtitle.length ? subtitleEntries(await externalSubtitles(ctx, streamType, streamIds, {}, g.kind === 'movie' ? 'movie' : 'series').catch(() => [])) : [];
+  const subs = options.includeSubtitles !== false && ctx.cfg.addons.subtitle.length ? subtitleEntries(await externalSubtitles(ctx, streamType, streamIds, {}, g.kind === 'movie' ? 'movie' : 'series').catch(() => [])) : [];
 
   const seen = new Set<string>();
   const sources: Dto[] = [];
