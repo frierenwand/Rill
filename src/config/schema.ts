@@ -20,7 +20,7 @@ export type CollectionSource =
 export interface CollectionFolder { id: string; name: string; shape?: TileShape; cover?: string; backdrop?: string; logo?: string; sources: CollectionSource[] }
 export type GeneratorKind = 'genres' | 'decades' | 'people' | 'studios' | 'networks' | 'franchises';
 export interface CollectionGenerator { id: string; kind: GeneratorKind; shape?: TileShape; limit?: number; catalog?: { id: string; type: 'movie' | 'series' | 'anime' }; type?: 'movie' | 'series'; ids?: number[] }
-export interface JellyfinCollection { id: string; name: string; description?: string; backdrop?: string; cover?: string; shape?: TileShape; profiles?: string[]; generators?: CollectionGenerator[]; folders: CollectionFolder[] }
+export interface JellyfinCollection { id: string; name: string; description?: string; backdrop?: string; cover?: string; coverShape?: TileShape; shape?: TileShape; profiles?: string[]; generators?: CollectionGenerator[]; folders: CollectionFolder[] }
 export interface CustomCatalog {
   id: string;
   name: string;
@@ -185,7 +185,7 @@ export function collectionOf(c: Partial<JellyfinCollection> | null | undefined, 
   }
   return {
     id: c.id, name: c.name.trim().slice(0, 150), description: typeof c.description === 'string' ? c.description.trim().slice(0, 1000) || undefined : undefined,
-    backdrop: url(c.backdrop), cover: url(c.cover), shape: shapeOf(c.shape),
+    backdrop: url(c.backdrop), cover: url(c.cover), coverShape: shapeOf(c.coverShape), shape: shapeOf(c.shape),
     profiles: profiles ? arr(c.profiles).filter((id) => profiles.has(id)) : arr(c.profiles), generators, folders,
   };
 }

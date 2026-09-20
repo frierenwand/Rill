@@ -145,7 +145,7 @@ export function collectionViewDto(L: Library, c: VisibleCollection): Dto {
   const backdrop = imageTag(c.collection.backdrop);
   if (cover || backdrop) {
     view.ImageTags = { Primary: cover ?? backdrop! };
-    view.PrimaryImageAspectRatio = cover ? 0.6666666666666666 : 1.7777777777777777;
+    view.PrimaryImageAspectRatio = SHAPE_RATIO[c.collection.coverShape ?? (cover ? 'poster' : 'landscape')];
   }
   if (backdrop) view.BackdropImageTags = [backdrop];
   return view;

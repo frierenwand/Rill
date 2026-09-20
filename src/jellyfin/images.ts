@@ -27,7 +27,13 @@ export async function imageUrlFor(lib: Library, itemId: string, kindRaw: string)
   const g = decodeGuid(itemId);
   if (!g || g.kind === 'view') return null;
   if(g.kind==='misc') {
-    if (g.sub === 'collection') return (await collectionOf(lib, g))?.collection.backdrop ?? null;
+    if (g.sub === 'collection') {
+      const collection = (await collectionOf(lib, g))?.collection;
+      if (!collection) return null;
+      if (kind === 'primary') return collection.cover ?? collection.backdrop ?? null;
+      if (kind === 'logo') return null;
+      return collection.backdrop ?? collection.cover ?? null;
+    }
     if (g.sub === 'boxset') {
       const found = await boxSetOf(lib, g);
       return found ? boxSetCoverUrl(lib, found.folder, kind) : null;
