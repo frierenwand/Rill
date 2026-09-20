@@ -311,6 +311,90 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
 @media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
+/* Shared layout rhythm and dedicated library management surfaces. */
+main { max-width:1120px; padding-bottom:64px; }
+.tabs-row { gap:24px; padding-bottom:20px; border-bottom:1px solid var(--faint); }
+.tabs { gap:4px; }
+.tabs button { padding:9px 12px; }
+.workspace { padding-top:36px; }
+h2 { font-size:28px; margin-bottom:10px; }
+h3 { font-size:16px; font-weight:600; }
+.section-content > .note:first-child { margin-bottom:28px; }
+.section-intro { max-width:680px; }
+.two { column-gap:24px; row-gap:8px; }
+#s-general .section-content { gap:20px; }
+.f { margin-bottom:22px; }
+.b { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.b > .hint { margin:0; }
+.b > .select-control { flex:1 1 180px; max-width:300px; }
+.b > strong { margin-right:auto; }
+.group { padding:22px; margin-bottom:20px; }
+.group > .b + .f,.group > .b + .two { margin-top:20px; }
+.list { gap:8px; }
+.item { padding:16px; gap:16px; }
+.gname { padding:0 0 16px; font-size:14px; font-weight:600; color:var(--fg); }
+#catalogs .group .list { margin:0; }
+.catalog-toolbar { margin:0 0 24px; gap:20px; }
+#catalog-picker { margin-bottom:32px; }
+.service-card { margin:16px 0; border-radius:12px; }
+.service-card .svc { padding:24px; }
+.service-card[open] summary { border-bottom:1px solid var(--line); }
+.svc > .b { margin:20px 0; }
+.svc .row + .row { margin-top:16px; }
+.settings-card { padding:28px; border:1px solid var(--line); background:#111; border-radius:14px; margin-bottom:28px; }
+.card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
+.card-heading h3 { margin:0; display:flex; align-items:center; gap:10px; }
+.card-heading .hint { margin:6px 0 0; }
+.card-symbol { font-size:25px; color:var(--mute); line-height:1; }
+.count-badge { display:inline-grid; place-items:center; min-width:26px; height:24px; padding:0 7px; border:1px solid #383838; border-radius:6px; color:#aaa; font-size:12px; font-weight:500; }
+.addon-form-actions { display:grid; grid-template-columns:minmax(180px,300px) auto; align-items:end; justify-content:space-between; gap:24px; }
+.addon-form-actions .f { margin:0; }
+button.primary { background:var(--fg); color:#141414; border-color:var(--fg); min-height:46px; padding-inline:24px; }
+button.primary:hover { background:#d5d5d5; }
+#addon-url { min-height:84px; }
+#addon-url-hint { margin-bottom:0; }
+#s-addons .b { margin:0; justify-content:flex-start; }
+#addon-list { display:grid; gap:16px; }
+.addon-card { padding:20px; background:#171717; border:1px solid #2c2c2c; border-radius:10px; min-width:0; }
+.addon-card-main { display:flex; align-items:center; gap:16px; }
+.addon-icon { display:grid; place-items:center; width:44px; height:44px; flex:none; border:1px solid #3c3c3c; border-radius:10px; background:#222; color:#ccc; font-size:18px; }
+.addon-identity { flex:1; min-width:0; }
+.addon-identity strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+.addon-identity small { display:block; color:var(--mute); font-size:12px; margin-top:3px; overflow-wrap:anywhere; }
+.addon-badges { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.addon-actions button { padding:9px 14px; }
+.remove-addon { color:#bcbcbc; background:transparent; }
+.addon-details { border-top:1px solid #2c2c2c; margin-top:18px; padding-top:12px; }
+.addon-details summary { color:var(--mute); cursor:pointer; font-size:12px; width:fit-content; }
+.addon-details .checks { gap:16px 24px; margin:20px 0; }
+.addon-manifest { display:grid; gap:8px; color:var(--mute); font-size:12px; }
+.addon-manifest input { font-size:12px; }
+#s-addons #addon-undo-row { margin-top:20px; }
+.empty-state { padding:28px 20px; text-align:center; border:1px dashed #333; border-radius:10px; }
+.empty-state strong { display:block; font-size:14px; font-weight:500; }
+.empty-state p { color:var(--mute); font-size:13px; max-width:410px; margin:8px auto 0; }
+.empty-symbol { display:block; font-size:26px; color:#777; margin-bottom:10px; }
+.destination-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.destination-card { display:flex; justify-content:space-between; gap:20px; padding:22px; border:1px solid var(--line); border-radius:12px; text-decoration:none; background:#101010; }
+.destination-card:hover { background:#171717; border-color:#4a4a4a; }
+.destination-card strong { font-size:14px; font-weight:500; }
+.destination-card small { display:block; color:var(--mute); font-size:12px; margin-top:6px; }
+.full-width { grid-column:1 / -1; }
+@media(min-width:701px) and (max-width:1050px) { .tabs-row { flex-wrap:wrap; gap:14px; } .tabs-row .tabs { flex-basis:100%; } }
+@media(max-width:700px) {
+  main { padding-inline:18px; } .workspace { padding-top:26px; } h2 { font-size:25px; }
+  .settings-card { padding:20px; margin-bottom:20px; } .card-heading { margin-bottom:22px; }
+  .destination-grid { grid-template-columns:1fr; gap:12px; }
+  .addon-form-actions { grid-template-columns:1fr; gap:18px; }
+  .addon-card { padding:16px; } .addon-card-main { flex-wrap:wrap; align-items:flex-start; gap:12px; }
+  .addon-identity { flex-basis:calc(100% - 60px); } .addon-actions { width:100%; padding-top:4px; }
+  .addon-actions button { flex:1; } .group,.service-card .svc,#jf-collections > .svc { padding:18px; }
+  .item { gap:12px; padding:14px 12px; } .ud { gap:0; } .ud button { width:32px; }
+  .b { gap:12px; } .b > .select-control { max-width:none; }
+  .catalog-toolbar { flex-wrap:wrap; gap:10px; } .catalog-toolbar input { flex-basis:100%; }
+}
+
+
 `;
 
 function body(): string {
@@ -322,7 +406,7 @@ function body(): string {
   <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
   <div class="tabs-row">
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
-    ${[['general','General'],['addons','Addons'],['jellyfin','Jellyfin'],['meta','Metadata'],['catalogs','Catalogs'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='catalogs'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
+    ${[['general','General'],['addons','Add-ons'],['catalogs','Catalogs'],['collections','Collections'],['jellyfin','Jellyfin'],['meta','Metadata'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
   </nav>
   <div class="mode" role="group" aria-label="Settings mode"><label><input type="radio" name="mode" value="simple" id="mode-simple"><span>Simple</span></label><label><input type="radio" name="mode" value="advanced" id="mode-advanced"><span>Advanced</span></label></div>
   </div>
@@ -373,16 +457,16 @@ function body(): string {
 
 <section id="s-catalogs">
   <h2><small>3</small>Catalogs</h2>
-  <p class="note">Choose catalogs and arrange their order in your apps.</p>
+  <p class="note">Choose what appears in your apps. Enable catalogs and use the arrows to arrange them within each source.</p>
   <div id="catalog-picker">
   <div class="catalog-toolbar"><input type="text" id="catalog-filter" aria-label="Filter catalogs" placeholder="Search catalogs" autocomplete="off" spellcheck="false"><span id="catalog-count" role="status"></span></div>
   <div id="catalogs"></div>
   <p id="catalog-empty" hidden>No matching catalogs.</p>
   <p class="status" id="cat-status"></p>
   </div>
-  <h3>Your lists</h3>
+  <details class="service-card catalog-settings" data-advanced><summary>Your lists</summary><div class="svc">
   <div class="two">
-    <div class="f" data-needs="mdblist"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Needs the MDBList key above.</p></div>
+    <div class="f" data-needs="mdblist"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Add your MDBList key in Metadata.</p></div>
     <div class="f" data-needs="trakt"><label class="t" for="l-trakt">Trakt list ids</label><textarea id="l-trakt" data-lines="lists.trakt" placeholder="user/list-slug, one per line" spellcheck="false"></textarea><p class="hint">Requires a Trakt client ID.</p></div>
     <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb">PublicMetaDB list IDs</label><textarea id="l-pmdb" data-lines="lists.publicmetadb" placeholder="one per line" spellcheck="false"></textarea></div>
     <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb-picks">PublicMetaDB pick IDs</label><textarea id="l-pmdb-picks" data-lines="lists.publicmetadbPicks" placeholder="one per line" spellcheck="false"></textarea></div>
@@ -391,7 +475,8 @@ function body(): string {
     <div class="f"><label class="t" for="l-letterboxd">Letterboxd lists and watchlists</label><textarea id="l-letterboxd" data-lines="lists.letterboxd" placeholder="List or watchlist links, one per line" spellcheck="false"></textarea></div>
     <div class="f"><label class="t" for="l-flixpatrol">FlixPatrol regions</label><textarea id="l-flixpatrol" data-lines="lists.flixpatrol" placeholder="global&#10;romania&#10;united-states" spellcheck="false"></textarea><p class="hint">One region per line. Available charts appear above.</p></div>
   </div>
-  <h3>MovieLens</h3>
+  </div></details>
+  <details class="service-card catalog-settings" data-advanced><summary>MovieLens</summary><div class="svc">
   <div class="two">
     <div class="f"><label class="t" for="ml-user">Username</label><input type="text" id="ml-user" data-k="movieLens.username" autocomplete="off" spellcheck="false"></div>
     <div class="f"><label class="t" for="ml-pass">Password</label><input id="ml-pass" type="password" data-k="movieLens.password" autocomplete="off"></div>
@@ -400,11 +485,13 @@ function body(): string {
     <div class="f"><label class="t" for="ml-csv">Import an IMDb ratings CSV</label><input id="ml-csv" type="file" accept=".csv,text/csv"></div>
     <span id="ml-result" class="hint" role="status"></span>
   </div>
-  <h3>Custom catalogs</h3>
+  </div></details>
+  <details class="service-card catalog-settings" data-advanced><summary>Custom catalogs</summary><div class="svc">
   <p class="note">Build discovery lists or combine existing catalogs in the order you choose.</p>
   <div id="custom-catalogs"></div>
   <button type="button" id="add-custom-catalog">Add catalog</button>
-  <h3>Recommendations</h3>
+  </div></details>
+  <details class="service-card catalog-settings" data-advanced><summary>Recommendations</summary><div class="svc">
   <p class="note">Optional AI recommendations use your viewing history with the provider you choose. Provider charges apply when a taste profile or recommendation list is generated.</p>
   <div id="rec-req" class="reqs"></div>
   <label class="check"><input type="checkbox" data-k="recommendations.enabled">Enable recommendations</label>
@@ -424,36 +511,30 @@ function body(): string {
   </div>
   <label class="check"><input type="checkbox" data-k="recommendations.webSearch">Search for recent releases</label>
   <div class="b"><button type="button" id="prepare-recommendations">Prepare recommendations</button><button type="button" id="rebuild-recommendations">Rebuild from history</button><button type="button" id="check-recommendations">Check progress</button><span id="rec-status" class="hint" role="status"></span></div>
+  </div></details>
+  <p class="hint" data-simple-catalog-note>Switch to Advanced for custom lists, MovieLens and recommendations.</p>
 </section>
 
 <section id="s-addons">
-  <h2><small>4</small>Addons</h2>
-  <p class="note">Paste Stremio addon manifest links, one per line. Catalogs and details come from your metadata addons, with Cinemeta filling in automatically. Streams and subtitles come from the addons below.</p>
-  <p class="mode-note" id="addons-mode-note">Simple mode. Switch to <strong>Advanced</strong> at the top for scrobbling, API keys, anime lists, custom catalogs and AI recommendations.</p>
-  <div class="f">
-    <label class="t" for="a-catalog">Catalogs</label>
-    <textarea id="a-catalog" data-lines="addons.catalog" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
-    <div class="b"><button type="button" data-probe="addons.catalog">Check</button></div>
-    <div class="probe" data-probe-out="addons.catalog"></div>
+  <h2>Add-ons</h2>
+  <p class="note section-intro">Connect the sources that bring your library to life. Add a source below, then manage it in one place.</p>
+  <div class="settings-card">
+    <div class="card-heading"><div><h3>Add an add-on</h3><p class="hint">Paste a Stremio manifest link. We’ll detect what it provides.</p></div><span class="card-symbol" aria-hidden="true">+</span></div>
+    <form id="addon-form">
+      <div class="f"><label class="t" for="addon-url">Manifest link</label><textarea id="addon-url" rows="2" placeholder="https://your-addon.com/manifest.json" spellcheck="false" required aria-describedby="addon-url-hint"></textarea><p class="hint" id="addon-url-hint">Adding several? Put each link on a new line.</p></div>
+      <div class="addon-form-actions"><div class="f"><label class="t" for="addon-kind">Use for</label><select id="addon-kind"><option value="auto">Detect automatically</option><option value="catalog">Catalogs</option><option value="meta">Metadata</option><option value="stream">Streams</option><option value="subtitle">Subtitles</option></select></div><button class="primary" id="addon-submit" type="submit">Add add-on</button></div>
+      <p class="status" id="addon-add-status" role="status"></p>
+    </form>
   </div>
-  <div id="addon-catalog-picker" hidden><h3>Your catalogs</h3><p class="note">Turn catalogs on or off and drag them into the order your apps should show.</p></div>
-  <div class="f">
-    <label class="t" for="a-meta">Metadata</label>
-    <textarea id="a-meta" data-lines="addons.meta" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
-    <div class="b"><button type="button" data-probe="addons.meta">Check</button></div>
-    <div class="probe" data-probe-out="addons.meta"></div>
+  <div class="settings-card">
+    <div class="card-heading"><div><h3>Added add-ons <span class="count-badge" id="addon-count">0</span></h3><p class="hint">Check a connection, change its role, or remove a source.</p></div></div>
+    <div id="addon-list"></div>
+    <div class="empty-state" id="addon-empty"><span class="empty-symbol" aria-hidden="true">＋</span><strong>Your sources start here</strong><p>Add your first manifest link above. Cinemeta provides default catalogs and metadata automatically.</p></div>
+    <div class="b" id="addon-undo-row" hidden><span class="hint" id="addon-removed" role="status"></span><button type="button" id="addon-undo">Undo removal</button></div>
   </div>
-  <div class="f">
-    <label class="t" for="a-stream">Streams</label>
-    <textarea id="a-stream" data-lines="addons.stream" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
-    <div class="b"><button type="button" data-probe="addons.stream">Check</button></div>
-    <div class="probe" data-probe-out="addons.stream"></div>
-  </div>
-  <div class="f">
-    <label class="t" for="a-subtitle">Subtitles</label>
-    <textarea id="a-subtitle" data-lines="addons.subtitle" placeholder="https://…/manifest.json" spellcheck="false"></textarea>
-    <div class="b"><button type="button" data-probe="addons.subtitle">Check</button></div>
-    <div class="probe" data-probe-out="addons.subtitle"></div>
+  <div class="destination-grid">
+    <a class="destination-card" href="#catalogs"><span><strong>Catalogs</strong><small>Choose and reorder the rows in your apps.</small></span><span aria-hidden="true">↗</span></a>
+    <a class="destination-card" href="#collections"><span><strong>Collections</strong><small>Build themed libraries and box sets.</small></span><span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
@@ -554,15 +635,17 @@ function body(): string {
     <div class="f"><label class="t" for="jf-max">Max sources per title</label><input type="number" id="jf-max" data-k="jellyfin.maxSources" min="1" max="200"></div>
   </div>
   <details class="profile-settings"><summary>Profiles</summary><p class="note">Profiles use the same password. Share your watch history or keep it separate.</p><div id="profiles"></div><button type="button" id="profile-add">Add profile</button></details>
-  <details class="profile-settings" id="collections-panel"><summary>Collections</summary>
+  <label class="t">Home screen rows</label>
+  <div class="list" data-order="jellyfin.home" data-options="resume,nextup,latest,upcoming"></div>
+</section>
+
+<section id="s-collections">
+  <h2>Collections</h2>
     <p class="note">Collections are box set libraries. Each tile inside is a row of its own: an actor, a genre, a studio, a network, a decade, a franchise or any mix of your catalogs, with its own artwork and tile shape. Auto rows build whole sets in one click; starter packs give you a finished library to tweak.</p>
     <div class="b"><button type="button" id="collection-add">Add collection</button><select id="collection-pack" aria-label="Starter pack"><option value="">Starter packs…</option><option value="movie-genres">Movie genres</option><option value="series-genres">Series genres</option><option value="catalog-genres">Genres of a catalog</option><option value="actors">Popular actors</option><option value="studios">Studios</option><option value="networks">Streaming networks</option><option value="franchises">Franchises</option><option value="decades">Decades</option><option value="cinema">Cinema: everything</option></select><button type="button" id="collection-import-toggle">Import</button><button type="button" id="collection-export-all">Export all</button></div>
     <div id="collection-import" hidden><textarea id="collection-import-text" rows="4" placeholder="Paste a collection export, or a link to one" spellcheck="false"></textarea><div class="b"><button type="button" id="collection-import-btn">Import</button><span class="hint" id="collection-import-status" role="status"></span></div></div>
     <textarea id="collection-export-text" rows="4" hidden readonly spellcheck="false"></textarea>
     <div id="jf-collections"></div>
-  </details>
-  <label class="t">Home screen rows</label>
-  <div class="list" data-order="jellyfin.home" data-options="resume,nextup,latest,upcoming"></div>
 </section>
 
 <section id="s-install">
@@ -603,7 +686,7 @@ const JS = String.raw`
     section.appendChild(content);
   });
   document.querySelector('#s-general .section-content').appendChild(document.getElementById('s-age'));
-  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
+  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], collections:['collections'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
   Object.keys(groups).forEach(function(key) {
     var panel = document.createElement('div');
     panel.id = 'panel-' + key;
@@ -626,13 +709,9 @@ const JS = String.raw`
   });
   function applyMode() {
     var advanced = !!cfg.advanced;
+    all('[data-simple-catalog-note]').forEach(function(note) { note.hidden = advanced; });
     document.getElementById('mode-' + (advanced ? 'advanced' : 'simple')).checked = true;
     all('[data-advanced]').forEach(function(tab) { tab.hidden = !advanced; });
-    var note = document.getElementById('addons-mode-note'); if (note) note.hidden = advanced;
-    var picker = document.getElementById('catalog-picker'), simpleHost = document.getElementById('addon-catalog-picker'), advancedHost = document.getElementById('s-catalogs').querySelector('.section-content') || document.getElementById('s-catalogs');
-    if (advanced) { if (picker.parentNode !== advancedHost) advancedHost.insertBefore(picker, advancedHost.querySelector('h3')); }
-    else if (picker.parentNode !== simpleHost) simpleHost.appendChild(picker);
-    simpleHost.hidden = advanced;
     var current = all('[data-tab]').filter(function(t) { return t.getAttribute('aria-selected') === 'true'; })[0];
     if (current && current.hidden) { location.hash = 'general'; selectTab('general', false); }
     if (typeof renderDrawerNav === 'function' && document.getElementById('drawer-nav').children.length) renderDrawerNav();
@@ -649,9 +728,10 @@ const JS = String.raw`
       if (active && focus) { tab.focus(); tab.scrollIntoView({block:'nearest',inline:'nearest'}); }
     });
   }
-  all('[data-tab]').forEach(function(tab, index, tabs) {
+  all('[data-tab]').forEach(function(tab) {
     tab.addEventListener('click', function() { location.hash = tab.dataset.tab; selectTab(tab.dataset.tab, false); });
     tab.addEventListener('keydown', function(e) {
+      var tabs = all('[data-tab]').filter(function(t) { return !t.hidden; }), index = tabs.indexOf(tab);
       var next = e.key === 'ArrowRight' ? (index+1)%tabs.length : e.key === 'ArrowLeft' ? (index+tabs.length-1)%tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length-1 : -1;
       if (next < 0) return;
       e.preventDefault(); location.hash = tabs[next].dataset.tab; selectTab(tabs[next].dataset.tab, true);
@@ -1160,8 +1240,10 @@ const JS = String.raw`
   function needTag(n, short) {
     var d = NEEDS[n];
     return el('button', { type: 'button', class: 'need-tag', title: 'Needs ' + d.label, text: short ? (/account$/.test(d.label) ? 'Connect' : 'Add key') : 'Needs ' + d.label, onclick: function (e) {
-      e.preventDefault(); e.stopPropagation(); location.hash = d.tab; selectTab(d.tab, false);
-      var f = $(d.field); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); }
+      e.preventDefault(); e.stopPropagation();
+      if (!cfg.advanced) { cfg.advanced = true; applyMode(); changed(); }
+      location.hash = d.tab; selectTab(d.tab, false);
+      var f = $(d.field); if (f) { var parent = f.parentElement; while(parent) { if(parent.tagName === 'DETAILS') parent.open = true; parent = parent.parentElement; } f.scrollIntoView({ block: 'center' }); f.focus(); }
     } });
   }
   function lockSelect(select, needFor, hintFor) {
@@ -1267,30 +1349,92 @@ const JS = String.raw`
     });
   }
 
-  function bindProbes() {
-    all('[data-probe]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var path = btn.getAttribute('data-probe');
-        var out = document.querySelector('[data-probe-out="' + path + '"]');
-        var urls = get(path) || [];
-        clear(out);
-        if (!urls.length) { out.appendChild(el('div', { text: 'Nothing to check.' })); return; }
-        btn.disabled = true;
-        Promise.all(urls.map(function (u) {
-          return api('/api/probe', { url: u }).then(function (r) {
-            var line = el('div');
-            if (r.error) { line.appendChild(el('b', { text: u })); line.appendChild(el('span', { text: ' — ' + r.error })); return line; }
-            line.appendChild(el('b', { text: r.name || u }));
-            var bits = [];
-            if (r.resources && r.resources.length) bits.push(r.resources.join(', '));
-            if (r.types && r.types.length) bits.push(r.types.join(', '));
-            if (r.catalogs) bits.push(r.catalogs + (r.catalogs === 1 ? ' catalog' : ' catalogs'));
-            if (r.version) bits.push('v' + r.version);
-            line.appendChild(el('span', { text: ' — ' + bits.join(' · ') }));
-            return line;
-          });
-        })).then(function (lines) { lines.forEach(function (l) { out.appendChild(l); }); btn.disabled = false; });
+  var addonInfo = {}, removedAddon = null;
+  var addonRoles = {catalog:'Catalogs',meta:'Metadata',stream:'Streams',subtitle:'Subtitles'};
+  function addonEntries() {
+    var entries = [];
+    Object.keys(addonRoles).forEach(function(role) {
+      (cfg.addons[role] || []).forEach(function(url) {
+        var entry = entries.find(function(item) { return item.url === url; });
+        if (!entry) { entry = {url:url,roles:[]}; entries.push(entry); }
+        entry.roles.push(role);
       });
+    });
+    return entries;
+  }
+  function addonHost(url) { try { return new URL(url).hostname; } catch (_) { return 'Add-on'; } }
+  function renderAddons() {
+    var root = $('addon-list'), entries = addonEntries(); clear(root);
+    $('addon-count').textContent = entries.length;
+    $('addon-empty').hidden = entries.length > 0;
+    entries.forEach(function(entry) {
+      var info = addonInfo[entry.url] || {}, name = info.name || addonHost(entry.url);
+      var badges = el('div',{class:'addon-badges'},entry.roles.map(function(role) { return el('span',{class:'pill',text:addonRoles[role]}); }));
+      var result = el('p',{class:'status','role':'status'});
+      var check = el('button',{type:'button',text:'Check','aria-label':'Check '+name,onclick:function() {
+        check.disabled = true; result.textContent = 'Checking connection…';
+        api('/api/probe',{url:entry.url}).then(function(r) {
+          check.disabled = false;
+          if (r.error) { result.textContent = r.error; return; }
+          addonInfo[entry.url] = r; title.textContent = r.name || name;
+          result.textContent = 'Connected' + (r.version ? ' · v'+r.version : '') + (r.catalogs ? ' · '+r.catalogs+' catalogs' : '');
+        });
+      }});
+      var remove = el('button',{type:'button',class:'remove-addon',text:'Remove','aria-label':'Remove '+name,onclick:function() {
+        removedAddon = {url:entry.url,roles:entry.roles.slice(),positions:entry.roles.map(function(role){return cfg.addons[role].indexOf(entry.url);})};
+        entry.roles.forEach(function(role) { cfg.addons[role] = cfg.addons[role].filter(function(url) { return url !== entry.url; }); });
+        renderAddons(); changed(); $('addon-removed').textContent = name+' removed.'; $('addon-undo-row').hidden = false; $('addon-undo').focus();
+      }});
+      var title = el('strong',{text:name});
+      var identity = el('div',{class:'addon-identity'},[title,el('small',{text:addonHost(entry.url)}),badges]);
+      var details = el('details',{class:'addon-details'},[el('summary',{text:'Manage roles'})]);
+      var roles = el('div',{class:'checks'});
+      Object.keys(addonRoles).forEach(function(role) {
+        var cb=el('input',{type:'checkbox',checked:entry.roles.indexOf(role)>=0,'aria-label':addonRoles[role]+' for '+name});
+        cb.addEventListener('change',function() {
+          if (!cb.checked && entry.roles.length === 1) { cb.checked = true; result.textContent = 'Keep at least one role, or use Remove to disconnect this add-on.'; return; }
+          if(cb.checked) { cfg.addons[role].push(entry.url); entry.roles.push(role); }
+          else { cfg.addons[role]=cfg.addons[role].filter(function(url){return url!==entry.url;}); entry.roles=entry.roles.filter(function(r){return r!==role;}); }
+          clear(badges); entry.roles.forEach(function(r){badges.appendChild(el('span',{class:'pill',text:addonRoles[r]}));}); result.textContent='Roles updated.'; changed();
+        });
+        roles.appendChild(el('label',{},[cb,addonRoles[role]]));
+      });
+      details.appendChild(roles);
+      details.appendChild(el('label',{class:'addon-manifest'},[el('span',{text:'Manifest link'}),el('input',{type:'text',readonly:true,value:entry.url,'aria-label':'Manifest link for '+name})]));
+      root.appendChild(el('article',{class:'addon-card'},[el('div',{class:'addon-card-main'},[el('span',{class:'addon-icon','aria-hidden':'true',text:name.charAt(0).toUpperCase()}),identity,el('div',{class:'b addon-actions'},[check,remove])]),details,result]));
+    });
+  }
+  function bindAddons() {
+    $('addon-form').addEventListener('submit',async function(e) {
+      e.preventDefault();
+      var urls=Array.from(new Set($('addon-url').value.split('\n').map(function(s){return s.trim().replace(/^stremio:\/\//i,'https://');}).filter(Boolean)));
+      var kind=$('addon-kind').value, button=$('addon-submit'), status=$('addon-add-status');
+      if(!urls.length) return;
+      button.disabled=true; button.textContent='Adding…'; status.textContent='Checking manifest links…';
+      var errors=[], added=0, unchanged=0;
+      for(var url of urls) {
+        try { var parsed=new URL(url); if(!['http:','https:'].includes(parsed.protocol)) throw new Error(); } catch (_) { errors.push('Use a valid http or https manifest link.'); continue; }
+        var roles, info;
+        if(kind==='auto') {
+          info=await api('/api/probe',{url:url});
+          if(info.error) { errors.push(addonHost(url)+': '+info.error); continue; }
+          roles=Object.keys(addonRoles).filter(function(role){return (info.resources || []).includes(role === 'subtitle' ? 'subtitles' : role) || (role==='catalog' && info.catalogs>0);});
+          if(!roles.length) { errors.push(addonHost(url)+': No supported roles found. Choose a role to add it manually.'); continue; }
+          addonInfo[url]=info;
+        } else roles=[kind];
+        var didAdd=false;
+        roles.forEach(function(role){if(cfg.addons[role].indexOf(url)<0){cfg.addons[role].push(url);didAdd=true;}});
+        if(didAdd) added++; else unchanged++;
+      }
+      if(added) {renderAddons();changed();}
+      if(!errors.length) $('addon-url').value='';
+      status.textContent=[added ? added+' add-on'+(added===1?'':'s')+' added.' : '',unchanged ? unchanged+' already added.' : '',errors.join('\n')].filter(Boolean).join(' ');
+      button.disabled=false; button.textContent='Add add-on';
+    });
+    $('addon-undo').addEventListener('click',function() {
+      if(!removedAddon) return;
+      removedAddon.roles.forEach(function(role,i){if(!cfg.addons[role].includes(removedAddon.url)) cfg.addons[role].splice(removedAddon.positions[i],0,removedAddon.url);});
+      removedAddon=null;$('addon-undo-row').hidden=true;renderAddons();changed();$('addon-url').focus();
     });
   }
 
@@ -1564,7 +1708,7 @@ const JS = String.raw`
     if (!('showPopover' in HTMLElement.prototype)) return;
     all('select').forEach(function(select) {
       if (select._picker) { select._picker.sync(); return; }
-      var label = Array.from(select.labels || []).map(function(l) { return l.textContent.trim(); }).join(' ') || 'Choose an option';
+      var label = Array.from(select.labels || []).map(function(l) { return (l.querySelector('.t') || l).textContent.trim(); }).join(' ') || select.getAttribute('aria-label') || 'Choose an option';
       var menu = el('div', {class:'select-menu',popover:'manual',role:'listbox',id:'picker-' + (++pickerId),'aria-label':label});
       var trigger = el('button', {type:'button',class:'select-trigger',role:'combobox','aria-label':label,'aria-haspopup':'listbox','aria-expanded':'false','aria-controls':menu.id});
       var wrapper = el('div', {class:'select-control'});
@@ -1630,6 +1774,7 @@ const JS = String.raw`
     updateSummary();
     fillInputs();
     renderTrackerStates();
+    renderAddons();
     renderCatalogs();
     renderProfiles();
     renderCustomCatalogs();
@@ -1638,7 +1783,7 @@ const JS = String.raw`
     renderInstall();
   }
   bindInputs();
-  bindProbes();
+  bindAddons();
   renderAll();
   encode();
   loadCatalogs();
