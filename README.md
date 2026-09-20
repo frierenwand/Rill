@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="docs/brand/rill.svg" alt="Rill" width="280">
+  <img src="docs/brand/rill-dark.svg#gh-dark-mode-only" alt="Rill" width="280">
+  <img src="docs/brand/rill.svg#gh-light-mode-only" alt="Rill" width="280">
 </p>
 
 Deploy and manage your own installation on Cloudflare Workers.
