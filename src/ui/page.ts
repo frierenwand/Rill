@@ -864,13 +864,13 @@ const JS = String.raw`
   }
 
   function renderInstall() {
+    $('url-jellyfin').textContent = ORIGIN;
+    $('jf-hint').textContent = account.durable && account.exists ? 'Sign in as “' + cfg.jellyfin.username + '” with your password.' : 'Save your server account before connecting.';
     if (!token) return;
     var base = ORIGIN + '/' + token;
     $('url-stremio').textContent = base + '/manifest.json';
     $('url-deeplink').textContent = 'stremio://' + base.replace(/^https?:\/\//, '') + '/manifest.json';
     $('open-deeplink').href = $('url-deeplink').textContent;
-    $('url-jellyfin').textContent = base + '/jellyfin';
-    $('jf-hint').textContent = 'Sign in as “' + cfg.jellyfin.username + '”' + (cfg.jellyfin.password ? ' with your password.' : ' with no password.');
   }
 
   function loadCatalogs() {
@@ -1488,9 +1488,7 @@ const JS = String.raw`
 
   async function deliveryStatus(retry) {
     var status=$('delivery-status');status.textContent='Checking…';
-    var encoded=await api('/api/config/encode',cfg);
-    if (!encoded.token) {status.textContent=encoded.error || 'Could not read configuration.';return;}
-    var base=ORIGIN+'/'+encoded.token+'/jellyfin', access;
+    var base=ORIGIN, access;
     try {
       var login=await fetch(base+'/Users/AuthenticateByName',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({Username:cfg.jellyfin.username,Pw:cfg.jellyfin.password})});
       var user=await login.json();if(!login.ok || !user.AccessToken)throw Error('Sign-in failed.');access=user.AccessToken;

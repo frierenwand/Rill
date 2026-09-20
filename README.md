@@ -61,7 +61,7 @@ Tip for operators: setting the optional `TMDB_KEY` secret lets Simple-mode users
 Then connect your apps:
 
 1. **Stremio:** install the manifest link from the Connect tab.
-2. **Jellyfin clients:** add the Worker URL as a server and sign in with the username and password from the Jellyfin tab. Signing in activates that configuration's settings. Quick Connect is supported.
+2. **Jellyfin clients:** add just the Worker URL (for example, `https://your-worker.workers.dev`) as a server and sign in with the username and password from the Jellyfin tab. The server loads your saved settings automatically. Quick Connect is supported.
 
 Configuration links carry credentials. Share the Worker URL, never the install link.
 

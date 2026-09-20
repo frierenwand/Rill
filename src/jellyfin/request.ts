@@ -6,6 +6,7 @@ export interface JfRequest {
   who: Identity;
   client: ClientInfo;
   claims: TokenClaims | null;
+  accessToken?: string;
   base: string;
   rawPath: string;
   q: (name: string) => string | undefined;

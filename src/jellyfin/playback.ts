@@ -60,7 +60,7 @@ export async function resolveSources(lib: Library, g: TitleGuid, itemId: string)
       subtitles: [
         ...(s.subtitles ?? []).filter((x) => x && /^https?:\/\//i.test(x.url)),
         ...subs,
-      ].map((x, i) => ({ url: x.url, lang: x.lang || 'und', deliveryUrl: `${lib.jf.base}/Videos/${plainGuid(itemId)}/${id}/Subtitles/${2 + i}/Stream.${subtitleFormat(x.url)}` })),
+      ].map((x, i) => ({ url: x.url, lang: x.lang || 'und', deliveryUrl: `${lib.jf.base}/Videos/${plainGuid(itemId)}/${id}/Subtitles/${2 + i}/Stream.${subtitleFormat(x.url)}${lib.jf.accessToken ? `?api_key=${encodeURIComponent(lib.jf.accessToken)}` : ''}` })),
     };
     const dto = mediaSource(input);
     dto.ETag = hashed;
@@ -102,10 +102,10 @@ export async function subtitleResponse(sources: Dto[], sourceId: string, index: 
     if(requested==='vtt'&&original==='srt') {
       const text=(await upstream.text()).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
       const vtt='WEBVTT\n\n'+text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
-      return new Response(vtt,{headers:{'content-type':type,'cache-control':'public, max-age=3600'}});
+      return new Response(vtt,{headers:{'content-type':type,'cache-control':'private, max-age=3600'}});
     }
     if(requested&&requested!==original){await upstream.body?.cancel();return new Response('Unsupported subtitle conversion',{status:400});}
-    return new Response(upstream.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'public, max-age=3600' } });
+    return new Response(upstream.body, { status: 200, headers: { 'content-type': type, 'cache-control': 'private, max-age=3600' } });
   } catch {
     return new Response('Subtitle unavailable', { status: 502 });
   }

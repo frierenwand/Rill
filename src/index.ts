@@ -4,7 +4,7 @@ import type { Ctx } from './context';
 import { decodeConfig } from './config/codec';
 import { sha256 } from './util/bytes';
 import { addonRouter } from './addon/index';
-import { jellyfinRouter, handleJellyfinSocket } from './jellyfin/index';
+import { handleJellyfinRequest, isJellyfinPath } from './jellyfin/index';
 import { uiRouter } from './ui/index';
 import { ensureSchema } from './storage/migrate';
 
@@ -28,11 +28,10 @@ async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfg
   const url = new URL(c.req.url);
   const scope = (await sha256(cfg.installationKey || cfgToken)).slice(0, cfg.installationKey ? 32 : 16);
   let accountConfigToken=cfgToken;
-  const activating = /\/users\/authenticate(byname|withquickconnect)$/i.test(url.pathname);
   if (c.env.DB && cfg.installationKey) {
     const saved = await c.env.DB.prepare('SELECT config FROM accounts WHERE scope=?').bind(scope).first<{config:string}>();
     const active=saved ? await decodeConfig(saved.config):null;
-    if (active && (!activating || (active.revision ?? 0)>(cfg.revision ?? 0))) {cfg=active;accountConfigToken=saved!.config;}
+    if (active) {cfg=active;accountConfigToken=saved!.config;}
   }
   return {
     cfg,
@@ -49,27 +48,21 @@ async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfg
 
 app.route('/', uiRouter);
 
-app.all('/:cfg/jellyfin/socket', async (c) => {
-  const ctx = await buildCtx(c, c.req.param('cfg'));
-  if (!ctx) return c.json({ error: 'bad config' }, 400);
-  return handleJellyfinSocket(ctx, c.req.raw);
+app.use('*', async (c, next) => {
+  if (!isJellyfinPath(new URL(c.req.url).pathname)) return next();
+  if (!c.env.DB) return c.json({ Message: 'Save your server account before connecting.' }, 503);
+  const owner = await c.env.DB.prepare('SELECT installation_key FROM owner WHERE id = 1').first<{ installation_key: string }>();
+  if (!owner) return c.json({ Message: 'Set up your server account before connecting.' }, 503);
+  const scope = (await sha256(owner.installation_key)).slice(0, 32);
+  const saved = await c.env.DB.prepare('SELECT config FROM accounts WHERE scope=?').bind(scope).first<{ config: string }>();
+  const ctx = saved ? await buildCtx(c, saved.config) : null;
+  if (!ctx || ctx.scope !== scope) return c.json({ Message: 'Server configuration is unavailable.' }, 503);
+  let exec: Parameters<typeof handleJellyfinRequest>[3];
+  try { exec = c.executionCtx; } catch {}
+  return handleJellyfinRequest(ctx, c.req.raw, c.env, exec);
 });
-app.all('/:cfg/jellyfin/emby/socket', async (c) => {
-  const ctx = await buildCtx(c, c.req.param('cfg'));
-  if (!ctx) return c.json({ error: 'bad config' }, 400);
-  return handleJellyfinSocket(ctx, c.req.raw);
-});
-
-app.use('/:cfg/jellyfin/*', async (c, next) => {
-  const ctx = await buildCtx(c, c.req.param('cfg'));
-  if (!ctx) return c.json({ error: 'bad config' }, 400);
-  c.set('ctx', ctx);
-  await next();
-});
-app.route('/:cfg/jellyfin', jellyfinRouter);
 
 app.use('/:cfg/*', async (c, next) => {
-  if (c.get('ctx')) return next();
   const ctx = await buildCtx(c, c.req.param('cfg'));
   if (!ctx) return c.json({ error: 'bad config' }, 400);
   c.set('ctx', ctx);

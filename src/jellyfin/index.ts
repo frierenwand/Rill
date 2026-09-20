@@ -33,10 +33,6 @@ import type { Meta } from '../stremio/types';
 import { collectionMembers } from '../addon/collections';
 import { boxSetDto, boxSetMembers, boxSetOf, collectionOf, collectionViewDto, visibleCollections } from './collections';
 
-export { handleJellyfinSocket } from './socket';
-
-export const jellyfinRouter = new Hono<{ Variables: { ctx: Ctx } }>();
-
 const inner = new Hono<JfEnv>();
 const state = new WeakMap<Request, JfRequest>();
 
@@ -64,16 +60,18 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   return {};
 }
 
-jellyfinRouter.all('/*', async (c) => {
-  let ctx = c.get('ctx');
-  const raw = c.req.raw;
+export function isJellyfinPath(path: string): boolean {
+  const root = path.toLowerCase().split('/')[1];
+  return root === 'jellyfin' || root === 'emby' || inner.routes.some(route => route.path.split('/')[1] === root);
+}
+
+export async function handleJellyfinRequest(ctx: Ctx, raw: Request, env: Parameters<typeof inner.fetch>[1], exec?: Parameters<typeof inner.fetch>[2]): Promise<Response> {
   const url = new URL(raw.url);
   if (raw.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
   const full = url.pathname;
-  const cut = full.toLowerCase().indexOf('/jellyfin');
-  const prefix = cut >= 0 ? full.slice(0, cut + '/jellyfin'.length) : '';
-  let sub = cut >= 0 ? full.slice(cut + '/jellyfin'.length) : full;
+  const prefix = /^\/jellyfin(?=\/|$)/i.exec(full)?.[0] ?? '';
+  let sub = full.slice(prefix.length);
   if (!sub.startsWith('/')) sub = `/${sub}`;
   sub = sub.replace(/^\/emby(?=\/|$)/i, '') || '/';
 
@@ -96,6 +94,7 @@ jellyfinRouter.all('/*', async (c) => {
     who,
     client: clientInfoOf(raw),
     claims,
+    accessToken: claims ? token : undefined,
     base: `${ctx.origin}${prefix}`,
     rawPath: sub,
     q: (name) => params.get(name.toLowerCase()),
@@ -107,19 +106,13 @@ jellyfinRouter.all('/*', async (c) => {
   const routed = new Request(`${url.origin}${sub.toLowerCase()}${url.search}`, { method: raw.method, headers: raw.headers });
   state.set(routed, jf);
 
-  let exec: Parameters<typeof inner.fetch>[2];
-  try {
-    exec = c.executionCtx as unknown as Parameters<typeof inner.fetch>[2];
-  } catch {
-    exec = undefined;
-  }
   if (exec) ctx.defer = work => exec!.waitUntil(work.catch(() => console.warn('Background tracking failed')));
-  const res = await inner.fetch(routed, c.env, exec);
+  const res = await inner.fetch(routed, env, exec);
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(CORS)) headers.set(k, v);
   if (res.status === 101) return res;
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers, ...(res.webSocket ? { webSocket: res.webSocket } : {}) });
-});
+}
 
 type C = Context<JfEnv, any, any>;
 
@@ -141,8 +134,6 @@ const PUBLIC = [
   /^\/sessions\/logout$/,
   /^\/socket$/,
   /^\/embywebsocket$/,
-  /^\/videos\/[^/]+\/[^/]+\/subtitles\//,
-  /^\/videos\/[^/]+\/(stream|original)(\.|\/|$)/,
 ];
 
 inner.use('*', async (c, next) => {
