@@ -125,6 +125,7 @@ async function buildFranchiseMeta(ctx: Ctx, titleId: string, ids: IdBundle, rows
 }
 
 async function animeMeta(ctx: Ctx, id: string): Promise<Meta | null> {
+  if (ctx.cfg.providers.anime === 'off') return null;
   const parsed = parseStremioId(id);
   const titleId = parsed.title;
   const key = `anime:meta:v3:${ctx.lang}:${ctx.cfg.providers.anime}:${ctx.cfg.providers.series}:${ctx.tmdbKey?'t':''}:${ctx.cfg.keys.tvdb?'v':''}:${ctx.cfg.search.includeAdult ? 'a' : 's'}:${titleId}`;
@@ -149,7 +150,7 @@ async function animeMeta(ctx: Ctx, id: string): Promise<Meta | null> {
 
 async function animeSearch(ctx: Ctx, query: string, opts: { skip?: number; limit?: number } = {}): Promise<MetaPreview[]> {
   const wanted = ctx.cfg.search.providers.filter((p): p is Provider => p === 'mal' || p === 'anilist' || p === 'kitsu');
-  const providers = wanted.length ? wanted : (['mal'] as Provider[]);
+  const providers = wanted;
   const runners: Record<Provider, (c: Ctx, q: string, o: typeof opts) => Promise<MetaPreview[]>> = { mal: malSearch, anilist: anilistSearch, kitsu: kitsuSearch };
   const lists = await mapLimit(providers, 3, (p) => runners[p](ctx, query, opts).catch(() => [] as MetaPreview[]));
   const out: MetaPreview[] = [];

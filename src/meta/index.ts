@@ -130,6 +130,7 @@ function stripByAgeCap(ctx: Ctx, meta: Meta): Meta | null {
 }
 
 async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
+  if ((type === 'movie' ? ctx.cfg.providers.movie : ctx.cfg.providers.series) === 'off') return null;
   const parsed = parseStremioId(id);
   let ids = await bridgeIds(ctx, bundleFromStremioId(parsed.title), type);
   const videoId = canonicalId(ids, type) ?? parsed.title;
@@ -175,7 +176,7 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   if (type !== 'movie') await fillAirDates(ctx, meta, ids);
 
   const lang = splitLanguageTag(ctx.cfg.language).lang;
-  if (ctx.tmdbKey && ids.tmdb) {
+  if (ctx.tmdbKey && ids.tmdb && ctx.cfg.artwork.posters.concat(ctx.cfg.artwork.backgrounds, ctx.cfg.artwork.logos).includes('tmdb')) {
     const d = await tmdbDetails(ctx, type === 'movie' ? 'movie' : 'tv', ids.tmdb);
     if (d) provided.tmdb = artworkFromDetails(d, lang);
   }
@@ -254,7 +255,6 @@ async function searchMeta(ctx: Ctx, type: ContentType, query: string, opts: { sk
         break;
     }
   }
-  if (!tasks.length || !providers.some((p) => (p === 'tmdb' && ctx.tmdbKey) || (p === 'tvdb' && hasTvdb(ctx)) || p === 'cinemeta')) tasks.push(() => cinemetaSearch(ctx, type, q, { skip }));
   const results = await mapLimit(tasks, 4, (t) => t().catch(() => [] as MetaPreview[]));
 
   const merged: MetaPreview[] = [];

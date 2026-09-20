@@ -1,6 +1,6 @@
 import type { Ctx } from '../context';
-import { emptySnapshot, sendRequest } from './common';
-import type { MarkEvent, ScrobbleEvent, Tracker } from './types';
+import { emptySnapshot, sendRequest, clampPercent, isoOrNow, epoch } from './common';
+import type { MarkEvent, ScrobbleEvent, Tracker, ResumeEntry, WatchSnapshot } from './types';
 import { fetchJson } from '../util/cache';
 import { metaApi } from '../meta/index';
 import { mapLimit } from '../util/concurrency';
@@ -76,9 +76,90 @@ async function mark(ctx: Ctx, ev: MarkEvent) {
     await write(ctx, `/watched?${params}`, 'DELETE');
   }
 }
+interface HistoryRow {
+  id?: string; tmdb_id: number; media_type: string; season?: number; episode?: number;
+  watched_at?: string; updated?: string; created?: string;
+  position_ms?: number; runtime_ms?: number; progress?: number;
+}
+interface HistoryPage { items: HistoryRow[]; total?: number; totalPages?: number; page?: number; perPage?: number }
+
+async function historyRows(ctx: Ctx, endpoint: 'watched' | 'resume', filter?: URLSearchParams): Promise<HistoryRow[]> {
+  const rows: HistoryRow[] = [], seen = new Set<string>();
+  for (let page = 1; page <= 100; page++) {
+    const params = new URLSearchParams(filter);
+    params.set('page', String(page)); params.set('perPage', '500');
+    const response = await sendRequest(`https://publicmetadb.com/api/external/${endpoint}?${params}`, {
+      headers: { authorization: `Bearer ${ctx.cfg.keys.publicmetadb}` },
+    });
+    const data = response.body as HistoryPage | null;
+    if (!response.ok || !data || !Array.isArray(data.items)) throw new Error('PublicMetaDB history unavailable');
+    const signature = JSON.stringify(data.items);
+    if (data.items.length && seen.has(signature)) throw new Error('PublicMetaDB repeated a history page');
+    seen.add(signature); rows.push(...data.items);
+    if (typeof data.totalPages === 'number' && page >= data.totalPages || typeof data.total === 'number' && rows.length >= data.total) return rows;
+    if (!data.items.length) {
+      if (typeof data.total === 'number' && rows.length < data.total || typeof data.totalPages === 'number' && page < data.totalPages) throw new Error('PublicMetaDB returned incomplete history');
+      return rows;
+    }
+    if (data.total === undefined && data.totalPages === undefined && data.items.length < (data.perPage ?? 500)) return rows;
+  }
+  throw new Error('PublicMetaDB history exceeds the import limit; previous history was retained');
+}
+
+function rowIdentity(row: HistoryRow): Pick<ResumeEntry, 'ids' | 'kind' | 'season' | 'episode'> | null {
+  if (!Number.isInteger(row.tmdb_id) || row.tmdb_id <= 0) return null;
+  if (row.media_type === 'movie') return { ids: { tmdb: row.tmdb_id, tmdbType: 'movie' }, kind: 'movie' };
+  if (row.media_type !== 'tv' || !Number.isInteger(row.season) || row.season! < 0 || !Number.isInteger(row.episode) || row.episode! <= 0) return null;
+  return { ids: { tmdb: row.tmdb_id, tmdbType: 'tv' }, kind: 'episode', season: row.season, episode: row.episode };
+}
+
+async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
+  const [watched, resume] = await Promise.all([historyRows(ctx, 'watched'), historyRows(ctx, 'resume')]);
+  const out = emptySnapshot();
+  const movies = new Map<number, WatchSnapshot['movies'][number]>(), episodes = new Map<string, WatchSnapshot['episodes'][number]>();
+  const shows = new Map<number, WatchSnapshot['shows'][number]>(), plays = new Set<string>();
+  for (const row of watched) {
+    const item = rowIdentity(row); if (!item || row.id && plays.has(row.id)) continue;
+    if (row.id) plays.add(row.id);
+    const lastAt = isoOrNow(row.watched_at);
+    if (item.kind === 'movie') {
+      const old = movies.get(row.tmdb_id);
+      movies.set(row.tmdb_id, { ids: item.ids, plays: (old?.plays ?? 0) + 1, lastAt: old && epoch(old.lastAt) > epoch(lastAt) ? old.lastAt : lastAt });
+    } else {
+      const key = `${row.tmdb_id}:${item.season}:${item.episode}`, old = episodes.get(key);
+      episodes.set(key, { ids: item.ids, season: item.season!, episode: item.episode!, plays: (old?.plays ?? 0) + 1, lastAt: old && epoch(old.lastAt) > epoch(lastAt) ? old.lastAt : lastAt });
+      const show = shows.get(row.tmdb_id);
+      if (!show || epoch(lastAt) > epoch(show.lastAt)) shows.set(row.tmdb_id, { ids: item.ids, lastAt, lastSeason: item.season, lastEpisode: item.episode });
+    }
+  }
+  out.movies = [...movies.values()]; out.episodes = [...episodes.values()]; out.shows = [...shows.values()];
+  for (const row of resume) {
+    const item = rowIdentity(row); if (!item) continue;
+    const runtimeMs = Number(row.runtime_ms), positionMs = Number(row.position_ms);
+    const progress = clampPercent(Number.isFinite(runtimeMs) && runtimeMs > 0 && Number.isFinite(positionMs) ? positionMs / runtimeMs * 100 : row.progress);
+    if (progress <= 0 || progress >= 100) continue;
+    out.resume.push({ ...item, progress, at: isoOrNow(row.updated ?? row.created), ref: row.id,
+      ...(Number.isFinite(positionMs) && positionMs >= 0 ? { positionMs } : {}), ...(Number.isFinite(runtimeMs) && runtimeMs > 0 ? { runtimeMs } : {}) });
+  }
+  return out;
+}
+
+async function clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void> {
+  if (entry.ref) { await write(ctx, `/resume/${encodeURIComponent(String(entry.ref))}`, 'DELETE'); return; }
+  if (!entry.ids.tmdb) throw new Error('PublicMetaDB requires a TMDB ID to clear resume');
+  const params = new URLSearchParams({ tmdb_id: String(entry.ids.tmdb), media_type: entry.kind === 'movie' ? 'movie' : 'tv' });
+  if (entry.kind === 'episode') { params.set('season', String(entry.season)); params.set('episode', String(entry.episode)); }
+  const rows = await historyRows(ctx, 'resume', params);
+  for (const row of rows) {
+    const item = rowIdentity(row);
+    if (row.id && item?.ids.tmdb === entry.ids.tmdb && item.kind === entry.kind && item.season === entry.season && item.episode === entry.episode) await write(ctx, `/resume/${encodeURIComponent(row.id)}`, 'DELETE');
+  }
+}
+
 export const publicmetadbTracker: Tracker = {
   name: 'publicmetadb', ready: ctx => !!ctx.cfg.keys.publicmetadb,
-  snapshot: async () => emptySnapshot(),
+  snapshot,
+  clearResume,
   catalogs,
   catalogItems,
   mark,

@@ -41,7 +41,7 @@ function snapshotKey(ctx: Ctx, tracker: Tracker): string {
 function primary(ctx: Ctx): Tracker | null {
   if (ctx.profile && !ctx.profile.sharesHistory) return null;
   const t = byName(ctx.cfg.trackers.primary);
-  return t && t.name !== 'publicmetadb' && t.ready(ctx) ? t : null;
+  return t && t.ready(ctx) ? t : null;
 }
 
 function sinks(ctx: Ctx): Tracker[] {
@@ -83,10 +83,10 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
       const fresh = await t.snapshot(ctx);
       if (ctx.env.DB) await saveSnapshot(ctx,durableKey,fresh);
       return fresh;
-    } catch (error) {
+    } catch {
       const stored = ctx.env.DB ? await loadSnapshot(ctx,durableKey) : null;
       if (stored) return stored;
-      throw error;
+      return emptySnapshot();
     }
   });
   const resume = await overlayBuffer(ctx,base.resume);

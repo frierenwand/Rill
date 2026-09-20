@@ -1,6 +1,6 @@
 export type TrackerName = 'trakt' | 'simkl' | 'mal' | 'anilist' | 'mdblist' | 'publicmetadb';
-export type MetaProvider = 'tmdb' | 'tvdb' | 'cinemeta' | 'tvmaze';
-export type AnimeProvider = 'mal' | 'anilist' | 'kitsu' | 'tmdb' | 'tvdb';
+export type MetaProvider = 'off' | 'tmdb' | 'tvdb' | 'cinemeta' | 'tvmaze';
+export type AnimeProvider = 'off' | 'mal' | 'anilist' | 'kitsu' | 'tmdb' | 'tvdb';
 
 export interface TraktAuth { clientId: string; clientSecret?: string; accessToken: string; refreshToken?: string; expiresAt?: number; username?: string }
 export interface SimklAuth { clientId: string; accessToken: string }
@@ -64,8 +64,8 @@ export const DEFAULT_CONFIG: RillConfig = {
   v: 1,
   name: 'Rill',
   language: 'en-US',
-  providers: { movie: 'tmdb', series: 'tmdb', anime: 'mal' },
-  artwork: { posters: ['tmdb', 'fanart', 'metahub'], backgrounds: ['tmdb', 'fanart', 'metahub'], logos: ['fanart', 'tmdb', 'metahub'] },
+  providers: { movie: 'off', series: 'off', anime: 'off' },
+  artwork: { posters: [], backgrounds: [], logos: [] },
   keys: {},
   addons: { catalog: [], meta: [], stream: [], subtitle: [] },
   catalogs: [],
@@ -74,7 +74,7 @@ export const DEFAULT_CONFIG: RillConfig = {
   ageCap: '',
   advanced: false,
   jellyfin: { username: 'rill', password: '', profiles: [], collections: [], maxSources: 30, home: ['resume', 'nextup', 'latest', 'upcoming'] },
-  search: { providers: ['tmdb', 'mal'], includeAdult: false },
+  search: { providers: [], includeAdult: false },
   recommendations:{sources:'both',enabled:false,provider:'gemini',apiKey:'',model:'',webSearch:false,refreshHours:24,order:'balanced',minVotes:100,reasoning:'low',staleDays:180,stalledWeight:'note'},
 };
 

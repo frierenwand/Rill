@@ -3,6 +3,8 @@ import { metaAddons } from '../config/schema';
 import { cacheGet, cachePut, fetchJson } from '../util/cache';
 import { mapLimit, uniq } from '../util/concurrency';
 import type { ContentType, Manifest, Meta, MetaPreview, Stream, Subtitle } from './types';
+import { bridgeIds, bundleFromStremioId } from '../meta/ids';
+import { mergeArtwork } from '../meta/artwork';
 
 export function addonBase(manifestUrl: string): string | null {
   try {
@@ -58,7 +60,14 @@ export async function externalMeta(ctx: Ctx, type: ContentType, id: string): Pro
     const manifest = await getManifest(url);
     if (manifest && !resourceSupports(manifest, 'meta', type, id)) continue;
     const meta = await addonMeta(base, type, id);
-    if (meta) return meta;
+    if (meta) {
+      if (!ctx.cfg.artwork.posters.length && !ctx.cfg.artwork.backgrounds.length && !ctx.cfg.artwork.logos.length) return meta;
+      try {
+        const ids = await bridgeIds(ctx, { ...bundleFromStremioId(id), ...meta.ids }, type);
+        const art = await mergeArtwork(ctx, type, ids);
+        return { ...meta, poster: art.poster ?? meta.poster, background: art.background ?? meta.background, logo: art.logo ?? meta.logo };
+      } catch { return meta; }
+    }
   }
   return null;
 }

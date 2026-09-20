@@ -21,8 +21,8 @@ function options(list: Array<[string, string]>): string {
   return list.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
 }
 
-const PROVIDER_OPTS: Array<[string, string]> = [['tmdb', 'TMDB'], ['tvdb', 'TVDB'], ['cinemeta', 'Cinemeta'], ['tvmaze', 'TVmaze']];
-const ANIME_OPTS: Array<[string, string]> = [['mal', 'MyAnimeList'], ['anilist', 'AniList'], ['kitsu', 'Kitsu'], ['tmdb', 'TMDB'], ['tvdb', 'TVDB']];
+const PROVIDER_OPTS: Array<[string, string]> = [['off', 'Off · use add-ons'], ['tmdb', 'TMDB'], ['tvdb', 'TVDB'], ['cinemeta', 'Cinemeta'], ['tvmaze', 'TVmaze']];
+const ANIME_OPTS: Array<[string, string]> = [['off', 'Off · use add-ons'], ['mal', 'MyAnimeList'], ['anilist', 'AniList'], ['kitsu', 'Kitsu'], ['tmdb', 'TMDB'], ['tvdb', 'TVDB']];
 
 const CSS = `
 :root { --fg:#f3f3f3; --bg:#0a0a0a; --mute:#9d9d9d; --line:#2b2b2b; --faint:#1d1d1d; --accent:#eeeeee; color-scheme:dark; }
@@ -311,6 +311,11 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
 @media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
+.tracking-storage { padding:0 0 18px; margin:0 0 24px; border-bottom:1px solid var(--line); }
+.tracking-storage h3 { margin:0 0 8px; }
+.tracking-storage .note { margin:0 0 8px; }
+.tracking-storage .hint { margin:0; }
+.tracker-service .svc > .f:last-child { margin-bottom:0; }
 /* Shared layout rhythm and dedicated library management surfaces. */
 main { max-width:1120px; padding-bottom:64px; }
 .tabs-row { gap:24px; padding-bottom:20px; border-bottom:1px solid var(--faint); }
@@ -581,7 +586,6 @@ function body(): string {
     <div class="f"><div class="key-row"><label class="t" for="k-tvdb">TVDB</label><span class="pill" data-key-status="tvdb">Not set</span></div><input type="password" id="k-tvdb" data-k="keys.tvdb" class="key" autocomplete="off"><a class="key-link" href="https://thetvdb.com/api-information" target="_blank" rel="noopener">Get a TVDB key ↗</a></div>
     <div class="f"><div class="key-row"><label class="t" for="k-fanart">Fanart.tv</label><span class="pill" data-key-status="fanart">Not set</span></div><input type="password" id="k-fanart" data-k="keys.fanart" class="key" autocomplete="off"><a class="key-link" href="https://fanart.tv/get-an-api-key/" target="_blank" rel="noopener">Get a Fanart.tv key ↗</a></div>
     <div class="f"><div class="key-row"><label class="t" for="k-rpdb">RPDB</label><span class="pill" data-key-status="rpdb">Not set</span></div><input type="password" id="k-rpdb" data-k="keys.rpdb" class="key" autocomplete="off"><a class="key-link" href="https://ratingposterdb.com/" target="_blank" rel="noopener">Get a RPDB key ↗</a></div>
-    <div class="f"><div class="key-row"><label class="t" for="k-mdblist">MDBList</label><span class="pill" data-key-status="mdblist">Not set</span></div><input type="password" id="k-mdblist" data-k="keys.mdblist" class="key" autocomplete="off"><a class="key-link" href="https://mdblist.com/preferences/" target="_blank" rel="noopener">Get a MDBList key ↗</a></div>
   </div>
   <p class="hint"><button class="q" type="button" id="show-keys">Show keys</button> Keys are stored on your Worker and forwarded only to their providers.</p>
   <h3>Providers</h3>
@@ -590,9 +594,9 @@ function body(): string {
     <div class="f"><label class="t" for="p-series">Series</label><div class="sel"><select id="p-series" data-k="providers.series">${options(PROVIDER_OPTS)}</select></div></div>
     <div class="f"><label class="t" for="p-anime">Anime</label><div class="sel"><select id="p-anime" data-k="providers.anime">${options(ANIME_OPTS)}</select></div></div>
   </div>
-  <p class="note">Where movie, series and anime details come from. Cinemeta always fills in anything the chosen provider lacks.</p>
+  <p class="note">Optional metadata providers start off. With Off selected, your add-ons supply the details. Choose a provider to override them.</p>
   <h3>Artwork priority</h3>
-  <p class="note">Ticked sources are used, top first. Locked sources are skipped until their key exists.</p>
+  <p class="note">All artwork overrides start off. Enable the sources you want, top first. With none selected, the original title artwork is kept.</p>
   <label class="t">Posters</label>
   <div class="list" data-order="artwork.posters" data-options="tmdb,fanart,tvdb,rpdb,metahub"></div>
   <label class="t">Backgrounds</label>
@@ -612,7 +616,7 @@ function body(): string {
   </div>
   <details class="service-card catalog-settings" data-advanced><summary>Your lists</summary><div class="svc">
   <div class="two">
-    <div class="f" data-needs="mdblist"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Add your MDBList key in Metadata.</p></div>
+    <div class="f" data-needs="mdblist"><label class="t" for="l-mdblist">MDBList list ids</label><textarea id="l-mdblist" data-lines="lists.mdblist" placeholder="one per line" spellcheck="false"></textarea><p class="hint">Add your MDBList key in Scrobbling.</p></div>
     <div class="f" data-needs="trakt"><label class="t" for="l-trakt">Trakt list ids</label><textarea id="l-trakt" data-lines="lists.trakt" placeholder="user/list-slug, one per line" spellcheck="false"></textarea><p class="hint">Requires a Trakt client ID.</p></div>
     <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb">PublicMetaDB list IDs</label><textarea id="l-pmdb" data-lines="lists.publicmetadb" placeholder="one per line" spellcheck="false"></textarea></div>
     <div class="f" data-needs="publicmetadb"><label class="t" for="l-pmdb-picks">PublicMetaDB pick IDs</label><textarea id="l-pmdb-picks" data-lines="lists.publicmetadbPicks" placeholder="one per line" spellcheck="false"></textarea></div>
@@ -686,10 +690,11 @@ function body(): string {
 
 <section id="s-tracking">
   <h2><small>5</small>Scrobbling</h2>
-  <div class="b"><button type="button" id="delivery-check">Check delivery status</button><button type="button" id="delivery-retry" hidden>Retry failed updates</button></div><p class="status" id="delivery-status" aria-live="polite"></p>
+  <p class="note section-intro">Your server keeps your watch progress. Trackers are optional.</p>
+  <div class="tracking-storage"><h3>Where your progress is stored</h3><p id="tracking-storage-note" class="note"></p><p class="hint">A primary tracker adds its history and receives new watch updates for enabled media types. Server records take precedence. Profiles with separate history stay on the server and do not sync with trackers.</p></div>
   <div class="two">
-    <div class="f"><label class="t" for="tr-primary">Primary tracker</label><div class="sel"><select id="tr-primary" data-k="trackers.primary"><option value="off">Off</option><option value="trakt">Trakt</option><option value="simkl">Simkl</option><option value="mdblist">MDBList</option><option value="mal">MyAnimeList</option><option value="anilist">AniList</option></select></div><p class="hint">Used for continue watching and watched status.</p></div>
-    <div class="f"><label class="t">Also scrobble to</label>
+    <div class="f"><label class="t" for="tr-primary">History source / primary tracker</label><div class="sel"><select id="tr-primary" data-k="trackers.primary"><option value="off">Server only (default)</option><option value="trakt">Trakt</option><option value="simkl">Simkl</option><option value="mdblist">MDBList</option><option value="publicmetadb">PublicMetaDB</option><option value="mal">MyAnimeList</option><option value="anilist">AniList</option></select></div><p class="hint">Used for Continue Watching and watched status. Add the service’s credentials below to select it.</p></div>
+    <div class="f"><label class="t">Also send watch updates to</label>
       <div class="checks" id="scrobble">
         <label data-needs="trakt"><input type="checkbox" data-arr="trackers.scrobbleTo" value="trakt"> Trakt</label>
         <label data-needs="simkl"><input type="checkbox" data-arr="trackers.scrobbleTo" value="simkl"> Simkl</label>
@@ -701,35 +706,34 @@ function body(): string {
     </div>
   </div>
 
-  <p class="note">Progress is sent when playback changes. If the player closes without reporting a stop, recent progress may be lost.</p>
-  <details class="service-card"><summary>Media types per service</summary><div class="svc">
+  <p class="note" id="tracking-sync-status" role="status"></p>
+  <details class="service-card"><summary>Sync status and delivery</summary><div class="svc"><p class="note">Server progress is saved as your player reports it. Tracker updates are queued for delivery. PublicMetaDB receives stopped positions; MyAnimeList and AniList receive completed anime progress.</p><div class="b"><button type="button" id="delivery-check">Check delivery status</button><button type="button" id="delivery-retry" hidden>Retry failed updates</button></div><p class="status" id="delivery-status" aria-live="polite"></p></div></details>
+  <details class="service-card"><summary>Media types to send</summary><div class="svc"><p class="hint">These filters apply only to trackers enabled above. Checked media types do not enable a tracker.</p>
     ${[['trakt','Trakt'],['simkl','Simkl'],['mdblist','MDBList'],['publicmetadb','PublicMetaDB'],['mal','MyAnimeList'],['anilist','AniList']].map(([key,label]) => `<h3>${label}</h3><div class="checks"><label><input type="checkbox" data-k="trackers.media.${key}.movie"> Movies</label><label><input type="checkbox" data-k="trackers.media.${key}.series"> Series</label></div>`).join('')}
   </div></details>
-  <div class="svc" id="svc-trakt">
-    <h3>Trakt</h3>
+  <details class="service-card tracker-service" id="svc-trakt"><summary>Trakt</summary><div class="svc">
     <p class="note">Create an app at trakt.tv/oauth/applications with redirect <span class="mono">urn:ietf:wg:oauth:2.0:oob</span>, then paste its id and secret.</p>
     <div class="two">
       <div class="f"><label class="t" for="trakt-id">Client id</label><input type="text" id="trakt-id" data-ui="trakt.clientId" autocomplete="off" spellcheck="false"></div>
       <div class="f"><label class="t" for="trakt-secret">Client secret</label><input type="password" id="trakt-secret" data-ui="trakt.clientSecret" autocomplete="off"></div>
     </div>
     <div class="row"><button type="button" id="trakt-connect">Connect</button><button type="button" id="trakt-refresh">Refresh token</button><button type="button" id="trakt-disconnect">Disconnect</button></div>
-    <p class="hint">Refresh here when your token expires, then replace the install link in your player. Playback never rotates credentials in the background.</p>
+    <p class="hint">Refresh here when your token expires. Your server saves the updated credentials.</p>
     <div id="trakt-code" hidden><div class="code" id="trakt-usercode"></div><p class="note">Enter the code at <a id="trakt-verify" target="_blank" rel="noopener"></a>. This page keeps checking until Trakt confirms.</p></div>
     <p class="status" id="trakt-status"></p>
-  </div>
+  </div></details>
 
-  <div class="svc"><h3>MDBList &amp; PublicMetaDB</h3><p class="note">MDBList uses the key in Metadata. PublicMetaDB receives stopped positions and watched changes; choose another service for your library history.</p><div class="f"><label class="t" for="k-publicmetadb">PublicMetaDB API key</label><input type="password" id="k-publicmetadb" data-k="keys.publicmetadb" autocomplete="off"></div></div>
-  <div class="svc" id="svc-simkl">
-    <h3>Simkl</h3>
+  <details class="service-card tracker-service" id="svc-mdblist"><summary>MDBList</summary><div class="svc"><p class="note">Use MDBList for watched history and resume positions, or only send it watch updates. This key also enables your MDBList catalogs.</p><div class="f"><div class="key-row"><label class="t" for="k-mdblist">MDBList API key</label><span class="pill" data-key-status="mdblist">Not set</span></div><input type="password" id="k-mdblist" data-k="keys.mdblist" autocomplete="off" spellcheck="false"><a class="key-link" href="https://mdblist.com/preferences/" target="_blank" rel="noopener">Get an MDBList key ↗</a></div></div></details>
+  <details class="service-card tracker-service" id="svc-publicmetadb"><summary>PublicMetaDB</summary><div class="svc"><p class="note">Use PublicMetaDB for watched history and resume positions, or only send it watch updates. Playback positions are sent when you stop. PublicMetaDB applies its own resume-completion rules.</p><p class="hint">To display imported titles, use an add-on that supports TMDB IDs, or enable TMDB in Metadata.</p><div class="f"><div class="key-row"><label class="t" for="k-publicmetadb">PublicMetaDB API key</label><span class="pill" data-key-status="publicmetadb">Not set</span></div><input type="password" id="k-publicmetadb" data-k="keys.publicmetadb" autocomplete="off" spellcheck="false"><p class="hint">Create a key in PublicMetaDB → Settings → API.</p><a class="key-link" href="https://publicmetadb.com/api-docs" target="_blank" rel="noopener">PublicMetaDB API setup ↗</a></div></div></details>
+  <details class="service-card tracker-service" id="svc-simkl"><summary>Simkl</summary><div class="svc">
     <p class="note">Create an app at simkl.com/settings/developer and paste its client id.</p>
     <div class="f"><label class="t" for="simkl-id">Client id</label><input type="text" id="simkl-id" data-ui="simkl.clientId" autocomplete="off" spellcheck="false"></div>
     <div class="row"><button type="button" id="simkl-connect">Connect</button><button type="button" id="simkl-disconnect">Disconnect</button></div>
     <div id="simkl-code" hidden><div class="code" id="simkl-usercode"></div><p class="note">Enter the code at <a id="simkl-verify" target="_blank" rel="noopener"></a>. This page keeps checking until Simkl confirms.</p></div>
     <p class="status" id="simkl-status"></p>
-  </div>
+  </div></details>
 
-  <div class="svc" id="svc-mal">
-    <h3>MyAnimeList</h3>
+  <details class="service-card tracker-service" id="svc-mal"><summary>MyAnimeList</summary><div class="svc">
     <p class="note">Create an API client at myanimelist.net/apiconfig (type: other). Open the authorisation page, approve, then paste the <span class="mono">code</span> from the address you land on.</p>
     <div class="two">
       <div class="f"><label class="t" for="mal-id">Client id</label><input type="text" id="mal-id" data-ui="mal.clientId" autocomplete="off" spellcheck="false"></div>
@@ -740,21 +744,20 @@ function body(): string {
     <div class="row"><div class="f"><label class="t" for="mal-code">Authorisation code</label><input type="text" id="mal-code" autocomplete="off" spellcheck="false"></div><div class="f" style="flex:0"><button type="button" id="mal-exchange">Exchange</button></div></div>
     <div class="row"><button type="button" id="mal-disconnect">Disconnect</button></div>
     <p class="status" id="mal-status"></p>
-  </div>
+  </div></details>
 
-  <div class="svc" id="svc-anilist">
-    <h3>AniList</h3>
+  <details class="service-card tracker-service" id="svc-anilist"><summary>AniList</summary><div class="svc">
     <p class="note">Create a client at anilist.co/settings/developer with redirect <span class="mono">https://anilist.co/api/v2/oauth/pin</span>. Open the link, approve, and paste the token AniList shows you.</p>
     <div class="f"><label class="t" for="anilist-id">Client id</label><input type="text" id="anilist-id" data-ui="anilist.clientId" autocomplete="off" spellcheck="false"></div>
     <p class="hint"><a id="anilist-link" target="_blank" rel="noopener">Open AniList authorisation page</a></p>
     <div class="row"><div class="f"><label class="t" for="anilist-token">Access token</label><input type="password" id="anilist-token" autocomplete="off"></div><div class="f" style="flex:0"><button type="button" id="anilist-save">Save</button></div></div>
     <div class="row"><button type="button" id="anilist-disconnect">Disconnect</button></div>
     <p class="status" id="anilist-status"></p>
-  </div>
+  </div></details>
 </section>
 
 <section id="s-search">
-  <h2><small>6</small>Search</h2>
+  <h2><small>6</small>Search</h2><p class="note">Extra search providers start off. Only the sources you enable here are queried by Rill’s built-in search.</p>
   <label class="t">Providers</label>
   <div class="checks">
     <label data-needs="tmdb"><input type="checkbox" data-arr="search.providers" value="tmdb"> TMDB</label>
@@ -962,7 +965,7 @@ const JS = String.raw`
   function updateSummary() {
     $('summary-catalogs').textContent = cfg.catalogs.filter(function(c) { return c.enabled; }).length;
     $('summary-addons').textContent = cfg.addons.stream.length;
-    $('summary-tracker').textContent = {off:'Off',trakt:'Trakt',simkl:'Simkl',mdblist:'MDBList',mal:'MyAnimeList',anilist:'AniList'}[cfg.trackers.primary] || 'Off';
+    $('summary-tracker').textContent = {off:'Server only',trakt:'Trakt',simkl:'Simkl',mdblist:'MDBList',publicmetadb:'PublicMetaDB',mal:'MyAnimeList',anilist:'AniList'}[cfg.trackers.primary] || 'Off';
   }
   function changed() {
     cfg.revision=Math.max(Date.now(),(cfg.revision || 0)+1);
@@ -992,6 +995,7 @@ const JS = String.raw`
   function initial(name) { return (name || '?').trim().charAt(0).toUpperCase() || '?'; }
   function statusText() { return $('draft-status').textContent || ''; }
   function renderAccount() {
+    refreshTrackingSummary();
     var host = $('account'), side = $('drawer-account'); clear(host); clear(side);
     if (account.durable && account.signedIn) {
       var chip = el('button', { type: 'button', class: 'chip', 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [
@@ -1535,7 +1539,7 @@ const JS = String.raw`
     tvdb: { label: 'TVDB key', tab: 'meta', field: 'k-tvdb', ok: function () { return !!cfg.keys.tvdb; } },
     fanart: { label: 'Fanart.tv key', tab: 'meta', field: 'k-fanart', ok: function () { return !!cfg.keys.fanart; } },
     rpdb: { label: 'RPDB key', tab: 'meta', field: 'k-rpdb', ok: function () { return !!cfg.keys.rpdb; } },
-    mdblist: { label: 'MDBList key', tab: 'meta', field: 'k-mdblist', ok: function () { return !!cfg.keys.mdblist; } },
+    mdblist: { label: 'MDBList key', tab: 'tracking', field: 'k-mdblist', ok: function () { return !!cfg.keys.mdblist; } },
     publicmetadb: { label: 'PublicMetaDB key', tab: 'tracking', field: 'k-publicmetadb', ok: function () { return !!cfg.keys.publicmetadb; } },
     trakt: { label: 'Trakt account', tab: 'tracking', field: 'trakt-id', ok: function () { return !!(cfg.trackers.trakt && cfg.trackers.trakt.accessToken); } },
     simkl: { label: 'Simkl account', tab: 'tracking', field: 'simkl-id', ok: function () { return !!(cfg.trackers.simkl && cfg.trackers.simkl.accessToken); } },
@@ -1566,6 +1570,18 @@ const JS = String.raw`
     else if (hint) hint.remove();
     if (select._picker) select._picker.sync();
   }
+  function refreshTrackingSummary() {
+    var storage=$('tracking-storage-note');if(!storage)return;
+    storage.textContent=account.durable ? 'Resume positions and watched status are stored in your Rill server’s database, including when Server only is selected. They are available to your other Jellyfin clients.' : 'This preview has no server database. On a deployed Rill server, resume positions and watched status are stored in your server’s database, even without a tracker.';
+    var names={trakt:'Trakt',simkl:'Simkl',mdblist:'MDBList',publicmetadb:'PublicMetaDB',mal:'MyAnimeList',anilist:'AniList'}, primary=cfg.trackers.primary;
+    var targets=Array.from(new Set([primary].concat(cfg.trackers.scrobbleTo || []))).filter(function(name){return name!=='off' && needOk(name);});
+    var sending=targets.filter(function(name){var media=(cfg.trackers.media || {})[name] || {};return media.movie!==false || media.series!==false;});
+    var text=primary==='off'?'History source: server only.':needOk(primary)?'History source: '+names[primary]+' plus server records.':'The selected tracker is not connected; server history is used.';
+    text+=sending.length?' Watch updates are sent to '+sending.map(function(name){return names[name];}).join(', ')+'.':' No watch updates are sent to external trackers.';
+    if(primary==='mal' || primary==='anilist')text+=' This tracker supplies anime progress; exact resume positions stay on the server.';
+    $('tracking-sync-status').textContent=text;
+    all('[data-arr="trackers.scrobbleTo"]').forEach(function(input){input.checked=input.value===primary || (cfg.trackers.scrobbleTo || []).includes(input.value);input.disabled=input.value===primary || (!needOk(input.value) && !input.checked);});
+  }
   function refreshNeeds() {
     all('[data-needs]').forEach(function (node) {
       var n = node.getAttribute('data-needs'), ok = needOk(n);
@@ -1573,12 +1589,13 @@ const JS = String.raw`
       var tag = node.querySelector(':scope > .need-tag');
       if (!ok && !tag) node.appendChild(needTag(n, node.tagName === 'LABEL'));
       if (ok && tag) tag.remove();
-      all('input[type=checkbox]', node).forEach(function (i) { i.disabled = !ok; });
+      all('input[type=checkbox]', node).forEach(function (i) { i.disabled = !ok && !i.checked; });
     });
-    ['p-movie', 'p-series'].forEach(function (id) { lockSelect($(id), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. Cinemeta is used until you add one.'; }); });
-    lockSelect($('p-anime'), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. MyAnimeList is used until you add one.'; });
+    ['p-movie', 'p-series'].forEach(function (id) { lockSelect($(id), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. Choose Off or another provider until you add one.'; }); });
+    lockSelect($('p-anime'), function (v) { return OPTION_NEEDS[v]; }, function (v) { return (LABELS[v] || v) + ' needs a key. Choose Off or another provider until you add one.'; });
     lockSelect($('tr-primary'), function (v) { return v === 'off' ? null : v; }, function (v) { return 'Connect ' + NEEDS[v].label.replace(' account', '') + ' below to use it as your primary tracker.'; });
     all('[data-order]').forEach(renderOrder);
+    refreshTrackingSummary();
     all('[data-key-status]').forEach(function (pill) { var on = !!cfg.keys[pill.getAttribute('data-key-status')]; pill.textContent = on ? 'Set' : 'Not set'; pill.classList.toggle('on', on); });
     var req = $('rec-req');
     if (req) { clear(req); [['ai', 'AI key and model'], ['tmdb', 'TMDB key']].forEach(function (r) { var ok = needOk(r[0]); req.appendChild(el('span', { class: 'req' + (ok ? ' on' : ''), text: (ok ? '✓ ' : '○ ') + r[1] })); }); }
@@ -1593,7 +1610,7 @@ const JS = String.raw`
     chosen.concat(rest).forEach(function (v, i) {
       var on = i < chosen.length;
       var need = OPTION_NEEDS[v], locked = !!need && !needOk(need);
-      var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (LABELS[v] || v), disabled: locked });
+      var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (LABELS[v] || v), disabled: locked && !on });
       cb.checked = on;
       cb.addEventListener('change', function () {
         var arr = chosen.slice();
@@ -1807,7 +1824,6 @@ const JS = String.raw`
           $('trakt-code').hidden = true;
           if (t.error) { status('trakt', t.error); return; }
           cfg.trackers.trakt = { clientId: id, clientSecret: secret, accessToken: t.accessToken, refreshToken: t.refreshToken, expiresAt: t.expiresAt, username: t.username };
-          if (cfg.trackers.primary === 'off') { cfg.trackers.primary = 'trakt'; $('tr-primary').value = 'trakt'; }
           renderTrackerStates(); changed();
         });
       }
@@ -1845,7 +1861,6 @@ const JS = String.raw`
           $('simkl-code').hidden = true;
           if (t.error) { status('simkl', t.error); return; }
           cfg.trackers.simkl = { clientId: id, accessToken: t.accessToken };
-          if (cfg.trackers.primary === 'off') { cfg.trackers.primary = 'simkl'; $('tr-primary').value = 'simkl'; }
           renderTrackerStates(); changed();
         });
       }
@@ -1878,7 +1893,6 @@ const JS = String.raw`
       if (r.error) { status('mal', r.error); return; }
       cfg.trackers.mal = { clientId: ui.mal.clientId, accessToken: r.accessToken, refreshToken: r.refreshToken, expiresAt: r.expiresAt };
       $('mal-code').value = ''; $('mal-url').textContent = '';
-      if (cfg.trackers.primary === 'off') { cfg.trackers.primary = 'mal'; $('tr-primary').value = 'mal'; }
       renderTrackerStates(); changed();
     });
   });
@@ -1890,7 +1904,6 @@ const JS = String.raw`
     if (!tok) { status('anilist', 'Paste the token first.'); return; }
     cfg.trackers.anilist = { accessToken: tok };
     $('anilist-token').value = '';
-    if (cfg.trackers.primary === 'off') { cfg.trackers.primary = 'anilist'; $('tr-primary').value = 'anilist'; }
     renderTrackerStates(); changed();
   });
   $('anilist-disconnect').addEventListener('click', function () { delete cfg.trackers.anilist; dropTracker('anilist'); });
