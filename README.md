@@ -60,9 +60,11 @@ Your username can contain 1–32 letters, numbers, dots, dashes or underscores.
 
 ### Updates
 
-Your copy includes a **Sync with upstream** workflow that checks the original Rill repository daily at **04:17 UTC**. Automatic updates depend on GitHub Actions being enabled, the sync succeeding, and Cloudflare's automatic deployments remaining connected.
+**Installing with Deploy to Cloudflare does not guarantee automatic updates from the original Rill repository.** An inspected installation created by this flow contained neither the GitHub Actions workflow nor the original Git history. Such a copy has no **Sync with upstream** action or **Sync fork** button. Copying the existing workflow into it is insufficient: that workflow requires shared Git history to merge updates.
 
-To update manually without waiting for the daily check:
+These installations currently need a separate update setup that supports their imported repository and preserves their Worker name, D1 database binding, and database ID in `wrangler.jsonc`. An update procedure for that installation path has not yet been verified.
+
+For a fork or clone that **retains the original Git history and includes `.github/workflows/sync.yml`**, the workflow checks for updates daily at **04:17 UTC** while GitHub Actions is enabled. To run that workflow manually:
 
 1. Open **your own copy** of the repository on GitHub and select **Actions**. Enable workflows if GitHub prompts you to do so.
 2. Select **Sync with upstream** in the sidebar.
@@ -70,9 +72,9 @@ To update manually without waiting for the daily check:
 4. Wait for the workflow to finish successfully. If it pulls new changes, Cloudflare should automatically build and deploy them.
 5. In Cloudflare, open **Workers & Pages → your Worker → Deployments** and confirm that the new deployment succeeded.
 
-Redeploying from Cloudflare alone uses the code already in your GitHub copy; it does not fetch updates from the original Rill repository. Run the sync workflow first.
+Redeploying from Cloudflare alone uses the code already in your GitHub copy; it does not fetch updates from the original Rill repository.
 
-If the sync fails, open its run in GitHub Actions and check the error. Changes you made to the same files as the original repository may need to be resolved manually. If the workflow reports **Already up to date**, there are no new changes to deploy.
+If the sync fails, open its run in GitHub Actions and check the error. Changes you made to the same files as the original repository may need to be resolved manually. If the workflow reports **Already up to date**, there are no new changes to deploy. The workflow intentionally skips the original `mrtxiv/Rill` repository; it only updates downstream copies.
 
 [About running GitHub workflows manually](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
