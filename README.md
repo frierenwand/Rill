@@ -1,119 +1,61 @@
 # Rill
 
+Deploy and manage your own installation on Cloudflare Workers.
+
+## 1. Create your accounts
+
+You need:
+
+- A [GitHub account](https://github.com/signup) to hold your copy of this repository.
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up) to host the Worker and its D1 database.
+
+Sign in to both accounts before continuing. This deployment runs entirely through your browser; you do not need to install development tools on your computer. Cloudflare supplies a `workers.dev` address, so you do not need to buy or connect a domain. See [Cloudflare's address documentation](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+
+## 2. Start the deployment
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mrtxiv/Rill)
 
-Rill is a single Cloudflare Worker that does two things:
+1. Select **Deploy to Cloudflare** above.
+2. Choose the Cloudflare account that will own the installation if you have more than one.
+3. Connect your GitHub account when prompted. Authorize the **Cloudflare Workers & Pages** GitHub app so Cloudflare can create and build your repository. If using a GitHub organization, you may need its administrator to approve access. See [GitHub connection permissions](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/github-integration/#manage-access).
+4. Choose the owner and name for your new GitHub repository. Cloudflare creates the copy for you; no separate fork is needed.
+5. Review the Worker name and D1 database listed in the deployment form. You can keep the suggested names or choose unused names in your account.
 
-- **Stremio addon** serving metadata, search and catalogs from TMDB, TVDB, TVmaze, Trakt, Simkl, MDBList, Letterboxd, MovieLens, FlixPatrol, PublicMetaDB, MAL, AniList and Kitsu, plus your own custom and merged catalogs.
-- **Jellyfin-compatible server** so any Jellyfin client can browse those catalogs and direct-play the HTTP streams returned by your Stremio stream addons, with watch history, profiles and scrobbling to Trakt, Simkl, MDBList, MAL, AniList and PublicMetaDB.
+Cloudflare reads this repository's configuration, creates the required resources and connects them to the Worker. This is the official [Deploy to Cloudflare flow](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
 
-There is no server to run. Cloudflare D1 (serverless SQLite) stores history, profiles, sessions, refreshed OAuth credentials and the tracker delivery queue. The Worker Cache API is only a disposable accelerator.
+## 3. Check the deployment settings
 
-## Deploy
+Keep the detected defaults. If Cloudflare asks you to enter build settings, use:
 
-Click **Deploy to Cloudflare** above and sign in. Cloudflare copies this repository into your GitHub account, creates the D1 database, deploys the Worker and gives you a `*.workers.dev` URL. Rill creates its own tables and signing key on first start. Pushes to your copy redeploy automatically.
-
-That is all. The free plan is enough for a personal installation.
-
-### Updates
-
-Your copy checks this repository once a day, merges new commits and Cloudflare redeploys the Worker. Database changes apply themselves on the next request. Nothing to configure. To update right away, open **Actions → Sync with upstream → Run workflow** in your copy.
-
-GitHub pauses scheduled workflows in repositories with no activity for 60 days. If the Actions tab shows a banner saying so, click **Enable** and the updates resume.
-
-If your copy predates this file, add it once and updates run from then on:
-
-```bash
-git clone https://github.com/YOUR_USER/Rill && cd Rill
-curl -fsSLo .github/workflows/sync.yml --create-dirs https://raw.githubusercontent.com/mrtxiv/Rill/main/.github/workflows/sync.yml
-git add .github && git commit -m "Sync with upstream" && git push
-```
-
-Optional secrets, under the Worker's **Settings → Variables and Secrets**:
-
-| Name | Purpose |
+| Setting | Value for this project |
 | --- | --- |
-| `TMDB_KEY` | Server-wide TMDB API key, used when a configuration has none. You can also enter it in the settings page instead. |
-| `RILL_SECRET` | Override the auto-generated Jellyfin token signing key, for example to keep sessions valid across database resets. |
+| Root directory | Repository root (`/`) |
+| Build command | Leave empty |
+| Deploy command | `npm run deploy` |
+| D1 database binding | `DB` — keep this exact name |
+| Required variables or secrets | None for deployment and first login |
 
-### Deploy with the Wrangler CLI instead
+The database name can change, but the binding must remain `DB`. No manual SQL import or migration command is needed: the application creates its tables on first use.
 
-```bash
-npm install
-npx wrangler login
-npm run deploy
-```
+Select **Deploy** and wait for the build and deployment to finish successfully. Cloudflare installs dependencies and runs the deployment command for you. If you need to change build settings later, open your Worker and go to **Settings → Build**. See [Cloudflare's build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
 
-Wrangler provisions the D1 database on the first deploy. Node.js 20 or newer is required.
+## 4. Open your installation
 
-## Configure
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), open **Workers & Pages** and select your deployed Worker.
+2. Open **Settings → Domains & Routes** and find its `workers.dev` address. It follows the form `https://your-worker.your-subdomain.workers.dev`. Open the actual address shown for your Worker. See [workers.dev configuration](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+3. On the first visit, create an installation account. Choose a username using 1–32 letters, numbers, dots, dashes or underscores, and a password of at least 8 characters. This account is separate from your GitHub and Cloudflare accounts.
+4. Once the settings page opens, deployment is complete. Bookmark the address to return to your installation.
 
-The settings page has two modes, switched at the top.
+## If deployment fails
 
-**Simple** (default) needs no API keys and no accounts. Paste your Stremio catalog, metadata, stream and subtitle addons, switch the catalogs you want on or off and order them, set a Jellyfin password and you are done. Cinemeta and Metahub fill in details and artwork automatically.
+| Problem | Where to check |
+| --- | --- |
+| GitHub account or repository is unavailable | Check the Cloudflare Workers & Pages app's access in [GitHub → Settings → Applications](https://github.com/settings/installations). For an organization, ask its administrator to approve the connection. |
+| Build or deployment fails | Open the failed build from your Worker's **Deployments** tab and read the error log. Confirm the settings above. Cloudflare's [build troubleshooting guide](https://developers.cloudflare.com/workers/ci-cd/builds/troubleshoot/) covers common errors. |
+| **Durable storage is not configured** | Open your Worker's **Bindings** tab and check that a D1 database is connected as `DB`. If missing, use **Add binding → D1 database**, enter `DB` as the variable name, and select the database created for this installation. See [Cloudflare's D1 binding instructions](https://developers.cloudflare.com/d1/get-started/#3-bind-your-worker-to-your-d1-database). |
+| The deployed address does not open | Confirm deployment succeeded and that the `workers.dev` route is enabled under **Settings → Domains & Routes**. Open the production address shown there. |
 
-**Advanced** adds Scrobbling, Metadata and Catalogs: Trakt, Simkl, MDBList, MyAnimeList and AniList tracking; TMDB, TVDB, Fanart and RPDB keys with provider and artwork priority; anime lists; list sources such as MDBList, Letterboxd, TVDB and MovieLens; custom and merged catalogs; AI recommendations. API-backed catalogs only appear in your apps while Advanced is on.
-
-Tip for operators: setting the optional `TMDB_KEY` secret lets Simple-mode users resolve titles that addons identify only by TMDB id.
-
-**One account, every device.** The first time you open your Worker it asks you to create an account: a username and a password of at least 8 characters. That single account protects the settings page and is what you type into Jellyfin apps. Every change saves to your Worker's database automatically, nothing is kept in the browser, and any device that signs in sees the same configuration. There is no registration afterwards, so nobody else can create an account or open your settings. Forgot the password? Delete the row in the `owner` table of your D1 database in the Cloudflare dashboard and the setup screen returns.
-
-Then connect your apps:
-
-1. **Stremio:** install the manifest link from the Connect tab.
-2. **Jellyfin clients:** add just the Worker URL (for example, `https://your-worker.workers.dev`) as a server and sign in with the username and password from the Jellyfin tab. The server loads your saved settings automatically. Quick Connect is supported.
-
-Configuration links carry credentials. Share the Worker URL, never the install link.
-
-## Local development
-
-```bash
-npm install
-npm run dev
-```
-
-Tables are created automatically in the local database. Optional local secrets go in a `.dev.vars` file (see `.dev.vars.example`).
-
-## Free plan notes
-
-Rill is built to run on the Workers Free plan for a personal installation:
-
-- All scheduled work stays within D1's 50-statement limit per invocation. If you upgrade to Workers Paid, set the variable `D1_QUERY_BUDGET` to `1000`.
-- The one-minute cron trigger uses about 1,440 of the 100,000 daily free requests.
-- Heavy features can exceed the free CPU and request limits: cold merged catalogs, very large history imports and AI recommendation builds. Those may need Workers Paid.
-
-See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
-
-## Features
-
-**Catalogs.** Add list links or IDs from any supported provider and enable the returned catalogs. Custom catalogs support provider filters or ordered merges of existing catalogs. Date filters accept expressions such as `today-7d`, `today-3m` and `today+1y`. Collections expose their member titles in both Stremio and Jellyfin.
-
-**Jellyfin collections.** Build box set libraries for Jellyfin clients under the Jellyfin tab. A collection is a library of its own, typed as box sets so clients draw it as one, with its own cover, backdrop, description and default tile shape (poster 2:3, landscape 16:9 or square). Each tile inside is a row of its own with its own name, artwork and shape override. Tile members come from your catalogs (optionally filtered by genre), an actor or director's TMDB credits, a franchise (TMDB collection), a studio, a network, or raw TMDB discover filters, in any mix and order with duplicates removed. Auto rows expand a whole set of tiles at request time: every genre of a catalog or of TMDB, decades, popular actors, studios, streaming networks and franchises, with a cap and a shape per row. Covers resolve on their own when none is set: actor photos, studio and network logos, franchise posters, otherwise the first member's artwork. Starter packs create finished libraries in one click, collections can be duplicated, restricted to profiles, and exported or imported as JSON or from a link. Everything except catalog-based tiles needs a TMDB key.
-
-**Recommendations.** Opt-in Gemini or OpenRouter with your own model and key. Choose which viewing history to use, vote thresholds and ordering. Cached results are durable and exclude titles you have since watched. Calls to the model provider may incur their charges.
-
-**Tracking.**
-- Trakt, Simkl and MDBList receive start, pause, resume and stop. MAL and AniList receive completed watches and manual changes. PublicMetaDB receives stopped positions and watched changes.
-- Playback reports are stored durably first, then delivered to providers in order with retries. Failed deliveries stop after ten attempts and are listed under **Scrobbling → Check delivery status**.
-- Refreshed Trakt and MAL tokens are stored in D1, so token rotation never requires a new install link.
-
-**Profiles.** Each profile has its own login. Profiles can share the account's history and tracking, or keep an independent local history with no tracker writes. Profiles can restrict catalogs and set an age-rating cap.
-
-**Anime.** Episode mapping uses Anime-Lists ranges, offsets and explicit overrides, including specials, split and merged episodes, with MAL and AniList progress calculated per entry.
-
-**Playback.** Direct play of HTTP streams from your configured addons. Torrent streams, transcoding and streams that need custom HTTP headers are not supported.
-
-## Layout
-
-```
-src/addon      Stremio manifest, catalogs, search, discovery, collections, recommendations
-src/jellyfin   Jellyfin REST facade: auth, library, playback, sessions, people, segments
-src/meta       Metadata providers and anime mapping
-src/trackers   Trakt, Simkl, MDBList, MAL, AniList, PublicMetaDB
-src/storage    D1 access: history, deliveries, credentials, scheduled work, budget
-src/ui         Configuration page
-migrations     D1 schema
-```
+Hosting is in your Cloudflare account. You manage the installation and any associated charges; review the current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) for your plan.
 
 ## License
 

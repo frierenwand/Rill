@@ -31,7 +31,7 @@ export async function buildManifest(ctx: Ctx): Promise<Manifest> {
     id: ADDON_ID,
     version: ADDON_VERSION,
     name,
-    description: `${name}: metadata, catalogs, personal lists and search for Stremio, backed by TMDB, TVDB, MAL, AniList, Kitsu, Trakt, Simkl and MDBList.`,
+    description: `${name}: software you deploy and manage in your own Cloudflare account.`,
     logo: LOGO_DATA_URI,
     resources: [
       'catalog',

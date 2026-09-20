@@ -17,6 +17,6 @@
     "typescript": "^5.6.0",
     "wrangler": "^4.0.0"
   },
-  "description": "Cloudflare Worker: Stremio metadata/catalog addon and Jellyfin-compatible direct-play server with tracker scrobbling.",
+  "description": "Software you deploy and manage in your own Cloudflare account.",
   "license": "MIT"
 }
