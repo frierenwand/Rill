@@ -561,11 +561,12 @@ export class Library {
       if (g.kind === 'movie') {
         const st = idx.movie(keys);
         if (!st.watched && !st.resume) continue;
+        const runtime = st.resume?.runtimeMs && st.resume.runtimeMs > 0 ? st.resume.runtimeMs * 10_000 : rt;
         item.UserData = userData(id, {
           played: Boolean(st.watched),
           playCount: st.watched?.plays ?? 0,
-          positionTicks: st.resume?.positionMs !== undefined ? st.resume.positionMs * 10_000 : st.resume && rt ? Math.round((rt * st.resume.progress) / 100) : 0,
-          runtimeTicks: rt,
+          positionTicks: st.resume?.positionMs !== undefined ? st.resume.positionMs * 10_000 : st.resume && runtime ? Math.round((runtime * st.resume.progress) / 100) : 0,
+          runtimeTicks: runtime,
           lastPlayed: st.watched?.lastAt ?? st.resume?.at,
         });
         continue;
@@ -574,11 +575,12 @@ export class Library {
         const known=this.episodeBook.get(id);
         const st = known ? await this.episodeState(idx,known.show,known.episode) : idx.episode(keys, g.season ?? 1, g.episode ?? 0);
         if (!st.watched && !st.resume) continue;
+        const runtime = st.resume?.runtimeMs && st.resume.runtimeMs > 0 ? st.resume.runtimeMs * 10_000 : rt;
         item.UserData = userData(id, {
           played: Boolean(st.watched),
           playCount: st.watched?.plays ?? 0,
-          positionTicks: st.resume?.positionMs !== undefined ? st.resume.positionMs * 10_000 : st.resume && rt ? Math.round((rt * st.resume.progress) / 100) : 0,
-          runtimeTicks: rt,
+          positionTicks: st.resume?.positionMs !== undefined ? st.resume.positionMs * 10_000 : st.resume && runtime ? Math.round((runtime * st.resume.progress) / 100) : 0,
+          runtimeTicks: runtime,
           lastPlayed: st.watched?.lastAt ?? st.resume?.at,
         });
         continue;

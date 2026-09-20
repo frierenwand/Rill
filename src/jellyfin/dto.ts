@@ -192,10 +192,10 @@ export function userData(id: string, u: UserDataInput = {}): Dto {
     IsFavorite: false,
     Played: Boolean(u.played),
     PlayedPercentage: percent,
-    UnplayedItemCount: u.unplayed ?? 0,
     Key: id,
     ItemId: id,
   };
+  if (u.unplayed !== undefined) out.UnplayedItemCount = u.unplayed;
   if (u.lastPlayed) out.LastPlayedDate = u.lastPlayed;
   return out;
 }
