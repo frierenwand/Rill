@@ -717,6 +717,7 @@ export function genreDto(name: string, who: Identity): Dto {
     Id: genreIdOf(name),
     ServerId: who.serverId,
     Type: 'Genre',
+    UserData: userData(genreIdOf(name)),
     IsFolder: false,
     ImageTags: {},
     BackdropImageTags: [],

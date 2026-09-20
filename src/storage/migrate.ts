@@ -4,6 +4,7 @@ import m0003 from '../../migrations/0003_preferences.sql';
 import m0004 from '../../migrations/0004_people.sql';
 import m0005 from '../../migrations/0005_recommendation_jobs.sql';
 import m0006 from '../../migrations/0006_owner.sql';
+import m0007 from '../../migrations/0007_favorites.sql';
 
 const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0001_durable.sql', m0001],
@@ -12,6 +13,7 @@ const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0004_people.sql', m0004],
   ['0005_recommendation_jobs.sql', m0005],
   ['0006_owner.sql', m0006],
+  ['0007_favorites.sql', m0007],
 ];
 
 const done = new WeakMap<D1Database, Promise<void>>();

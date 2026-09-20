@@ -16,7 +16,7 @@ import {
   tokenOf,
   verifyToken,
 } from './auth';
-import { collectionFolder, genreDto, imageTag, listOf, publicSystemInfo, sessionDto, systemInfo, userDto, type Dto } from './dto';
+import { collectionFolder, genreDto, imageTag, listOf, publicSystemInfo, sessionDto, systemInfo, userData, userDto, type Dto } from './dto';
 import { dashGuid, decodeGuid, encodeGuid, genreIdOf, parentSeriesOf, plainGuid, type LabelGuid, type TitleGuid } from './ids';
 import { imageUrlFor, redirectTo } from './images';
 import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type Show } from './library';
@@ -32,9 +32,11 @@ import { applyAgeCap } from '../addon/agecap';
 import type { Meta } from '../stremio/types';
 import { collectionMembers } from '../addon/collections';
 import { boxSetDto, boxSetMembers, boxSetOf, collectionOf, collectionViewDto, visibleCollections } from './collections';
+import { mapLimit } from '../util/concurrency';
 
 const inner = new Hono<JfEnv>();
 const state = new WeakMap<Request, JfRequest>();
+const libraries = new WeakMap<JfRequest, Library>();
 
 const CORS: Record<string, string> = {
   'access-control-allow-origin': '*',
@@ -158,12 +160,29 @@ function dashIds(value: unknown): unknown {
   return out;
 }
 
-function reply(c: C, body: unknown, status = 200): Response {
+async function reply(c: C, body: unknown, status = 200): Promise<Response> {
+  // Cover every item response, including folders and playback/user-data updates.
+  const records: Dto[] = [];
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    const dto = value as Dto;
+    if (typeof dto.IsFavorite === 'boolean' && plainGuid(dto.ItemId ?? dto.Key)) records.push(dto);
+    for (const child of Object.values(dto)) visit(child);
+  };
+  visit(body);
+  if (records.length && c.get('jf').claims) {
+    const favorites = await lib(c).favorites();
+    for (const record of records) record.IsFavorite = favorites.has(plainGuid(record.ItemId ?? record.Key));
+  }
   return c.json(dashIds(body) as never, status as never);
 }
 
 function lib(c: C): Library {
-  return new Library(c.get('jf'));
+  const jf = c.get('jf');
+  let library = libraries.get(jf);
+  if (!library) { library = new Library(jf); libraries.set(jf, library); }
+  return library;
 }
 
 function defer(c: C, work: () => Promise<unknown>): void {
@@ -337,13 +356,20 @@ function sortWithin(items: Dto[], sortBy: string[], descending: boolean): Dto[] 
   return descending && key !== 'Random' ? sorted.reverse() : sorted;
 }
 
+function itemFilters(jf: JfRequest): string[] {
+  const filters = qList(jf, 'Filters');
+  if (jf.q('IsFavorite') !== undefined) filters.push(qBool(jf, 'IsFavorite', false) ? 'IsFavorite' : 'IsNotFavorite');
+  return filters;
+}
+
 function applyFilters(items: Dto[], filters: string[]): Dto[] {
   let out = items;
   const ud = (i: Dto) => (i.UserData ?? {}) as Dto;
   if (filters.includes('IsPlayed')) out = out.filter((i) => ud(i).Played === true);
   if (filters.includes('IsUnplayed')) out = out.filter((i) => ud(i).Played !== true);
   if (filters.includes('IsResumable')) out = out.filter((i) => Number(ud(i).PlaybackPositionTicks ?? 0) > 0);
-  if (filters.includes('IsFavorite')) out = [];
+  if (filters.includes('IsFavorite')) out = out.filter((i) => ud(i).IsFavorite === true);
+  if (filters.includes('IsNotFavorite')) out = out.filter((i) => ud(i).IsFavorite !== true);
   return out;
 }
 
@@ -384,13 +410,13 @@ async function listItems(c: C): Promise<Response> {
   const start = Math.max(0, qInt(jf, 'StartIndex', 0));
   const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 100)), 500);
   const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
-  const filters = qList(jf, 'Filters');
+  const filters = itemFilters(jf);
   const sortBy = qList(jf, 'SortBy');
   const descending = (jf.q('SortOrder') ?? '').toLowerCase() === 'descending';
   const parentRaw = jf.q('ParentId');
   const term = (jf.q('SearchTerm') ?? '').trim();
 
-  if (filters.includes('IsFavorite') || nothingSurvives(jf)) return reply(c, listOf([], 0, start));
+  if (nothingSurvives(jf)) return reply(c, listOf([], 0, start));
   const personId=qList(jf,'PersonIds')[0];
   if(personId) {
     const guid=decodeGuid(personId);
@@ -402,7 +428,8 @@ async function listItems(c: C): Promise<Response> {
       const g=L.guidOfBundle({tmdb:Number(m.id.split(':')[1])},m.type==='movie'?'movie':'series');
       return g?L.titleItemOf(m as Meta,g):null;
     }).filter((x):x is Dto=>x!==null),wanted);
-    return reply(c,listOf(await L.decorate(sortWithin(items,sortBy,descending).slice(start,start+limit)),items.length,start));
+    const filtered = sortWithin(applyFilters(await L.decorate(items), filters), sortBy, descending);
+    return reply(c,listOf(filtered.slice(start,start+limit),filtered.length,start));
   }
 
   const ids = qList(jf, 'Ids');
@@ -412,22 +439,49 @@ async function listItems(c: C): Promise<Response> {
       const item = await singleItem(L, plainGuid(raw), false);
       if (item) items.push(item);
     }
-    return reply(c, listOf(items, items.length, 0));
+    const filtered = sortWithin(applyFilters(await L.decorateFavorites(filterByType(items, wanted)), filters), sortBy, descending);
+    return reply(c, listOf(filtered.slice(start, start + limit), filtered.length, start));
+  }
+
+  // Saved favorites are the source of this list, independent of current catalog pages.
+  if (filters.includes('IsFavorite') && !parentRaw) {
+    const excluded = new Set(qList(jf, 'ExcludeItemTypes'));
+    const included = new Set(qList(jf, 'IncludeItemTypes'));
+    const typeOf = (id: string): string => {
+      const g = decodeGuid(id);
+      if (!g) return '';
+      if (g.kind === 'movie' && (g.source === 'tmdbc' || g.source === 'tvdbc') || g.kind === 'misc' && g.sub === 'boxset') return 'BoxSet';
+      if (g.kind === 'view' || g.kind === 'misc' && g.sub === 'collection') return 'CollectionFolder';
+      if (g.kind === 'misc') return g.sub === 'genre' ? 'Genre' : 'Person';
+      return g.kind[0].toUpperCase() + g.kind.slice(1);
+    };
+    const ids = [...await L.favorites()].filter(id => (!included.size || included.has(typeOf(id))) && !excluded.has(typeOf(id)));
+    const resolved = await mapLimit(ids, 4, id => singleItem(L, id, false));
+    const media = new Set(qList(jf, 'MediaTypes'));
+    const genre = (await genreExtra(L, jf))?.toLowerCase();
+    const items = resolved.filter((item): item is Dto => item !== null).filter(item =>
+      (!included.size || included.has(String(item.Type))) && !excluded.has(String(item.Type)) &&
+      (!media.size || media.has(String(item.MediaType ?? 'Unknown'))) &&
+      (!term || String(item.Name ?? '').toLowerCase().includes(term.toLowerCase())) &&
+      (!genre || (item.Genres as string[] | undefined)?.some(name => name.toLowerCase() === genre)));
+    const filtered = sortWithin(applyFilters(await L.decorateFavorites(items), filters), sortBy, descending);
+    return reply(c, listOf(filtered.slice(start, start + limit), filtered.length, start));
   }
 
   if (term) {
     const found = await L.search(term, wanted, start + limit);
-    return reply(c, listOf(found.slice(start, start + limit), found.length, start));
+    const filtered = sortWithin(applyFilters(found, filters), sortBy, descending);
+    return reply(c, listOf(filtered.slice(start, start + limit), filtered.length, start));
   }
 
   if (!parentRaw) {
     if (!qBool(jf, 'Recursive', false)) {
-      const views = await L.views();
+      const views = applyFilters(await L.decorateFavorites(await L.views()), filters);
       return reply(c, listOf(views.slice(start, start + limit), views.length, start));
     }
     if (wanted?.has('BoxSet') && !wanted.has('Movie') && !wanted.has('Series')) {
       const sets = (await visibleCollections(L)).flatMap((col) => col.folders.map((f) => boxSetDto(L, col, f)));
-      const items = sortWithin(sets, sortBy, descending);
+      const items = sortWithin(applyFilters(await L.decorateFavorites(sets), filters), sortBy, descending);
       return reply(c, listOf(items.slice(start, start + limit), items.length, start));
     }
     const genre = await genreExtra(L, jf);
@@ -463,7 +517,7 @@ async function listItems(c: C): Promise<Response> {
   if (parent.kind === 'misc' && parent.sub === 'collection') {
     const col = await collectionOf(L, parent);
     if (!col) return reply(c, listOf([], 0, start));
-    const items = sortWithin(col.folders.map((f) => boxSetDto(L, col, f)), sortBy, descending);
+    const items = sortWithin(applyFilters(await L.decorateFavorites(col.folders.map((f) => boxSetDto(L, col, f))), filters), sortBy, descending);
     return reply(c, listOf(items.slice(start, start + limit), items.length, start));
   }
   if (parent.kind === 'misc' && parent.sub === 'boxset') {
@@ -478,7 +532,7 @@ async function listItems(c: C): Promise<Response> {
     const safe=await applyAgeCap(jf.ctx,'movie',members.items);
     const fake={id:'collection',type:'movie',viewId:plainGuid(parentRaw)} as CatalogRef;
     const items=safe.map(m=>L.previewItem(m,fake,fake.viewId)).filter((m):m is Dto=>!!m);
-    return reply(c,listOf(await L.decorate(filterByType(items,wanted)),members.total,start));
+    return reply(c,listOf(applyFilters(await L.decorate(filterByType(items,wanted)), filters),members.total,start));
   }
 
   if (parent.kind === 'series' || parent.kind === 'season') {
@@ -567,6 +621,7 @@ async function singleItemHandler(c: C): Promise<Response> {
   const { id } = itemGuid(c);
   const withSources = qList(jf, 'Fields').includes('MediaSources');
   const item = await singleItem(lib(c), id, withSources);
+  if (item && !item.UserData) item.UserData = userData(id);
   return item ? reply(c, item) : notFound(c);
 }
 
@@ -675,7 +730,7 @@ inner.get('/shows/:id/episodes', async (c) => {
     if (sg && sg.kind === 'season') season = sg.season;
   }
   let items = await L.decorate(L.episodeItems(show, season), new Map([[show.id, show]]));
-  items = applyFilters(items, qList(jf, 'Filters'));
+  items = applyFilters(items, itemFilters(jf));
   const start = Math.max(0, qInt(jf, 'StartIndex', 0));
   const limit = Math.min(Math.max(1, qInt(jf, 'Limit', items.length || 1)), 1000);
   return reply(c, listOf(items.slice(start, start + limit), items.length, start));
@@ -877,7 +932,44 @@ inner.delete('/users/:uid/playeditems/:id', markPlayed(false));
 inner.post('/userplayeditems/:id', markPlayed(true));
 inner.delete('/userplayeditems/:id', markPlayed(false));
 
-const userDataHandler = async (c: C) => reply(c, await updateUserData(lib(c), c.req.param('id') ?? '', c.get('jf').body));
+const favoriteHandler = (favorite: boolean) => async (c: C) => {
+  const L = lib(c);
+  if (!L.ctx.env.DB) return reply(c, { Message: 'Durable storage is required to save favorites' }, 503);
+  const { id, g } = itemGuid(c);
+  if (!g) return notFound(c);
+  const item = await singleItem(L, id, false);
+  if (!item && favorite) return notFound(c);
+  await L.setFavorite(id, favorite);
+  return reply(c, item?.UserData ?? userData(id));
+};
+for (const path of ['/users/:uid/favoriteitems/:id', '/userfavoriteitems/:id']) {
+  inner.post(path, favoriteHandler(true));
+  inner.delete(path, favoriteHandler(false));
+}
+
+const userDataHandler = async (c: C) => {
+  const L = lib(c), body = c.get('jf').body;
+  const { id, g } = itemGuid(c);
+  if (!g) return notFound(c);
+  const favorite = body.IsFavorite ?? body.isFavorite;
+  if (typeof favorite === 'boolean') {
+    if (!L.ctx.env.DB) return reply(c, { Message: 'Durable storage is required to save favorites' }, 503);
+    const item = await singleItem(L, id, false);
+    if (!item) return notFound(c);
+    await L.setFavorite(id, favorite);
+    if (body.Played === undefined && body.played === undefined && body.PlaybackPositionTicks === undefined && body.playbackPositionTicks === undefined) {
+      return reply(c, item.UserData ?? userData(id));
+    }
+  }
+  return reply(c, await updateUserData(L, id, body));
+};
+const getUserDataHandler = async (c: C) => {
+  const item = await singleItem(lib(c), itemGuid(c).id, false);
+  return item ? reply(c, item.UserData ?? userData(itemGuid(c).id)) : notFound(c);
+};
+inner.get('/items/:id/userdata', getUserDataHandler);
+inner.get('/useritems/:id/userdata', getUserDataHandler);
+inner.get('/users/:uid/items/:id/userdata', getUserDataHandler);
 inner.post('/items/:id/userdata', userDataHandler);
 inner.post('/useritems/:id/userdata', userDataHandler);
 inner.post('/users/:uid/items/:id/userdata', userDataHandler);

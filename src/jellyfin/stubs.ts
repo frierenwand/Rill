@@ -122,12 +122,4 @@ export function registerStubs(app: Hono<JfEnv>): void {
     }),
   );
 
-  const notFavourite = (c: { req: { param: (n: string) => string }; json: (b: unknown) => Response }) => {
-    const id = c.req.param('id');
-    return c.json({ PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: id, ItemId: id });
-  };
-  app.post('/users/:uid/favoriteitems/:id', notFavourite);
-  app.delete('/users/:uid/favoriteitems/:id', notFavourite);
-  app.post('/userfavoriteitems/:id', notFavourite);
-  app.delete('/userfavoriteitems/:id', notFavourite);
 }

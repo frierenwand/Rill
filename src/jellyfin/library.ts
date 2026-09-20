@@ -32,6 +32,7 @@ import {
 import type { JfRequest } from './request';
 import { rememberPeople } from './people';
 import { enrichWithTmdb } from './enrichment';
+import { favoriteIds, saveFavorite } from '../storage/favorites';
 
 export const SHELF_LIMIT = 20;
 export const SHELF_CONCURRENCY = 4;
@@ -261,6 +262,7 @@ export class Library {
   private episodeStates=new Map<string,Promise<{watched?:EpisodeMark;resume?:ResumeEntry}>>();
   private catalogsPromise?: Promise<CatalogRef[]>;
   private watchPromise?: Promise<WatchIndex>;
+  private favoritesPromise?: Promise<Set<string>>;
   private readonly metas = new Map<string, Promise<Meta | null>>();
   private readonly keyBook = new Map<string, string[]>();
 
@@ -268,6 +270,26 @@ export class Library {
 
   get ctx() {
     return this.jf.ctx;
+  }
+
+  favorites(): Promise<Set<string>> {
+    this.favoritesPromise ??= favoriteIds(this.ctx);
+    return this.favoritesPromise;
+  }
+
+  async setFavorite(id: string, favorite: boolean): Promise<void> {
+    await saveFavorite(this.ctx, id, favorite);
+    this.favoritesPromise = undefined;
+  }
+
+  async decorateFavorites(items: Dto[]): Promise<Dto[]> {
+    if (!items.length) return items;
+    const favorites = await this.favorites();
+    for (const item of items) {
+      const id = String(item.Id ?? '');
+      item.UserData = { ...userData(id), ...(item.UserData as Dto | undefined), IsFavorite: favorites.has(id) };
+    }
+    return items;
   }
 
   catalogs(): Promise<CatalogRef[]> {
@@ -608,7 +630,7 @@ export class Library {
       item.UserData = userData(id, { played: unplayed === 0, playCount: unplayed === 0 ? 1 : 0, unplayed, lastPlayed: lastAt || undefined });
       (item.UserData as Dto).PlayedPercentage = (watched / pool.length) * 100;
     }
-    return items;
+    return this.decorateFavorites(items);
   }
 
   guidOfBundle(ids: IdBundle, kind: 'movie' | 'series'): TitleGuid | null {
