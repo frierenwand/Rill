@@ -5,7 +5,7 @@ import type { IdBundle } from '../meta/types';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
 import { fetchJson } from '../util/cache';
 import { clampPercent, emptySnapshot, epoch, fingerprint, isoOrNow, nowIso, sendRequest, stremioIdOf } from './common';
-import type { MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, WatchSnapshot, WatchedEpisode, WatchedMovie } from './types';
+import type { DropEvent, MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, WatchSnapshot, WatchedEpisode, WatchedMovie } from './types';
 
 const API = 'https://api.trakt.tv';
 const PAGE = 50;
@@ -116,13 +116,15 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const s = await session(ctx);
   if (!s) return emptySnapshot();
 
-  const [playback, movies, shows] = await Promise.all([
+  const [playback, movies, shows, dropped] = await Promise.all([
     get<PlaybackItem[]>(ctx, s, '/sync/playback', 30),
-    get<WatchedMovieItem[]>(ctx, s, '/sync/watched/movies', 60),
-    get<WatchedShowItem[]>(ctx, s, '/sync/watched/shows', 60),
+    allPages<WatchedMovieItem>(ctx, s, '/sync/watched/movies?extended=progress'),
+    allPages<WatchedShowItem>(ctx, s, '/sync/watched/shows?extended=progress'),
+    allPages<{ show?: TraktShow }>(ctx, s, '/users/hidden/dropped?type=show'),
   ]);
 
   const out = emptySnapshot();
+  out.dropped = dropped.flatMap(row => row.show ? [bundleOf(row.show.ids, 'tv')] : []);
 
   for (const p of playback ?? []) {
     const progress = clampPercent(p.progress);
@@ -162,6 +164,28 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   out.resume.sort((a, b) => epoch(b.at) - epoch(a.at));
   out.fetchedAt = nowIso();
   return out;
+}
+
+async function allPages<T>(ctx: Ctx, s: Session, path: string): Promise<T[]> {
+  const rows: T[] = [], seen = new Set<string>();
+  for (let page = 1; page <= 1000; page++) {
+    const data = await get<T[]>(ctx, s, `${path}${path.includes('?') ? '&' : '?'}page=${page}&limit=100`, 0);
+    if (!Array.isArray(data)) throw new Error('Trakt list unavailable');
+    if (!data.length) return rows;
+    const signature = JSON.stringify(data);
+    if (seen.has(signature)) throw new Error('Trakt repeated a list page');
+    seen.add(signature); rows.push(...data);
+  }
+  throw new Error('Trakt list exceeds the import limit');
+}
+
+async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
+  const s = await session(ctx), ids = idsForWrite(ev.ids);
+  if (!s || !ids) throw new Error('Trakt show ID or credentials unavailable');
+  const res = await sendRequest(`${API}/users/hidden/dropped${ev.dropped ? '' : '/remove'}`, {
+    method: 'POST', headers: headers(ctx, s.token), body: JSON.stringify({ shows: [{ ids }] }),
+  });
+  if (!res.ok || (res.body as { not_found?: { shows?: unknown[] } } | null)?.not_found?.shows?.length) throw new Error('Trakt drop update rejected');
 }
 
 function scrobbleBody(ev: ScrobbleEvent, progress: number): unknown | null {
@@ -312,6 +336,7 @@ export const traktTracker: Tracker = {
   scrobble,
   mark,
   clearResume,
+  drop,
   catalogs,
   catalogItems,
 };

@@ -19,6 +19,7 @@ export interface WatchedMovie { ids: IdBundle; plays: number; lastAt: string }
 export interface WatchedEpisode { ids: IdBundle; season: number; episode: number; plays: number; lastAt: string }
 
 export interface WatchSnapshot {
+  dropped?: IdBundle[];
   local?: Array<{ids:IdBundle;kind:'movie'|'episode';season?:number;episode?:number;watched:boolean;progress:number;positionMs?:number;runtimeMs?:number;at:string}>;
   movies: WatchedMovie[];
   episodes: WatchedEpisode[];
@@ -55,6 +56,16 @@ export interface MarkEvent {
   watched: boolean;
 }
 
+export interface DropEvent {
+  ids: IdBundle;
+  dropped: boolean;
+  at: number;
+  scope: string;
+  source?: TrackerName;
+  itemId?: string;
+  rating?: { itemId: string; likes: boolean | null; profile: string };
+}
+
 export interface Tracker {
   name: TrackerName;
   ready(ctx: Ctx): boolean;
@@ -62,6 +73,7 @@ export interface Tracker {
   scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void>;
   mark(ctx: Ctx, ev: MarkEvent): Promise<void>;
   clearResume?(ctx: Ctx, entry: ResumeEntry): Promise<void>;
+  drop?(ctx: Ctx, event: DropEvent): Promise<void>;
   catalogs?(ctx: Ctx): Promise<ManifestCatalog[]>;
   catalogItems?(ctx: Ctx, catalogId: string, skip: number): Promise<MetaPreview[]>;
 }
@@ -73,5 +85,6 @@ export interface TrackerApi {
   scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void>;
   mark(ctx: Ctx, ev: MarkEvent): Promise<void>;
   clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void>;
+  drop(ctx: Ctx, ids: IdBundle, dropped: boolean, itemId?: string, rating?: DropEvent['rating']): Promise<void>;
   invalidate(ctx: Ctx): Promise<void>;
 }

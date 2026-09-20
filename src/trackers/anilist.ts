@@ -3,7 +3,7 @@ import type { AnilistAuth } from '../config/schema';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
 import { memo } from '../util/cache';
 import { clampPercent, emptySnapshot, fingerprint, nowIso, sendRequest } from './common';
-import type { MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
+import type { DropEvent, MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
 
 const API = 'https://graphql.anilist.co';
 const WATCHED_AT = 90;
@@ -73,8 +73,10 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const a = auth(ctx);
   if (!a) return emptySnapshot();
   const out = emptySnapshot();
-  for (const e of await collection(ctx, a, ['CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED'], 60)) {
+  out.dropped = [];
+  for (const e of await collection(ctx, a, ['CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED', 'DROPPED'], 0)) {
     const ids = { anilist: e.media.id, ...(e.media.idMal ? { mal: e.media.idMal } : {}) };
+    if (e.status === 'DROPPED') out.dropped.push(ids);
     const lastAt = stamp(e.updatedAt);
     let seen = Number(e.progress) || 0;
     if (e.status === 'COMPLETED' && !seen) seen = Number(e.media.episodes) || 1;
@@ -86,14 +88,27 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   return out;
 }
 
-async function current(a: AnilistAuth, anilist: number): Promise<{ watched: number; total: number | null } | null> {
-  const d = await gql<{ Media?: { episodes?: number | null; mediaListEntry?: { progress?: number } | null } }>(
+async function current(a: AnilistAuth, anilist: number): Promise<{ watched: number; total: number | null; status?: ListStatus } | null> {
+  const d = await gql<{ Media?: { episodes?: number | null; mediaListEntry?: { progress?: number; status?: ListStatus } | null } }>(
     a,
-    'query ($id: Int) { Media(id: $id, type: ANIME) { episodes mediaListEntry { progress } } }',
+    'query ($id: Int) { Media(id: $id, type: ANIME) { episodes mediaListEntry { progress status } } }',
     { id: anilist },
   );
   if (!d?.Media) return null;
-  return { watched: Number(d.Media.mediaListEntry?.progress) || 0, total: Number(d.Media.episodes) || null };
+  return { watched: Number(d.Media.mediaListEntry?.progress) || 0, total: Number(d.Media.episodes) || null, status: d.Media.mediaListEntry?.status };
+}
+
+async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
+  const a = auth(ctx);
+  if (!a) throw new Error('AniList credentials unavailable');
+  if (!ev.ids.anilist) return;
+  const cur = await current(a, ev.ids.anilist);
+  if (!cur) throw new Error('AniList state unavailable');
+  if (!ev.dropped && cur.status !== 'DROPPED') return;
+  const status: ListStatus = ev.dropped ? 'DROPPED' : cur.total && cur.watched >= cur.total ? 'COMPLETED' : cur.watched > 0 ? 'CURRENT' : 'PLANNING';
+  const saved = await gql<{ SaveMediaListEntry?: { id: number } }>(a,
+    'mutation ($id: Int, $status: MediaListStatus) { SaveMediaListEntry(mediaId: $id, status: $status) { id } }', { id: ev.ids.anilist, status });
+  if (!saved?.SaveMediaListEntry?.id) throw new Error('AniList drop update rejected');
 }
 
 async function save(a: AnilistAuth, anilist: number, progress: number, total: number | null): Promise<void> {
@@ -163,6 +178,7 @@ export const anilistTracker: Tracker = {
   name: 'anilist',
   ready: (ctx) => !!auth(ctx),
   snapshot,
+  drop,
   scrobble,
   mark,
   catalogs,

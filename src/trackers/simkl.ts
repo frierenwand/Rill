@@ -2,9 +2,10 @@ import type { Ctx } from '../context';
 import type { SimklAuth } from '../config/schema';
 import type { IdBundle } from '../meta/types';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
-import { fetchJson,memo } from '../util/cache';
+import { cacheDelete, fetchJson,memo } from '../util/cache';
 import { clampPercent, emptySnapshot, epoch, fingerprint, isoOrNow, nowIso, sendRequest, stremioIdOf } from './common';
-import type { MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
+import type { DropEvent, MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
+import { sameShow } from '../storage/dropped';
 
 const API = 'https://api.simkl.com';
 
@@ -138,16 +139,19 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const a = auth(ctx);
   if (!a) return emptySnapshot();
 
-  const [moviesDone, tvWatching, tvDone, animeWatching, animeDone, playback] = await Promise.all([
+  const [moviesDone, tvWatching, tvDone, animeWatching, animeDone, playback, dropped, held] = await Promise.all([
     library(ctx, a, 'movies', 'completed', false),
     library(ctx, a, 'tv', 'watching', true),
     library(ctx, a, 'tv', 'completed', true),
     library(ctx, a, 'anime', 'watching', true),
     library(ctx, a, 'anime', 'completed', true),
     get<PlaybackItem[]>(ctx, a, '/sync/playback', 30),
+    statusRows(ctx, a, 'dropped'),
+    statusRows(ctx, a, 'hold'),
   ]);
 
   const out = emptySnapshot();
+  out.dropped = [...dropped.shows ?? [], ...dropped.anime ?? []].flatMap(row => row.show ? [bundleOf(row.show.ids, 'tv')] : []);
 
   for (const m of moviesDone) {
     if (!m.movie) continue;
@@ -168,16 +172,16 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
     };
     for (const season of item.seasons ?? []) for (const ep of season.episodes ?? []) push(season.number, ep.number, ep.watched_at);
     for (const ep of item.episodes ?? []) push(ep.season ?? 1, ep.number, ep.watched_at);
-    if (!item.seasons?.length && !item.episodes?.length && anime && item.status === 'completed') {
-      const count = Number(item.watched_episodes_count) || Number(item.total_episodes_count) || 0;
+    if (!item.seasons?.length && !item.episodes?.length && anime) {
+      const count = Number(item.watched_episodes_count) || (item.status === 'completed' ? Number(item.total_episodes_count) : 0) || 0;
       for (let i = 1; i <= count; i++) out.episodes.push({ ids, season: 1, episode: i, plays: 1, lastAt });
       lastSeason = count ? 1 : undefined; lastEpisode = count || undefined;
     }
     out.shows.push({ ids, lastAt, lastSeason, lastEpisode });
   };
 
-  for (const item of [...tvWatching, ...tvDone]) if (item.show) addShow(item, false);
-  for (const item of [...animeWatching, ...animeDone]) if (item.show) addShow(item, true);
+  for (const item of [...tvWatching, ...tvDone, ...dropped.shows ?? [], ...held.shows ?? []]) if (item.show) addShow(item, false);
+  for (const item of [...animeWatching, ...animeDone, ...dropped.anime ?? [], ...held.anime ?? []]) if (item.show) addShow(item, true);
 
   for (const p of playback ?? []) {
     const progress = clampPercent(p.progress);
@@ -200,6 +204,24 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   out.resume.sort((x, y) => epoch(y.at) - epoch(x.at));
   out.fetchedAt = nowIso();
   return out;
+}
+
+async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
+  const a = auth(ctx), ids = idsForWrite(ev.ids);
+  if (!a || !ids) throw new Error('Simkl show ID or credentials unavailable');
+  let to: Status = 'dropped';
+  if (!ev.dropped) {
+    const data = await get<LibraryPayload>(ctx, a, '/sync/all-items/dropped?extended=full&episode_watched_at=yes&next_watch_info=yes', 0);
+    if (!data) throw new Error('Simkl dropped list unavailable');
+    const row = [...data.shows ?? [], ...data.anime ?? []].find(row => sameShow(bundleOf(row.show?.ids, 'tv'), ev.ids));
+    if (!row) return;
+    const watched = row.watched_episodes_count ?? 0, total = row.total_episodes_count ?? 0;
+    to = total > 0 && watched >= total ? 'completed' : watched > 0 ? 'watching' : 'plantowatch';
+  }
+  const res = await sendRequest(`${API}/sync/add-to-list`, { method: 'POST', headers: headers(a), body: JSON.stringify({ shows: [{ ids, to }] }) });
+  if (!res.ok || (res.body as { not_found?: { shows?: unknown[] } } | null)?.not_found?.shows?.length) throw new Error('Simkl drop update rejected');
+  activityRequests.delete(ctx); listRequests.delete(ctx);
+  await cacheDelete(`json:simkl:${ctx.scope}:${await fingerprint(a.accessToken)}:${API}/sync/activities`);
 }
 
 function historyBody(ids: IdBundle, kind: 'movie' | 'episode' | 'series', season?: number, episode?: number): unknown | null {
@@ -269,6 +291,7 @@ export const simklTracker: Tracker = {
   name: 'simkl',
   ready: (ctx) => !!auth(ctx),
   snapshot,
+  drop,
   scrobble,
   mark,
   catalogs,

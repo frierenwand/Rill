@@ -3,7 +3,31 @@ import type { TrackerName } from '../config/schema';
 import { loadEpisodeMaps, toAnimeEpisodes, toExternalEpisodes } from '../meta/anime/episode-map';
 import { mappingForAnimeId } from '../meta/anime/mapping';
 import type { IdBundle } from '../meta/types';
-import type { MarkEvent, ScrobbleEvent } from './types';
+import type { DropEvent, MarkEvent, ScrobbleEvent } from './types';
+import { metaApi } from '../meta/index';
+import { stremioIdOf } from './common';
+
+export async function dropTargets(ctx: Ctx, ev: DropEvent, name: TrackerName): Promise<DropEvent[]> {
+  if (name === 'mal' || name === 'anilist') {
+    if (ev.ids[name]) return [ev];
+    if (ev.ids.mal || ev.ids.anilist || ev.ids.anidb || ev.ids.kitsu) {
+      const ids = await mappingForAnimeId(ctx, ev.ids);
+      if (!ids?.[name]) throw new Error(`No ${name} mapping for dropped anime`);
+      return [{ ...ev, ids: { ...ev.ids, ...ids } }];
+    }
+    // A TV show can span several anime entries; update each mapped entry without
+    // fabricating episode watches or resetting any entry's progress.
+    const rows = (await loadEpisodeMaps(ctx)).filter(row => ev.ids.tmdb && row.tmdb === ev.ids.tmdb || ev.ids.tvdb && row.tvdb === ev.ids.tvdb);
+    const ids = await Promise.all([...new Set(rows.map(row => row.anidb))].map(anidb => mappingForAnimeId(ctx, { anidb })));
+    if (ids.some(bundle => !bundle?.[name])) throw new Error(`Incomplete ${name} mapping for dropped show`);
+    return ids.map(bundle => ({ ...ev, ids: { ...ev.ids, ...bundle } }));
+  }
+  if (name === 'publicmetadb' ? ev.ids.tmdb : ev.ids.imdb || ev.ids.tmdb || ev.ids.tvdb) return [ev];
+  const id = stremioIdOf(ev.ids);
+  if (!id) throw new Error('Dropped show has no supported ID');
+  const ids = await metaApi.resolveIds(ctx, id, ev.ids.mal || ev.ids.anilist || ev.ids.anidb || ev.ids.kitsu ? 'anime' : 'series');
+  return [{ ...ev, ids: { ...ev.ids, ...ids } }];
+}
 
 type Event = ScrobbleEvent | MarkEvent;
 export async function trackerTargets<T extends Event>(ctx: Ctx, ev: T, name: TrackerName): Promise<T[]> {

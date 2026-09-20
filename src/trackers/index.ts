@@ -13,7 +13,10 @@ import { trackerTargets } from './targets';
 import { traktTracker } from './trakt';
 import { enqueue, drain } from '../storage/deliveries';
 import { overlayHistory } from '../storage/history';
-import type { MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, TrackerApi, WatchSnapshot } from './types';
+import type { DropEvent, MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, TrackerApi, WatchSnapshot } from './types';
+import type { IdBundle } from '../meta/types';
+import { localDrop, overlayDropped, reconcileDropped, sameShow } from '../storage/dropped';
+import { withStateLock } from '../storage/lock';
 
 const SNAPSHOT_TTL_S = 60;
 
@@ -76,11 +79,12 @@ async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry
 
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const t = primary(ctx);
-  if (!t) return overlayHistory(ctx, emptySnapshot());
+  if (!t) return overlayDropped(ctx, await overlayHistory(ctx, emptySnapshot()));
   const durableKey = `history-import:${ctx.scope}:${t.name}`;
   const base = await memo<WatchSnapshot>(snapshotKey(ctx,t),SNAPSHOT_TTL_S,async () => {
     try {
       const fresh = await t.snapshot(ctx);
+      await reconcileDropped(ctx, t.name, fresh);
       if (ctx.env.DB) await saveSnapshot(ctx,durableKey,fresh);
       return fresh;
     } catch {
@@ -90,7 +94,34 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
     }
   });
   const resume = await overlayBuffer(ctx,base.resume);
-  return overlayHistory(ctx,{...base,resume});
+  return overlayDropped(ctx, await overlayHistory(ctx,{...base,resume}));
+}
+
+const restoreSnapshots = new WeakMap<Ctx, Promise<WatchSnapshot>>();
+export async function restoreDroppedShow(ctx: Ctx, ids: IdBundle): Promise<void> {
+  let task = restoreSnapshots.get(ctx);
+  if (!task) { task = snapshot(ctx); restoreSnapshots.set(ctx, task); }
+  const state = await task;
+  const dropped = state.dropped?.find(other => sameShow(ids, other));
+  if (!dropped) return;
+  await drop(ctx, { ...dropped, ...ids }, false);
+  state.dropped = state.dropped?.filter(other => !sameShow(ids, other));
+}
+
+async function drop(ctx: Ctx, ids: IdBundle, dropped: boolean, itemId?: string, rating?: DropEvent['rating']): Promise<void> {
+  if (!ctx.env.DB) throw new Error('Durable storage is required to drop shows');
+  await withStateLock(ctx, `drop:${ctx.historyScope ?? ctx.scope}`, async () => {
+    const previous = await localDrop(ctx, ids);
+    const targets = sinks(ctx).filter(t => t.drop && ctx.cfg.trackers.media?.[t.name]?.series !== false);
+    const source = primary(ctx)?.name;
+    const event: DropEvent = { ids: { ...previous?.bundle, ...ids }, dropped, itemId: itemId ?? previous?.item_id ?? undefined,
+      scope: ctx.historyScope ?? ctx.scope, at: Math.max(Date.now(), (previous?.updated ?? 0) + 1),
+      source: targets.some(t => t.name === source) ? source : undefined, rating };
+    await enqueue(ctx, 'drop', event, targets);
+  });
+  restoreSnapshots.delete(ctx);
+  await invalidate(ctx);
+  if (!ctx.queueOnly) { if (ctx.defer) ctx.defer(drain(ctx, REGISTRY)); else await drain(ctx, REGISTRY); }
 }
 
 async function invalidate(ctx: Ctx): Promise<void> {
@@ -99,6 +130,7 @@ async function invalidate(ctx: Ctx): Promise<void> {
 }
 
 async function scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void> {
+  if (ev.kind === 'episode' && ev.action === 'start' && ctx.env.DB) await restoreDroppedShow(ctx, ev.ids);
   const targets = sinks(ctx).filter(t => ctx.cfg.trackers.media?.[t.name]?.[ev.kind === 'movie' ? 'movie' : 'series'] !== false);
   if (ctx.env.DB) {
     await enqueue(ctx,'scrobble',ev,targets);
@@ -128,6 +160,7 @@ async function scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void> {
 }
 
 async function mark(ctx: Ctx, ev: MarkEvent): Promise<void> {
+  if (ev.kind !== 'movie' && ev.watched && ctx.env.DB) await restoreDroppedShow(ctx, ev.ids);
   const targets = sinks(ctx).filter(t => ctx.cfg.trackers.media?.[t.name]?.[ev.kind === 'movie' ? 'movie' : 'series'] !== false);
   if (ctx.env.DB) {
     await enqueue(ctx,'mark',ev,targets);
@@ -165,6 +198,7 @@ export const trackerApi: TrackerApi = {
   scrobble,
   mark,
   clearResume,
+  drop,
   invalidate,
 };
 

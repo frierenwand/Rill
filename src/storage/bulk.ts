@@ -2,12 +2,13 @@ import type { Ctx } from '../context';
 import type { MarkEvent } from '../trackers/types';
 import { registerAccount } from './state';
 import { profileContext } from '../jellyfin/profiles';
-import { trackerApi } from '../trackers/index';
+import { restoreDroppedShow, trackerApi } from '../trackers/index';
 import { saveHistory } from './history';
 import { hasDatabaseBudget, cleanupDatabase } from './budget';
 
 export async function queueBulk(ctx: Ctx, events: MarkEvent[]): Promise<void> {
   if (!ctx.env.DB || !events.length) return;
+  for (const ev of events) if (ev.kind !== 'movie' && ev.watched) await restoreDroppedShow(ctx, ev.ids);
   await registerAccount(ctx);
   const id=crypto.randomUUID(), now=Date.now();
   const stamped=events.map(e => ({...e,at:new Date(now).toISOString()}));

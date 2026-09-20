@@ -9,6 +9,7 @@ import { budgetDatabase, cleanupDatabase, DatabaseBudgetExceeded, hasDatabaseBud
 import { syncMovieLens } from '../addon/movielens-sync';
 import { advanceRecommendations } from './recommendation-jobs';
 import { ensureSchema } from './migrate';
+import { reconcileDropped } from './dropped';
 
 export async function scheduled(_event: ScheduledController, env: Env): Promise<void> {
   if (!env.DB) throw new Error('Scheduled synchronization requires DB');
@@ -36,7 +37,11 @@ export async function scheduled(_event: ScheduledController, env: Env): Promise<
         if (claimed.meta.changes) {
           const tracker = trackerApi.primary(ctx);
           try {
-            if (tracker) await saveSnapshot(ctx,`history-import:${ctx.scope}:${tracker.name}`,await tracker.snapshot(ctx));
+            if (tracker) {
+              const snapshot = await tracker.snapshot(ctx);
+              await reconcileDropped(ctx, tracker.name, snapshot);
+              await saveSnapshot(ctx,`history-import:${ctx.scope}:${tracker.name}`,snapshot);
+            }
             await trackerApi.invalidate(ctx);
           } catch(error) {
             await cleanupDatabase(db).prepare('UPDATE accounts SET sync_after=? WHERE scope=?').bind(now+60_000,a.scope).run();

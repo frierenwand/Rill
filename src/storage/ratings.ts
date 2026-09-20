@@ -9,15 +9,19 @@ export async function itemRatings(ctx: Ctx): Promise<Map<string, boolean>> {
 }
 
 export async function saveRating(ctx: Ctx, rawId: string, likes: boolean | null): Promise<void> {
+  await ratingStatement(ctx, rawId, likes).run();
+}
+
+export function ratingStatement(ctx: Ctx, rawId: string, likes: boolean | null, profile = ctx.profile?.id ?? ''): D1PreparedStatement {
   if (!ctx.env.DB) throw new Error('Durable storage is required to save ratings');
   const id = plainGuid(rawId);
   if (!decodeGuid(id)) throw new Error('Invalid rating item ID');
   // Personal ratings stay separate from shared watch history and favorites.
-  const args = [ctx.scope, ctx.profile?.id ?? '', id];
+  const args = [ctx.scope, profile, id];
   if (likes === null) {
-    await ctx.env.DB.prepare('DELETE FROM item_ratings WHERE scope=? AND profile=? AND item_id=?').bind(...args).run();
+    return ctx.env.DB.prepare('DELETE FROM item_ratings WHERE scope=? AND profile=? AND item_id=?').bind(...args);
   } else {
-    await ctx.env.DB.prepare('INSERT INTO item_ratings(scope,profile,item_id,likes,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(scope,profile,item_id) DO UPDATE SET likes=excluded.likes,updated_at=excluded.updated_at')
-      .bind(...args, likes ? 1 : 0, Date.now()).run();
+    return ctx.env.DB.prepare('INSERT INTO item_ratings(scope,profile,item_id,likes,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(scope,profile,item_id) DO UPDATE SET likes=excluded.likes,updated_at=excluded.updated_at')
+      .bind(...args, likes ? 1 : 0, Date.now());
   }
 }

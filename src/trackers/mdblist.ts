@@ -32,6 +32,14 @@ interface Row {
 export const mdblistTracker: Tracker = {
   name: 'mdblist',
   ready: ctx => !!ctx.cfg.keys.mdblist,
+  async drop(ctx, ev) {
+    const r = await sendRequest(url(ctx, ev.dropped ? '/sync/dropped' : '/sync/dropped/remove'), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ shows: [{ ids: idsOf(ev.ids), ...(ev.dropped ? { dropped_at: new Date(ev.at).toISOString() } : {}) }] }),
+    });
+    const body = r.body as { not_found?: { shows?: unknown[] }; errors?: unknown[] } | null;
+    if (!r.ok || body?.not_found?.shows?.length || body?.errors?.length) throw new Error('MDBList drop update rejected');
+  },
   async scrobble(ctx, ev) {
     await write(ctx, `/scrobble/${ev.action}`, { ...item(ev), progress: clampPercent(ev.progress) });
   },
@@ -65,7 +73,22 @@ export const mdblistTracker: Tracker = {
       }
       throw new Error('MDBList history exceeds the import limit; previous history was retained');
     };
-    const [movies, episodes, playback] = await Promise.all([history('movie'), history('episode'), read<Row[]>('/sync/playback')]);
+    const dropped = async (): Promise<IdBundle[]> => {
+      const rows: IdBundle[] = [], seen = new Set<string>();
+      let cursor = '';
+      for (let page = 0; page < 1000; page++) {
+        const data = await read<{ shows: Array<{ ids?: IdBundle; show?: { ids: IdBundle }; dropped_at?: string | null }>; pagination?: { next_cursor?: string } }>(`/sync/dropped?limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+        if (!Array.isArray(data.shows)) throw new Error('MDBList dropped list unavailable');
+        for (const row of data.shows) { const ids = row.show?.ids ?? row.ids; if (ids && row.dropped_at !== null) rows.push(ids); }
+        const next = data.pagination?.next_cursor;
+        if (!next) return rows;
+        if (seen.has(next) || next === cursor) throw new Error('MDBList repeated a dropped cursor');
+        seen.add(next); cursor = next;
+      }
+      throw new Error('MDBList dropped list exceeds the import limit');
+    };
+    const [movies, episodes, playback, droppedIds] = await Promise.all([history('movie'), history('episode'), read<Row[]>('/sync/playback'), dropped()]);
+    out.dropped = droppedIds;
     for (const r of movies) if (r.movie) out.movies.push({ ids: r.movie.ids, plays: 1, lastAt: isoOrNow(r.last_watched_at) });
     for (const r of episodes) {
       const ids = r.episode?.show?.ids ?? r.show?.ids;

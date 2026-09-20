@@ -366,7 +366,7 @@ function applyFilters(items: Dto[], filters: string[]): Dto[] {
   const ud = (i: Dto) => (i.UserData ?? {}) as Dto;
   if (filters.includes('IsPlayed')) out = out.filter((i) => ud(i).Played === true);
   if (filters.includes('IsUnplayed')) out = out.filter((i) => ud(i).Played !== true);
-  if (filters.includes('IsResumable')) out = out.filter((i) => Number(ud(i).PlaybackPositionTicks ?? 0) > 0);
+  if (filters.includes('IsResumable')) out = out.filter((i) => Number(ud(i).PlaybackPositionTicks ?? 0) > 0 && !(i.Type === 'Episode' && ud(i).Likes === false));
   if (filters.includes('IsFavorite')) out = out.filter((i) => ud(i).IsFavorite === true);
   if (filters.includes('IsNotFavorite')) out = out.filter((i) => ud(i).IsFavorite !== true);
   if (filters.includes('Likes')) out = out.filter((i) => ud(i).Likes === true);

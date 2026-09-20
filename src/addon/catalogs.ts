@@ -16,6 +16,9 @@ import { discoverItems } from './discovery';
 import { mergedItems } from './merged';
 import { recommendationItems } from './recommendations';
 import { collectionsPage,collectionMembers } from './collections';
+import { sameShow } from '../storage/dropped';
+import { bundleFromStremioId } from '../meta/ids';
+import type { Meta } from '../stremio/types';
 import {
   AIRING_REGIONS, MAL_DECADES, MAL_GENRES, MAL_STUDIOS, STREAMING_PROVIDERS, TMDB_KEYWORDS, TMDB_LANGUAGES, TMDB_NETWORKS, WEEKDAYS,
   isoDate, parseSeasonLabel, recentSeasonLabels, regionOf, seasonOf, yearOptions,
@@ -515,7 +518,11 @@ export async function catalogPage(ctx: Ctx, type: ContentType, id: string, extra
     items = [];
   }
 
-  const clean = uniq(items.filter((m) => m && m.id && m.name), (m) => m.id);
+  let clean = uniq(items.filter((m) => m && m.id && m.name), (m) => m.id);
+  if (head === 'tracker' && type !== 'movie' && /^(publicmetadb:(series|anime):resume|simkl:watching:(series|anime)|mal:watching|anilist:(current|repeating))$/.test(rest)) {
+    const dropped = (await trackerApi.snapshot(ctx)).dropped ?? [];
+    clean = clean.filter(meta => !dropped.some(ids => sameShow(ids, { ...bundleFromStremioId(meta.id), ...(meta as Meta).ids })));
+  }
   return { items: await applyAgeCap(ctx, type, clean), consumed: items.length };
 }
 

@@ -1,6 +1,6 @@
 import type { Ctx } from '../context';
 import { emptySnapshot, sendRequest, clampPercent, isoOrNow, epoch } from './common';
-import type { MarkEvent, ScrobbleEvent, Tracker, ResumeEntry, WatchSnapshot } from './types';
+import type { DropEvent, MarkEvent, ScrobbleEvent, Tracker, ResumeEntry, WatchSnapshot } from './types';
 import { fetchJson } from '../util/cache';
 import { metaApi } from '../meta/index';
 import { mapLimit } from '../util/concurrency';
@@ -114,8 +114,9 @@ function rowIdentity(row: HistoryRow): Pick<ResumeEntry, 'ids' | 'kind' | 'seaso
 }
 
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
-  const [watched, resume] = await Promise.all([historyRows(ctx, 'watched'), historyRows(ctx, 'resume')]);
+  const [watched, resume, dropped] = await Promise.all([historyRows(ctx, 'watched'), historyRows(ctx, 'resume'), droppedShows(ctx)]);
   const out = emptySnapshot();
+  out.dropped = dropped.map(tmdb => ({ tmdb, tmdbType: 'tv' }));
   const movies = new Map<number, WatchSnapshot['movies'][number]>(), episodes = new Map<string, WatchSnapshot['episodes'][number]>();
   const shows = new Map<number, WatchSnapshot['shows'][number]>(), plays = new Set<string>();
   for (const row of watched) {
@@ -144,6 +145,31 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   return out;
 }
 
+async function droppedShows(ctx: Ctx): Promise<number[]> {
+  const ids: number[] = [], seen = new Set<string>();
+  for (let page = 1; page <= 1000; page++) {
+    const response = await sendRequest(`https://publicmetadb.com/api/external/dropped?page=${page}&perPage=100`, { headers: { authorization: `Bearer ${ctx.cfg.keys.publicmetadb}` } });
+    const data = response.body as { items?: Array<{ tmdb_id: number }>; dropped?: Array<{ tmdb_id: number }>; totalPages?: number; total?: number; pagination?: { totalPages?: number; hasNextPage?: boolean; total?: number } } | null;
+    const rows = Array.isArray(data) ? data as Array<{ tmdb_id: number }> : data?.items ?? data?.dropped;
+    if (!response.ok || !Array.isArray(rows)) throw new Error('PublicMetaDB dropped shows unavailable');
+    const signature = JSON.stringify(rows);
+    if (rows.length && seen.has(signature)) throw new Error('PublicMetaDB repeated a dropped page');
+    seen.add(signature);
+    ids.push(...rows.map(row => Number(row.tmdb_id)).filter(id => Number.isSafeInteger(id) && id > 0));
+    if (!rows.length || data?.pagination?.hasNextPage === false || page >= (data?.pagination?.totalPages ?? data?.totalPages ?? Infinity)) return ids;
+  }
+  throw new Error('PublicMetaDB dropped list exceeds the import limit');
+}
+
+async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
+  if (!ev.ids.tmdb) throw new Error('PublicMetaDB requires a TMDB show ID');
+  if (ev.dropped) { await write(ctx, '/dropped', 'POST', { tmdb_id: ev.ids.tmdb }); return; }
+  const response = await sendRequest(`https://publicmetadb.com/api/external/dropped/${ev.ids.tmdb}/tv`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${ctx.cfg.keys.publicmetadb}` },
+  });
+  if (response.status !== 404 && (!response.ok || (response.body as { success?: boolean } | null)?.success === false)) throw new Error('PublicMetaDB undrop rejected');
+}
+
 async function clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void> {
   if (entry.ref) { await write(ctx, `/resume/${encodeURIComponent(String(entry.ref))}`, 'DELETE'); return; }
   if (!entry.ids.tmdb) throw new Error('PublicMetaDB requires a TMDB ID to clear resume');
@@ -159,6 +185,7 @@ async function clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void> {
 export const publicmetadbTracker: Tracker = {
   name: 'publicmetadb', ready: ctx => !!ctx.cfg.keys.publicmetadb,
   snapshot,
+  drop,
   clearResume,
   catalogs,
   catalogItems,

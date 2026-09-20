@@ -1,14 +1,17 @@
 import type { Ctx } from '../context';
 import type { TrackerName } from '../config/schema';
-import type { MarkEvent, ResumeEntry, ScrobbleEvent, Tracker } from '../trackers/types';
+import type { DropEvent, MarkEvent, ResumeEntry, ScrobbleEvent, Tracker } from '../trackers/types';
 import { sha256 } from '../util/bytes';
 import { registerAccount } from './state';
 import { historyStatement } from './history';
-import { trackerTargets } from '../trackers/targets';
+import { dropTargets, trackerTargets } from '../trackers/targets';
 import { hasDatabaseBudget, cleanupDatabase, DatabaseBudgetExceeded } from './budget';
+import { dropStatement, localDrop } from './dropped';
+import { ratingStatement } from './ratings';
+import { cacheDelete } from '../util/cache';
 
-type Operation = 'scrobble' | 'mark' | 'clear';
-type Event = ScrobbleEvent | MarkEvent | ResumeEntry;
+type Operation = 'scrobble' | 'mark' | 'clear' | 'drop';
+type Event = ScrobbleEvent | MarkEvent | ResumeEntry | DropEvent;
 interface Job { id: string; scope: string; service: TrackerName; operation: Operation; payload: string; created: number; attempts: number }
 
 export async function enqueue(ctx: Ctx, operation: Operation, event: Event, targets: Tracker[]): Promise<void> {
@@ -28,8 +31,11 @@ export async function enqueue(ctx: Ctx, operation: Operation, event: Event, targ
     statements.push(db.prepare('INSERT INTO deliveries(id,scope,service,operation,payload,created,due) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING')
       .bind(id,ctx.scope,t.name,operation,JSON.stringify(event),now,now));
   }
-  const local = historyStatement(ctx,event,operation === 'scrobble' ? 'progress' : operation === 'mark' ? 'mark' : 'clear');
+  const local = operation === 'drop' ? dropStatement(ctx, event as DropEvent)
+    : historyStatement(ctx,event as Exclude<Event, DropEvent>,operation === 'scrobble' ? 'progress' : operation === 'mark' ? 'mark' : 'clear');
   if (local) statements.push(local);
+  const rating = operation === 'drop' ? (event as DropEvent).rating : undefined;
+  if (rating) statements.push(ratingStatement(ctx, rating.itemId, rating.likes, rating.profile));
   if (statements.length) await db.batch(statements);
 }
 
@@ -50,9 +56,18 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
       const tracker = registry[job.service];
       if (!tracker?.ready(ctx)) throw new Error('Tracker disconnected');
       const event = JSON.parse(job.payload) as Event;
-      const stale = job.operation === 'scrobble' && (event as ScrobbleEvent).action !== 'stop' && now - job.created > 10 * 60_000;
+      let stale = job.operation === 'scrobble' && (event as ScrobbleEvent).action !== 'stop' && now - job.created > 10 * 60_000;
+      if (job.operation === 'drop') {
+        const ev = event as DropEvent;
+        const current = await localDrop({ ...ctx, historyScope: ev.scope }, ev.ids);
+        stale = !!current && current.updated > ev.at;
+      }
       if (!stale) {
-        if (job.operation === 'clear') await tracker.clearResume?.(ctx,event as ResumeEntry);
+        if (job.operation === 'drop') {
+          if (!tracker.drop) throw new Error('Tracker does not support dropping shows');
+          for (const target of await dropTargets(ctx, event as DropEvent, tracker.name)) await tracker.drop(ctx, target);
+          await cacheDelete(`tracker-snapshot:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}:${tracker.name}`);
+        } else if (job.operation === 'clear') await tracker.clearResume?.(ctx,event as ResumeEntry);
         else {
           const events = await trackerTargets(ctx,event as ScrobbleEvent | MarkEvent,job.service);
           for (let i = 0; i < events.length; i++) {
@@ -64,6 +79,12 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
             if (!renewed.meta.changes) return;
             if (job.operation === 'scrobble') await tracker.scrobble(ctx,events[i] as ScrobbleEvent);
             else await tracker.mark(ctx,events[i] as MarkEvent);
+            // A stop report from a player already running when the user dropped a show
+            // must not let the tracker's automatic watched-event undrop reverse that choice.
+            if (tracker.drop && (event as MarkEvent).kind !== 'movie') {
+              const dropped = await localDrop(ctx, event.ids);
+              if (dropped?.dropped) await tracker.drop(ctx, { ids: { ...dropped.bundle, ...events[i].ids }, dropped: true, at: dropped.updated, scope: ctx.scope });
+            }
             await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING')
               .bind(ack,'true',Date.now()+30*86400_000).run();
           }

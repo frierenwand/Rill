@@ -35,6 +35,7 @@ import { rememberPeople } from './people';
 import { enrichWithTmdb } from './enrichment';
 import { favoriteIds, saveFavorite } from '../storage/favorites';
 import { itemRatings, saveRating } from '../storage/ratings';
+import { overlayDropped, showKeys } from '../storage/dropped';
 
 export const SHELF_LIMIT = 20;
 export const SHELF_CONCURRENCY = 4;
@@ -110,6 +111,7 @@ interface EpisodeMark {
 }
 
 export class WatchIndex {
+  readonly dropped: Set<string>;
   readonly localEpisodes=new Map<string,NonNullable<WatchSnapshot['local']>[number]>();
   readonly movies = new Map<string, WatchedMovie>();
   readonly episodes = new Map<string, Map<string, EpisodeMark>>();
@@ -118,6 +120,7 @@ export class WatchIndex {
   readonly shows = new Map<string, WatchSnapshot['shows'][number]>();
 
   constructor(readonly snapshot: WatchSnapshot) {
+    this.dropped = new Set((snapshot.dropped ?? []).flatMap(showKeys));
     for(const r of snapshot.local ?? []) if(r.kind==='episode') for(const k of bundleKeys(r.ids)) this.localEpisodes.set(`${k}:${r.season ?? 1}:${r.episode}`,r);
     for (const m of snapshot.movies ?? []) for (const k of bundleKeys(m.ids)) this.movies.set(k, m);
     for (const e of snapshot.episodes ?? []) {
@@ -149,6 +152,8 @@ export class WatchIndex {
     }
     return out;
   }
+
+  isDropped(keys: string[]): boolean { return keys.some(key => this.dropped.has(key)); }
 
   episode(keys: string[], season: number, episode: number): { watched?: EpisodeMark; resume?: ResumeEntry } {
     const out: { watched?: EpisodeMark; resume?: ResumeEntry } = {};
@@ -286,12 +291,32 @@ export class Library {
   }
 
   ratings(): Promise<Map<string, boolean>> {
-    this.ratingsPromise ??= itemRatings(this.ctx);
+    this.ratingsPromise ??= (async () => {
+      const [ratings, idx] = await Promise.all([itemRatings(this.ctx), this.watch()]);
+      for (const [id, likes] of ratings) {
+        const g = decodeGuid(id);
+        if (!g || g.kind === 'movie' || g.kind === 'misc' || g.kind === 'view') continue;
+        if (idx.isDropped(this.keysOf(id, g))) ratings.set(id, false);
+        else if (!likes) ratings.delete(id);
+      }
+      for (const ids of idx.snapshot.dropped ?? []) {
+        const g = this.guidOfBundle(ids, 'series');
+        if (g) ratings.set(encodeGuid(g), false);
+      }
+      return ratings;
+    })();
     return this.ratingsPromise;
   }
 
   async setRating(id: string, likes: boolean | null): Promise<void> {
-    await saveRating(this.ctx, id, likes);
+    const g = decodeGuid(id);
+    if (g && (g.kind === 'series' || g.kind === 'season' || g.kind === 'episode')) {
+      const root = parentSeriesOf(g);
+      const ids = bundleOf(root, await this.meta(root));
+      const previous = this.watchPromise;
+      await trackerApi.drop(this.ctx, ids, likes === false, encodeGuid(root), { itemId: id, likes: likes === false ? null : likes, profile: this.ctx.profile?.id ?? '' });
+      this.watchPromise = previous?.then(async idx => new WatchIndex(await overlayDropped(this.ctx, idx.snapshot)));
+    } else await saveRating(this.ctx, id, likes);
     this.ratingsPromise = undefined;
   }
 
@@ -302,6 +327,8 @@ export class Library {
       const id = plainGuid(record.ItemId ?? record.Key);
       record.IsFavorite = favorites.has(id);
       record.Likes = ratings.get(id) ?? null;
+      const g = decodeGuid(id);
+      if (g && (g.kind === 'series' || g.kind === 'season' || g.kind === 'episode') && (await this.watch()).isDropped(this.keysOf(id, g))) record.Likes = false;
     }
   }
 
@@ -674,7 +701,7 @@ export class Library {
 
   async resumeShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
-    const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.kind === 'movie' || !idx.isDropped(bundleKeys(r.ids))) && (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
     const page = rows.slice(start, start + Math.min(limit, SHELF_LIMIT));
     const shows = new Map<string, Show>();
     const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
@@ -685,7 +712,7 @@ export class Library {
         return meta ? this.titleItemOf(meta, g) : null;
       }
       const show = await this.show(g);
-      if (!show) return null;
+      if (!show || idx.isDropped(show.keys)) return null;
       shows.set(show.id, show);
       let ep = this.findEpisode(show, { ...g, kind: 'episode', season: row.season, episode: row.episode });
       const local=idx.localEpisode(show.keys,row.season ?? 1,row.episode ?? 0);
@@ -704,14 +731,14 @@ export class Library {
 
   async nextUpShelf(start: number, limit: number, opts: { includeResumable: boolean; includeRewatching: boolean }): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
-    const shows = [...(idx.snapshot.shows ?? [])].sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+    const shows = [...(idx.snapshot.shows ?? [])].filter(row => !idx.isDropped(bundleKeys(row.ids))).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
     const page = shows.slice(start, start + Math.min(limit, SHELF_LIMIT));
     const loaded = new Map<string, Show>();
     const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
       const g = this.guidOfBundle(row.ids, 'series');
       if (!g) return null;
       const show = await this.show(g);
-      if (!show) return null;
+      if (!show || idx.isDropped(show.keys)) return null;
       loaded.set(show.id, show);
       const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
       const states=await mapLimit(released,8,e=>this.episodeState(idx,show,e));
@@ -737,8 +764,8 @@ export class Library {
   async upcomingShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
     const followed = new Map<string, IdBundle>();
-    for (const s of idx.snapshot.shows ?? []) followed.set(bundleKeys(s.ids)[0] ?? JSON.stringify(s.ids), s.ids);
-    for (const r of idx.snapshot.resume ?? []) if (r.kind === 'episode') followed.set(bundleKeys(r.ids)[0] ?? JSON.stringify(r.ids), r.ids);
+    for (const s of idx.snapshot.shows ?? []) if (!idx.isDropped(bundleKeys(s.ids))) followed.set(bundleKeys(s.ids)[0] ?? JSON.stringify(s.ids), s.ids);
+    for (const r of idx.snapshot.resume ?? []) if (r.kind === 'episode' && !idx.isDropped(bundleKeys(r.ids))) followed.set(bundleKeys(r.ids)[0] ?? JSON.stringify(r.ids), r.ids);
     const now = Date.now();
     const horizon = now + UPCOMING_DAYS * 86_400_000;
     const list = [...followed.values()].slice(0, 60);
@@ -747,7 +774,7 @@ export class Library {
     await mapLimit(list, SHELF_CONCURRENCY, async (ids) => {
       const g = this.guidOfBundle(ids, 'series');
       const show = g ? await this.show(g) : null;
-      if (!show) return;
+      if (!show || idx.isDropped(show.keys)) return;
       if(show.keys.some(k=>seen.has(k)))return;
       show.keys.forEach(k=>seen.add(k));
       for (const e of show.episodes) {

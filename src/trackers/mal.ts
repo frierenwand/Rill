@@ -4,7 +4,7 @@ import type { MalAuth } from '../config/schema';
 import type { ManifestCatalog, MetaPreview } from '../stremio/types';
 import { fetchJson } from '../util/cache';
 import { clampPercent, emptySnapshot, fingerprint, isoOrNow, nowIso, sendRequest } from './common';
-import type { MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
+import type { DropEvent, MarkEvent, ScrobbleEvent, Tracker, WatchSnapshot } from './types';
 
 const API = 'https://api.myanimelist.net/v2';
 const WATCHED_AT = 90;
@@ -35,27 +35,34 @@ async function get<T>(ctx: Ctx, a: MalAuth, path: string, ttl: number): Promise<
   return result;
 }
 
-async function listAll(ctx: Ctx, a: MalAuth, status: MalStatus, fields: string, ttl: number, maxPages = 10): Promise<ListRow[]> {
+async function listAll(ctx: Ctx, a: MalAuth, status: MalStatus, fields: string, ttl: number, maxPages = 100): Promise<ListRow[]> {
   const rows: ListRow[] = [];
+  const seen = new Set<string>();
   for (let i = 0; i < maxPages; i++) {
     const page = await get<ListPage>(ctx, a, `/users/@me/animelist?status=${status}&fields=${fields}&limit=${PAGE}&offset=${i * PAGE}&nsfw=true`, ttl);
-    if (!page?.data?.length) break;
+    if (!page?.data?.length) return rows;
+    const signature = JSON.stringify(page.data);
+    if (seen.has(signature)) throw new Error('MAL repeated a list page');
+    seen.add(signature);
     rows.push(...page.data);
-    if (!page.paging?.next) break;
+    if (!page.paging?.next) return rows;
   }
-  return rows;
+  throw new Error('MAL list exceeds the import limit');
 }
 
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const initial = auth(ctx);
   const a = initial ? await credentials(ctx, 'mal', initial) : undefined;
   if (!a) return emptySnapshot();
-  const [watching, completed] = await Promise.all([
+  const [watching, completed, dropped, held] = await Promise.all([
     listAll(ctx, a, 'watching', 'list_status', 60),
     listAll(ctx, a, 'completed', 'list_status,num_episodes', 60),
+    listAll(ctx, a, 'dropped', 'list_status,num_episodes', 0),
+    listAll(ctx, a, 'on_hold', 'list_status,num_episodes', 60),
   ]);
   const out = emptySnapshot();
-  for (const row of [...watching, ...completed]) {
+  out.dropped = dropped.filter(row => row.node?.id).map(row => ({ mal: row.node.id }));
+  for (const row of [...watching, ...completed, ...dropped, ...held]) {
     const mal = row.node?.id;
     if (!mal) continue;
     const ls = row.list_status ?? {};
@@ -69,6 +76,19 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   }
   out.fetchedAt = nowIso();
   return out;
+}
+
+async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
+  const initial = auth(ctx);
+  const a = initial ? await credentials(ctx, 'mal', initial) : undefined;
+  if (!a) throw new Error('MAL credentials unavailable');
+  if (!ev.ids.mal) return;
+  const cur = await current(ctx, a, ev.ids.mal);
+  if (!cur) throw new Error('MAL state unavailable');
+  if (!ev.dropped && cur.status !== 'dropped') return;
+  const status: MalStatus = ev.dropped ? 'dropped' : cur.total && cur.watched >= cur.total ? 'completed' : cur.watched > 0 ? 'watching' : 'plan_to_watch';
+  const result = await sendRequest(`${API}/anime/${ev.ids.mal}/my_list_status`, { method: 'PATCH', headers: headers(a, true), body: new URLSearchParams({ status }).toString() });
+  if (!result.ok) throw new Error('MAL drop update rejected');
 }
 
 async function current(ctx: Ctx, a: MalAuth, mal: number): Promise<{ watched: number; total: number | null; status?: MalStatus } | null> {
@@ -154,6 +174,7 @@ export const malTracker: Tracker = {
   name: 'mal',
   ready: (ctx) => !!auth(ctx),
   snapshot,
+  drop,
   scrobble,
   mark,
   catalogs,
