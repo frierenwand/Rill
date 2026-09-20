@@ -799,9 +799,7 @@ function body(): string {
 </section>
 
 <section id="s-install">
-  <h2><small>9</small>Connect your apps</h2><p class="note">Copy a link into your player. These links contain your configuration and credentials; keep them private. After changing settings, copy the updated link into your apps.</p>
-  <div class="out"><label class="t">Stremio manifest</label><div class="u" id="url-stremio"></div><div class="b"><button type="button" data-copy="url-stremio">Copy</button><span></span></div></div>
-  <div class="out"><label class="t">Stremio deep link</label><div class="u" id="url-deeplink"></div><div class="b"><button type="button" data-copy="url-deeplink">Copy</button><a id="open-deeplink" href="#">Open in Stremio</a><span></span></div></div>
+  <h2><small>9</small>Connect Jellyfin</h2><p class="note">Enter this server address in your Jellyfin app, then sign in with your server account.</p>
   <div class="out"><label class="t">Jellyfin server</label><div class="u" id="url-jellyfin"></div><div class="b"><button type="button" data-copy="url-jellyfin">Copy</button><span id="jf-hint"></span></div></div>
   <p class="status" id="enc-status"></p>
   <h3>Load an existing config</h3>
@@ -1096,11 +1094,6 @@ const JS = String.raw`
   function renderInstall() {
     $('url-jellyfin').textContent = ORIGIN;
     $('jf-hint').textContent = account.durable && account.exists ? 'Sign in as “' + cfg.jellyfin.username + '” with your password.' : 'Save your server account before connecting.';
-    if (!token) return;
-    var base = ORIGIN + '/' + token;
-    $('url-stremio').textContent = base + '/manifest.json';
-    $('url-deeplink').textContent = 'stremio://' + base.replace(/^https?:\/\//, '') + '/manifest.json';
-    $('open-deeplink').href = $('url-deeplink').textContent;
   }
 
   function loadCatalogs() {
