@@ -1,4 +1,6 @@
-# Rill
+<p align="center">
+  <img src="docs/brand/rill.svg" alt="Rill" width="280">
+</p>
 
 Deploy and manage your own installation on Cloudflare Workers.
 

@@ -8,6 +8,7 @@ import { getManifest } from '../stremio/client';
 import { sha256 } from '../util/bytes';
 import { listCatalogDefinitions } from '../addon/catalogs';
 import { renderPage, renderLogo } from './page';
+import { BRAND_ICON, BRAND_WORDMARK } from '../brand';
 import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
 import { syncMovieLens,movieLensSyncStatus,importRatingsCsv } from '../addon/movielens-sync';
 import { aiCatalog } from '../addon/ai';
@@ -113,6 +114,9 @@ uiRouter.get('/', (c) => {
 uiRouter.get('/logo.svg', (c) => {
   return c.body(renderLogo(), 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
 });
+
+uiRouter.get('/wordmark.svg', (c) => c.body(BRAND_WORDMARK, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
+uiRouter.get('/favicon.svg', (c) => c.body(BRAND_ICON, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }));
 
 uiRouter.use('/api/*', async (c, next) => {
   await next();

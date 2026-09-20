@@ -1,4 +1,4 @@
-import { BRAND_LOGO, BRAND_NAME } from '../brand';
+import { BRAND_NAME, BRAND_VERSION } from '../brand';
 import type { Ctx } from '../context';
 import type { Manifest, ManifestCatalog } from '../stremio/types';
 import { enabledCatalogDefinitions, type CatalogDefinition } from './catalogs';
@@ -7,8 +7,6 @@ export const ADDON_ID = 'community.rill';
 export const ADDON_VERSION = '0.1.0';
 
 export const ID_PREFIXES = ['tt', 'tmdb:', 'tvdb:', 'tvmaze:', 'tvdbc:', 'tmdbc:', 'kitsu:', 'mal:', 'anilist:', 'anidb:'];
-
-export const LOGO_DATA_URI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BRAND_LOGO)}`;
 
 export function catalogToManifestEntry(def: CatalogDefinition): ManifestCatalog {
   const entry: ManifestCatalog = { type: def.type, id: def.id, name: def.name };
@@ -32,7 +30,7 @@ export async function buildManifest(ctx: Ctx): Promise<Manifest> {
     version: ADDON_VERSION,
     name,
     description: `${name}: software you deploy and manage in your own Cloudflare account.`,
-    logo: LOGO_DATA_URI,
+    logo: `${ctx.origin}/logo.svg?v=${BRAND_VERSION}`,
     resources: [
       'catalog',
       { name: 'meta', types: ['movie', 'series', 'anime'], idPrefixes: ID_PREFIXES },

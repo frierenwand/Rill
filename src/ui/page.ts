@@ -1,4 +1,4 @@
-import { BRAND_LOGO } from '../brand';
+import { BRAND_LOGO, BRAND_VERSION } from '../brand';
 import { DEFAULT_CONFIG } from '../config/schema';
 
 const LANGUAGES = [
@@ -33,9 +33,13 @@ body { font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -w
 main { max-width:960px; margin:auto; padding:0 28px 48px; }
 header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--bg); }
 .brand-row { display:flex; justify-content:space-between; align-items:center; gap:24px; }
-.brand { display:flex; align-items:center; gap:9px; }
-.brand img { width:28px; height:28px; }
-.wordmark { font-size:27px; font-weight:600; line-height:1; letter-spacing:-1.2px; margin:0; }
+.brand { display:flex; align-items:center; gap:12px; flex-shrink:0; }
+.brand .brand-cat { display:block; width:44px; height:51px; object-fit:contain; }
+.wordmark { margin:0; line-height:0; }
+.brand .brand-wordmark { display:block; width:90px; height:38px; }
+.brand.brand-welcome { gap:16px; align-items:flex-end; margin-bottom:28px; }
+.brand-welcome .brand-cat { width:98px; height:113px; }
+.brand-welcome .brand-wordmark { width:146px; height:60px; margin-bottom:6px; }
 .header-actions { display:flex; align-items:center; gap:14px; }
 .account { position:relative; }
 .account:empty { display:none; }
@@ -100,17 +104,17 @@ header { padding-top:26px; position:sticky; top:0; z-index:5; background:var(--b
 .tabs-row { display:flex; align-items:center; gap:16px; margin-top:22px; padding-bottom:16px; }
 .tabs-row .tabs { flex:1 1 auto; min-width:0; margin:0; padding:0; }
 .tabs-row .mode { flex:none; }
-#setup-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; overflow:auto; }
+#setup-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; overflow:auto; align-items:safe center; }
 #setup-gate[hidden] { display:none; }
 #setup-form { width:100%; max-width:380px; }
-#setup-form .brand { margin-bottom:18px; }
+#setup-form .brand { margin-bottom:28px; }
 #setup-form h2 { margin-bottom:8px; }
 #setup-form input { width:100%; }
 #setup-submit { width:100%; background:var(--accent); color:#141414; border:1px solid #ffffff; padding:11px 16px; border-radius:8px; font-weight:650; margin-top:4px; }
-#login-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px; }
+#login-gate { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:safe center; justify-content:center; padding:24px; overflow:auto; }
 #login-gate[hidden] { display:none; }
 #login-form { width:100%; max-width:360px; }
-#login-form .brand { margin-bottom:18px; }
+#login-form .brand { margin-bottom:28px; }
 #login-form input { width:100%; }
 #login-submit { width:100%; background:var(--accent); color:#141414; border:1px solid #ffffff; padding:11px 16px; border-radius:8px; font-weight:650; }
 .mode { display:inline-flex; border:1px solid #eeeeee29; border-radius:6px; overflow:hidden; }
@@ -309,7 +313,7 @@ input[type=text],input[type=password],input[type=number],input[type=url],textare
 @media(max-width:960px) { #s-tracking .two { grid-template-columns:1fr; } }
 @media(max-width:700px) { input[type=text],input[type=password],input[type=number],input[type=url],textarea,.select-trigger { font-size:16px; } #scrobble { grid-template-columns:1fr; } #scrobble label { padding:12px 12px; gap:9px; font-size:12px; } }
 @media(prefers-reduced-motion:reduce) { *,*:before { transition:none!important; } }
-@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .wordmark { font-size:26px; letter-spacing:-1px; } .brand { gap:10px; } .brand img { width:27px; height:27px; } .header-actions { gap:10px; } #account, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
+@media(max-width:700px) { main { padding:0 20px 40px; } header { padding-top:24px; } .brand { gap:10px; } .brand .brand-cat { width:40px; height:46px; } .brand .brand-wordmark { width:84px; height:35px; } .brand-welcome .brand-cat { width:94px; height:108px; } .brand-welcome .brand-wordmark { width:140px; height:58px; } .header-actions { gap:10px; } #account, .tabs-row { display:none; } #menu-btn { display:inline-flex; flex-direction:column; justify-content:center; align-items:center; gap:4px; width:42px; height:42px; border:1px solid var(--line); border-radius:10px; background:#101010; } #menu-btn span { display:block; width:16px; height:1.5px; background:var(--fg); border-radius:1px; transition:transform .2s ease, opacity .2s ease; } #menu-btn[aria-expanded=true] span:nth-child(1) { transform:translateY(5.5px) rotate(45deg); } #menu-btn[aria-expanded=true] span:nth-child(2) { opacity:0; } #menu-btn[aria-expanded=true] span:nth-child(3) { transform:translateY(-5.5px) rotate(-45deg); } header { padding-bottom:14px; } .workspace { padding-top:18px; } .workspace { padding-top:22px; } h2 { font-size:22px; } #s-general .section-content,.two { grid-template-columns:1fr; } .setting-row { min-height:0; padding:18px; } #s-age { display:block; padding:18px; } #s-age .note { margin:10px 0 0; } #s-age .f { margin-top:18px; } #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:20px; } .svc { padding:20px; } }
 @media(max-width:700px) { #s-meta .section-content,#s-jellyfin .section-content,#s-search .section-content { padding:0; } }
 .tracking-storage { padding:0 0 18px; margin:0 0 24px; border-bottom:1px solid var(--line); }
 .tracking-storage h3 { margin:0 0 8px; }
@@ -548,13 +552,18 @@ button.primary:hover { background:#d5d5d5; }
 
 `;
 
+function brand(welcome = false, heading = true): string {
+  const tag = heading ? 'h1' : 'span';
+  return `<div class="brand${welcome ? ' brand-welcome' : ''}"><img class="brand-cat" src="/logo.svg?v=${BRAND_VERSION}" alt="" width="44" height="51"><${tag} class="wordmark"><img class="brand-wordmark" src="/wordmark.svg?v=${BRAND_VERSION}" alt="Rill" width="90" height="38"></${tag}></div>`;
+}
+
 function body(): string {
   return `
 <main>
-<div id="setup-gate" hidden><form id="setup-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><h2>Create your account</h2><p class="note">One account protects this page and signs you in from Jellyfin apps. Your settings are stored on your Worker and follow you to every device.</p><div class="f"><label class="t" for="setup-user">Username</label><input type="text" id="setup-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="setup-pass">Password</label><input type="password" id="setup-pass" name="password" autocomplete="new-password" minlength="8" required><p class="hint">At least 8 characters.</p></div><div class="f"><label class="t" for="setup-pass2">Confirm password</label><input type="password" id="setup-pass2" autocomplete="new-password" minlength="8" required></div><button type="submit" id="setup-submit">Create account</button><p class="status" id="setup-status" role="alert"></p></form></div>
-<div id="login-gate" hidden><form id="login-form" autocomplete="on"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
+<div id="setup-gate" hidden><form id="setup-form" autocomplete="on">${brand(true)}<h2>Create your account</h2><p class="note">One account protects this page and signs you in from Jellyfin apps. Your settings are stored on your Worker and follow you to every device.</p><div class="f"><label class="t" for="setup-user">Username</label><input type="text" id="setup-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="setup-pass">Password</label><input type="password" id="setup-pass" name="password" autocomplete="new-password" minlength="8" required><p class="hint">At least 8 characters.</p></div><div class="f"><label class="t" for="setup-pass2">Confirm password</label><input type="password" id="setup-pass2" autocomplete="new-password" minlength="8" required></div><button type="submit" id="setup-submit">Create account</button><p class="status" id="setup-status" role="alert"></p></form></div>
+<div id="login-gate" hidden><form id="login-form" autocomplete="on">${brand(true)}<p class="note">Sign in with your Jellyfin username and password to open your settings.</p><div class="f"><label class="t" for="login-user">Username</label><input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div><div class="f"><label class="t" for="login-pass">Password</label><input type="password" id="login-pass" name="password" autocomplete="current-password" required></div><button type="submit" id="login-submit">Sign in</button><p class="status" id="login-status" role="alert"></p></form></div>
 <header>
-  <div class="brand-row"><div class="brand"><img src="/logo.svg?v=rill" alt=""><h1 class="wordmark">rill</h1></div><div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
+  <div class="brand-row">${brand()}<div class="header-actions"><span id="draft-status" role="status" hidden>Saved on this device</span><div id="account" class="account"></div><button type="button" id="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button></div></div>
   <div class="tabs-row">
   <nav class="tabs" role="tablist" aria-label="Configuration sections">
     ${[['general','General'],['addons','Add-ons'],['catalogs','Catalogs'],['collections','Collections'],['jellyfin','Jellyfin'],['meta','Metadata'],['tracking','Scrobbling'],['install','Connect']].map(([id,label],i) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}" data-tab="${id}"${id==='meta'||id==='tracking'?' data-advanced':''}>${label}</button>`).join('')}
@@ -564,7 +573,7 @@ function body(): string {
 </header>
 <div id="drawer-backdrop" hidden></div>
 <aside id="drawer" hidden aria-label="Menu">
-  <div class="drawer-head"><div class="brand"><img src="/logo.svg?v=rill" alt=""><span class="wordmark">rill</span></div><button type="button" id="drawer-close" aria-label="Close menu">✕</button></div>
+  <div class="drawer-head">${brand(false, false)}<button type="button" id="drawer-close" aria-label="Close menu">✕</button></div>
   <div id="drawer-account"></div>
   <nav id="drawer-nav" class="drawer-nav" aria-label="Sections"></nav>
   <div class="drawer-mode"><span class="t">Mode</span><div class="seg" role="group" aria-label="Settings mode"><button type="button" data-mode="simple" aria-pressed="false">Simple</button><button type="button" data-mode="advanced" aria-pressed="false">Advanced</button></div></div>
@@ -2128,7 +2137,7 @@ export function renderPage(): string {
 <meta name="color-scheme" content="dark">
 <meta name="referrer" content="no-referrer">
 <title>Rill</title>
-<link rel="icon" href="/logo.svg?v=rill" type="image/svg+xml">
+<link rel="icon" href="/favicon.svg?v=${BRAND_VERSION}" type="image/svg+xml">
 <style>${CSS}</style>
 </head>
 <body>
