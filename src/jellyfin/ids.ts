@@ -32,8 +32,8 @@ export type LabelGuid = ViewGuid | MiscGuid;
 
 export type Guid = TitleGuid | LabelGuid;
 
-const MISC_SUB: Record<string, number> = { genre: 1, person: 2, studio: 3, collection: 4, boxset: 5 };
-const MISC_SUB_OF: Record<number, string> = { 1: 'genre', 2: 'person', 3: 'studio', 4: 'collection', 5: 'boxset' };
+const MISC_SUB: Record<string, number> = { genre: 1, person: 2, studio: 3, collection: 4, boxset: 5, tmdbperson: 6 };
+const MISC_SUB_OF: Record<number, string> = { 1: 'genre', 2: 'person', 3: 'studio', 4: 'collection', 5: 'boxset', 6: 'tmdbperson' };
 
 export function fnv1a32(text: string): number {
   let h = 0x811c9dc5;
@@ -214,7 +214,8 @@ export function genreIdOf(name: string): string {
   return encodeLabel('misc', 'genre', name);
 }
 
-export function personIdOf(name: string): string {
+export function personIdOf(name: string, tmdbId?: number): string {
+  if (tmdbId && Number.isSafeInteger(tmdbId) && tmdbId > 0 && tmdbId <= 0xffffffff) return packLabel('misc', 'tmdbperson', tmdbId, '');
   return encodeLabel('misc', 'person', name);
 }
 

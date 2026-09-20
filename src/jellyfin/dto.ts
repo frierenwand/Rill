@@ -279,10 +279,10 @@ export function providerIds(meta: Partial<Meta>, g: TitleGuid): Record<string, s
 }
 
 function peopleOf(meta: Partial<Meta>): Dto[] {
-  const out: Dto[] = [];
-  for (const name of (meta.cast ?? []).slice(0, 20)) out.push({ Name: name, Id: personIdOf(name), Role: '', Type: 'Actor' });
-  for (const name of meta.director ?? []) out.push({ Name: name, Id: personIdOf(name), Role: '', Type: 'Director' });
-  for (const name of meta.writer ?? []) out.push({ Name: name, Id: personIdOf(name), Role: '', Type: 'Writer' });
+  const out: Dto[] = (meta.people ?? []).map(p => ({ Name: p.name, Id: personIdOf(p.name, p.tmdbId), Role: p.role ?? '', Type: p.type, PrimaryImageTag: imageTag(p.image) }));
+  for (const [type, names] of [['Actor', (meta.cast ?? []).slice(0, 20)], ['Director', meta.director ?? []], ['Writer', meta.writer ?? []]] as const) {
+    for (const name of names) if (!out.some(p => p.Type === type && String(p.Name).toLowerCase() === name.toLowerCase())) out.push({ Name: name, Id: personIdOf(name), Role: '', Type: type });
+  }
   return out.filter((p) => p.Name);
 }
 
@@ -307,7 +307,7 @@ export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, wh
 
   const item: Dto = {
     Name: meta.name,
-    OriginalTitle: meta.name,
+    OriginalTitle: full.originalTitle || meta.name,
     SortName: String(meta.name ?? '').toLowerCase(),
     Id: id,
     ServerId: who.serverId,
@@ -326,8 +326,8 @@ export function titleItem(meta: MetaPreview | Meta, g: TitleGuid, id: string, wh
     RunTimeTicks: runtimeTicks(full.runtime),
     ProviderIds: providerIds(full, g),
     People: peopleOf(full),
-    Studios: full.network ? [{ Name: full.network }] : [],
-    Taglines: [],
+    Studios: [...new Set([...(full.studios ?? []), ...(full.network ? [full.network] : [])])].map(Name => ({ Name })),
+    Taglines: full.tagline ? [full.tagline] : [],
     Tags: [],
     ProductionLocations: full.country ? [full.country] : [],
     RemoteTrailers: (full.trailers ?? [])

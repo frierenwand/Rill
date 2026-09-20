@@ -519,7 +519,7 @@ async function singleItem(L: Library, id: string, withSources: boolean): Promise
       return found ? boxSetDto(L, found.collection, found.folder) : null;
     }
     const person=await personFor(L.ctx,g);
-    return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday??null,EndDate:person.deathday??null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ImageTags:person.profile_path?{Primary:`https://image.tmdb.org/t/p/h632${person.profile_path}`}:{},IsFolder:false}:null;
+    return person?{Id:id,ServerId:L.jf.who.serverId,Name:person.name,Type:'Person',Overview:person.biography??'',PremiereDate:person.birthday?`${person.birthday}T00:00:00.000Z`:null,EndDate:person.deathday?`${person.deathday}T00:00:00.000Z`:null,ProductionLocations:person.place_of_birth?[person.place_of_birth]:[],ProviderIds:{Tmdb:String(person.id)},ExternalUrls:[{Name:'TMDB',Url:`https://www.themoviedb.org/person/${person.id}`}],ImageTags:person.profile_path?{Primary:`https://image.tmdb.org/t/p/h632${person.profile_path}`}:{},PrimaryImageAspectRatio:2/3,IsFolder:false}:null;
   }
 
   if (g.kind === 'movie' || g.kind === 'series') {

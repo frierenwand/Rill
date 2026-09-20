@@ -1,6 +1,6 @@
 import type { Ctx } from '../context';
 import { episodeId } from '../stremio/ids';
-import type { ContentType, Meta, MetaLink, MetaPreview, MetaVideo } from '../stremio/types';
+import type { ContentType, Meta, MetaLink, MetaPerson, MetaPreview, MetaVideo } from '../stremio/types';
 import { fetchJson, memo } from '../util/cache';
 import { mapLimit } from '../util/concurrency';
 import { languageChain, regionOf, splitLanguageTag, tmdbLanguage } from './language';
@@ -20,8 +20,8 @@ export type TmdbKind = 'movie' | 'tv';
 export interface TmdbImage { file_path: string; iso_639_1: string | null; vote_average: number; width?: number; height?: number }
 export interface TmdbGenre { id: number; name: string }
 export interface TmdbVideo { key: string; site: string; type: string; iso_639_1?: string; official?: boolean; published_at?: string }
-export interface TmdbCast { name: string; character?: string; order?: number; profile_path?: string | null }
-export interface TmdbCrew { name: string; job?: string; department?: string }
+export interface TmdbCast { id?: number; name: string; character?: string; order?: number; profile_path?: string | null; roles?: Array<{ character: string }> }
+export interface TmdbCrew { id?: number; name: string; job?: string; department?: string; profile_path?: string | null; jobs?: Array<{ job: string }> }
 export interface TmdbTranslation { iso_639_1: string; iso_3166_1: string; data?: { title?: string; name?: string; overview?: string; tagline?: string } }
 
 export interface TmdbEpisode {
@@ -50,6 +50,7 @@ export interface TmdbDetails {
   belongs_to_collection?: { id: number; name: string } | null;
   external_ids?: { imdb_id?: string | null; tvdb_id?: number | null };
   credits?: { cast?: TmdbCast[]; crew?: TmdbCrew[] };
+  aggregate_credits?: { cast?: TmdbCast[]; crew?: TmdbCrew[] };
   videos?: { results?: TmdbVideo[] };
   images?: { posters?: TmdbImage[]; backdrops?: TmdbImage[]; logos?: TmdbImage[] };
   release_dates?: { results?: Array<{ iso_3166_1: string; release_dates: Array<{ certification: string; type: number }> }> };
@@ -135,6 +136,7 @@ export async function tmdbImages(ctx: Ctx, kind: TmdbKind, tmdbId: number): Prom
 
 function appendList(kind: TmdbKind, lang: string): string {
   const base = ['external_ids', 'credits', 'videos', 'images', 'keywords', kind === 'movie' ? 'release_dates' : 'content_ratings'];
+  if (kind === 'tv') base.push('aggregate_credits');
   if (lang !== 'en') base.push('translations');
   return base.join(',');
 }
@@ -336,11 +338,30 @@ function crewNames(d: TmdbDetails, jobs: string[]): string[] {
   return out;
 }
 
+export function peopleFromDetails(d: TmdbDetails): MetaPerson[] {
+  const credits = d.aggregate_credits ?? d.credits;
+  const people: MetaPerson[] = (credits?.cast ?? []).slice()
+    .sort((a, b) => (a.order ?? 99) - (b.order ?? 99)).slice(0, 30)
+    .map(p => ({ name: p.name, type: 'Actor', tmdbId: p.id,
+      role: p.character || [...new Set((p.roles ?? []).map(r => r.character).filter(Boolean))].join(' / ') || undefined,
+      image: tmdbImageUrl(p.profile_path, 'w185') }));
+  for (const p of credits?.crew ?? []) {
+    const jobs = p.jobs?.map(j => j.job) ?? (p.job ? [p.job] : []);
+    for (const type of ['Director', 'Writer'] as const) {
+      const wanted = type === 'Director' ? ['Director', 'Series Director'] : ['Writer', 'Screenplay', 'Story', 'Novel', 'Author', 'Creator'];
+      const roles = jobs.filter(job => wanted.includes(job));
+      if (roles.length) people.push({ name: p.name, type, tmdbId: p.id, role: roles.join(' / '), image: tmdbImageUrl(p.profile_path, 'w185') });
+    }
+  }
+  return [...new Map(people.filter(p => p.name).map(p => [`${p.type}:${p.tmdbId ?? p.name}`, p])).values()];
+}
+
 function episodeToVideo(canonicalId: string, ep: TmdbEpisode, fallbackThumb: string | undefined): MetaVideo {
   const released = ep.air_date ? toIsoNoon(ep.air_date) : undefined;
   const still = tmdbImageUrl(ep.still_path, 'w500');
   return {
     id: episodeId(canonicalId, ep.season_number, ep.episode_number),
+    numbering: 'tmdb',
     title: ep.name || `Episode ${ep.episode_number}`,
     season: ep.season_number,
     episode: ep.episode_number,
@@ -373,6 +394,10 @@ export async function tmdbMeta(ctx: Ctx, kind: TmdbKind, tmdbId: number, canonic
     id: canonicalId,
     type: contentTypeFor(kind),
     name: titleOf(d, lang),
+    originalTitle: d.original_title || d.original_name,
+    tagline: d.tagline || translated(d, lang, 'tagline'),
+    studios: (d.production_companies ?? []).map(s => s.name),
+    people: peopleFromDetails(d),
     description: overviewOf(d, lang),
     poster: art.poster,
     background: art.background,

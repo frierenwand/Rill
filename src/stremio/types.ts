@@ -40,6 +40,14 @@ export interface MetaVideo {
 
 export interface MetaLink { name: string; category: string; url: string }
 
+export interface MetaPerson {
+  name: string;
+  type: 'Actor' | 'Director' | 'Writer';
+  tmdbId?: number;
+  role?: string;
+  image?: string;
+}
+
 export interface MetaPreview {
   id: string;
   type: ContentType;
@@ -56,6 +64,10 @@ export interface MetaPreview {
 }
 
 export interface Meta extends MetaPreview {
+  people?: MetaPerson[];
+  originalTitle?: string;
+  tagline?: string;
+  studios?: string[];
   collection?:boolean;
   seasonPosters?:Record<number,string>;
   runtime?: string;

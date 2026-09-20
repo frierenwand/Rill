@@ -4,7 +4,7 @@ import { aiQuery,aiSearch } from '../addon/ai';
 import { trackerTargets } from '../trackers/targets';
 import { externalMeta } from '../stremio/client';
 import { metaApi } from '../meta/index';
-import { tmdbList } from '../meta/tmdb';
+import { tmdbList, tmdbMeta } from '../meta/tmdb';
 import { applyAgeCap } from '../addon/agecap';
 import { passesAgeCap } from '../meta/rating';
 import type { IdBundle } from '../meta/types';
@@ -31,6 +31,7 @@ import {
 } from './ids';
 import type { JfRequest } from './request';
 import { rememberPeople } from './people';
+import { enrichWithTmdb } from './enrichment';
 
 export const SHELF_LIMIT = 20;
 export const SHELF_CONCURRENCY = 4;
@@ -431,8 +432,13 @@ export class Library {
           meta = await externalMeta(this.ctx, type, stremioId).catch(() => null);
           if (!meta && type === 'anime') meta = await externalMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'series', stremioId).catch(() => null);
         }
+        // Related titles and filmographies use TMDB IDs, even in add-on-only mode.
+        if (!meta && this.ctx.tmdbKey && title.source === 'tmdb') {
+          meta = await tmdbMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'tv', title.num, stremioId).catch(() => null);
+        }
+        if (meta) meta = await enrichWithTmdb(this.ctx, meta, bundleOf(title, meta), title.anime);
         if (meta && !this.allowed(meta.certification)) return null;
-        if(meta)await rememberPeople(this.ctx,meta);
+        if(meta)await rememberPeople(this.ctx,meta).catch(() => {});
         return meta;
       })();
       this.metas.set(k, p);
@@ -726,9 +732,11 @@ export class Library {
 
   async similar(g: TitleGuid, limit: number): Promise<Dto[]> {
     const meta = await this.meta(g);
-    if (!meta?.ids?.tmdb) return [];
+    if (!this.ctx.tmdbKey || !meta?.ids?.tmdb) return [];
     const kind=g.kind==='movie'?'movie':'tv';
-    const items=await applyAgeCap(this.ctx,kind==='movie'?'movie':'series',await tmdbList(this.ctx,kind,`/${kind}/${meta.ids.tmdb}/recommendations`,{language:this.ctx.cfg.language},1));
+    let related = await tmdbList(this.ctx,kind,`/${kind}/${meta.ids.tmdb}/recommendations`,{language:this.ctx.cfg.language},1);
+    if (!related.length) related = await tmdbList(this.ctx,kind,`/${kind}/${meta.ids.tmdb}/similar`,{language:this.ctx.cfg.language},1);
+    const items=await applyAgeCap(this.ctx,kind==='movie'?'movie':'series',related.filter(m => m.id !== `tmdb:${meta.ids!.tmdb}`));
     const built=items.slice(0,limit).map(m=> {
       const guid=this.guidOfBundle({tmdb:Number(m.id.split(':')[1])},kind==='movie'?'movie':'series');
       return guid?this.titleItemOf(m as Meta,guid):null;

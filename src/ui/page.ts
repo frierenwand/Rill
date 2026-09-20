@@ -588,6 +588,7 @@ function body(): string {
     <div class="f"><div class="key-row"><label class="t" for="k-rpdb">RPDB</label><span class="pill" data-key-status="rpdb">Not set</span></div><input type="password" id="k-rpdb" data-k="keys.rpdb" class="key" autocomplete="off"><a class="key-link" href="https://ratingposterdb.com/" target="_blank" rel="noopener">Get a RPDB key ↗</a></div>
   </div>
   <p class="hint"><button class="q" type="button" id="show-keys">Show keys</button> Keys are stored on your Worker and forwarded only to their providers.</p>
+  <p class="hint">Adding a TMDB key automatically fills missing Jellyfin details for matched titles, including cast photos, character names, biographies and related titles. Works with metadata add-ons, even when Providers is set to Off. Existing add-on details and episode numbering are preserved.</p>
   <h3>Providers</h3>
   <div class="two">
     <div class="f"><label class="t" for="p-movie">Movies</label><div class="sel"><select id="p-movie" data-k="providers.movie">${options(PROVIDER_OPTS)}</select></div></div>
