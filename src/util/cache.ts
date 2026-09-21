@@ -8,20 +8,41 @@ function keyUrl(key: string, origin?: string): string {
   return (origin ? `${origin}/.rill-cache/` : NS) + encodeURIComponent(key);
 }
 
+const hot = new Map<string, {json:string; expires:number}>();
+let hotSize = 0;
+function forgetHot(url:string):void {
+  const entry=hot.get(url);
+  if(entry){hotSize-=entry.json.length;hot.delete(url);}
+}
+function rememberHot(key:string,url:string,json:string,expires:number):void {
+  // Only reusable metadata and revision-keyed shelves belong in this cache.
+  // Authentication, tracker state and delivery acknowledgements stay fresh.
+  if(!/^(jf-meta:|jf-shelf:|catalog-defs:|addon-catalog-defs:|tmdb:|anime:)/.test(key)||json.length>512_000||url.length>16_384)return;
+  forgetHot(url);
+  while(hot.size>=128||hotSize+json.length>4_000_000)forgetHot(hot.keys().next().value!);
+  hot.set(url,{json,expires});hotSize+=json.length;
+}
+
 function cacheDatabase(): D1Database | undefined {
   return tryGetContext<{Bindings: {DB?: D1Database}}>()?.env.DB;
 }
 
 export async function cacheGet<T>(key: string, origin?: string): Promise<T | null> {
   const url = keyUrl(key, origin);
+  const cached=hot.get(url);
+  if(cached&&cached.expires>Date.now())return JSON.parse(cached.json) as T;
+  forgetHot(url);
   try {
     const hit = await caches.default.match(url);
     if (hit) return await hit.json() as T;
   } catch {}
   try {
-    const row = await cacheDatabase()?.prepare('SELECT value FROM state WHERE key=? AND expires>?')
-      .bind(`cache:${url}`,Date.now()).first<{value:string}>();
-    return row ? JSON.parse(row.value) as T : null;
+    const row = await cacheDatabase()?.prepare('SELECT value,expires FROM state WHERE key=? AND expires>?')
+      .bind(`cache:${url}`,Date.now()).first<{value:string;expires:number}>();
+    if(!row)return null;
+    const value=JSON.parse(row.value) as T;
+    rememberHot(key,url,row.value,row.expires);
+    return value;
   } catch { return null; }
 }
 
@@ -31,6 +52,8 @@ export async function cachePut(key: string, value: unknown, ttlSeconds: number, 
   try { json = JSON.stringify(value); } catch { return; }
   if (json === undefined) return;
   const ttl = Math.max(1,Math.floor(ttlSeconds));
+  const expires=Date.now()+ttl*1000;
+  rememberHot(key,url,json,expires);
   try {
     await caches.default.put(url, new Response(json, {
       headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${ttl}` },
@@ -42,13 +65,14 @@ export async function cachePut(key: string, value: unknown, ttlSeconds: number, 
   if (db && json.length <= 64_000 && new TextEncoder().encode(json).byteLength <= 64_000) {
     try {
       await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires')
-        .bind(`cache:${url}`,json,Date.now()+ttl*1000).run();
+        .bind(`cache:${url}`,json,expires).run();
     } catch {}
   }
 }
 
 export async function cacheDelete(key: string, origin?: string, db = cacheDatabase()): Promise<void> {
   const url = keyUrl(key, origin);
+  forgetHot(url);
   try { await caches.default.delete(url); } catch {}
   if (db) await db.prepare('DELETE FROM state WHERE key=?').bind(`cache:${url}`).run();
 }

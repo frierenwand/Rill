@@ -3,6 +3,15 @@ import type { WatchSnapshot } from '../trackers/types';
 import { stateGet } from './state';
 
 interface SnapshotHead { generation:string; parts:number }
+const recent = new WeakMap<D1Database, Map<string, {generation:string; text:string}>>();
+function remember(db:D1Database,key:string,generation:string,text:string):void {
+  if(text.length>1_000_000)return;
+  let entries=recent.get(db);
+  if(!entries){entries=new Map();recent.set(db,entries);}
+  entries.delete(key);
+  if(entries.size>=4)entries.delete(entries.keys().next().value!);
+  entries.set(key,{generation,text});
+}
 export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Promise<void> {
   const db=ctx.env.DB;if(!db)return;
   const text=JSON.stringify(snapshot),generation=crypto.randomUUID(),expires=Date.now()+365*86400_000;
@@ -17,6 +26,12 @@ export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Pr
 }
 export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|null> {
   const db=ctx.env.DB;if(!db)return null;
+  const cached=recent.get(db)?.get(key);
+  if(cached){
+    const head=await stateGet<SnapshotHead>(ctx,`${key}:head`);
+    if(head?.generation===cached.generation)return JSON.parse(cached.text) as WatchSnapshot;
+    recent.get(db)?.delete(key);
+  }
   const rows=await db.prepare(`WITH head AS (
     SELECT key,value,? || json_extract(value,'$.generation') AS prefix FROM state WHERE key=? AND expires>?
   ) SELECT key,value FROM head UNION ALL
@@ -31,5 +46,8 @@ export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|nul
     if(value===undefined)throw new Error('Incomplete stored history import');
     chunks.push(JSON.parse(value) as string);
   }
-  return JSON.parse(chunks.join('')) as WatchSnapshot;
+  const text=chunks.join('');
+  const snapshot=JSON.parse(text) as WatchSnapshot;
+  remember(db,key,head.generation,text);
+  return snapshot;
 }
