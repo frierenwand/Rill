@@ -221,7 +221,7 @@ async function drop(ctx: Ctx, ev: DropEvent): Promise<void> {
   const res = await sendRequest(`${API}/sync/add-to-list`, { method: 'POST', headers: headers(a), body: JSON.stringify({ shows: [{ ids, to }] }) });
   if (!res.ok || (res.body as { not_found?: { shows?: unknown[] } } | null)?.not_found?.shows?.length) throw new Error('Simkl drop update rejected');
   activityRequests.delete(ctx); listRequests.delete(ctx);
-  await cacheDelete(`json:simkl:${ctx.scope}:${await fingerprint(a.accessToken)}:${API}/sync/activities`, ctx.origin);
+  await cacheDelete(`json:simkl:${ctx.scope}:${await fingerprint(a.accessToken)}:${API}/sync/activities`, ctx.origin, ctx.env.DB);
 }
 
 function historyBody(ids: IdBundle, kind: 'movie' | 'episode' | 'series', season?: number, episode?: number): unknown | null {

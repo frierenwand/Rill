@@ -61,5 +61,5 @@ export function finishedInBuffer(r: BufferRecord): boolean {
 }
 
 export async function forgetTitle(ctx: Ctx, ev: Pick<ScrobbleEvent, 'ids' | 'kind' | 'season' | 'episode'>): Promise<void> {
-  await cacheDelete(recordKey(ctx, titleKey(ev.ids, ev.kind, ev.season, ev.episode)), ctx.origin);
+  await cacheDelete(recordKey(ctx, titleKey(ev.ids, ev.kind, ev.season, ev.episode)), ctx.origin, ctx.env.DB);
 }

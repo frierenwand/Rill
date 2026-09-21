@@ -8,27 +8,49 @@ function keyUrl(key: string, origin?: string): string {
   return (origin ? `${origin}/.rill-cache/` : NS) + encodeURIComponent(key);
 }
 
+function cacheDatabase(): D1Database | undefined {
+  return tryGetContext<{Bindings: {DB?: D1Database}}>()?.env.DB;
+}
+
 export async function cacheGet<T>(key: string, origin?: string): Promise<T | null> {
+  const url = keyUrl(key, origin);
   try {
-    const hit = await caches.default.match(keyUrl(key, origin));
-    return hit ? ((await hit.json()) as T) : null;
-  } catch {
-    return null;
-  }
+    const hit = await caches.default.match(url);
+    if (hit) return await hit.json() as T;
+  } catch {}
+  try {
+    const row = await cacheDatabase()?.prepare('SELECT value FROM state WHERE key=? AND expires>?')
+      .bind(`cache:${url}`,Date.now()).first<{value:string}>();
+    return row ? JSON.parse(row.value) as T : null;
+  } catch { return null; }
 }
 
 export async function cachePut(key: string, value: unknown, ttlSeconds: number, origin?: string): Promise<void> {
+  const url = keyUrl(key, origin);
+  let json: string;
+  try { json = JSON.stringify(value); } catch { return; }
+  if (json === undefined) return;
+  const ttl = Math.max(1,Math.floor(ttlSeconds));
   try {
-    const res = new Response(JSON.stringify(value), {
-      headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${Math.max(1, Math.floor(ttlSeconds))}` },
-    });
-    await caches.default.put(keyUrl(key, origin), res);
-  } catch {
+    await caches.default.put(url, new Response(json, {
+      headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${ttl}` },
+    }));
+  } catch {}
+  // workers.dev may not retain edge entries. Keep small results in the existing
+  // database too; large history imports already have their own chunked storage.
+  const db = cacheDatabase();
+  if (db && json.length <= 64_000 && new TextEncoder().encode(json).byteLength <= 64_000) {
+    try {
+      await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires')
+        .bind(`cache:${url}`,json,Date.now()+ttl*1000).run();
+    } catch {}
   }
 }
 
-export async function cacheDelete(key: string, origin?: string): Promise<void> {
-  try { await caches.default.delete(keyUrl(key, origin)); } catch {}
+export async function cacheDelete(key: string, origin?: string, db = cacheDatabase()): Promise<void> {
+  const url = keyUrl(key, origin);
+  try { await caches.default.delete(url); } catch {}
+  if (db) await db.prepare('DELETE FROM state WHERE key=?').bind(`cache:${url}`).run();
 }
 
 export async function memo<T>(key: string, ttlSeconds: number, produce: () => Promise<T>): Promise<T> {
