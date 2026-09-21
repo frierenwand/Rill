@@ -1,30 +1,34 @@
+import { tryGetContext } from 'hono/context-storage';
+
 const NS = 'https://rill.cache.invalid/';
 
-function keyUrl(key: string): string {
-  return NS + encodeURIComponent(key);
+function keyUrl(key: string, origin?: string): string {
+  const requestUrl = tryGetContext()?.req.url;
+  origin ??= requestUrl ? new URL(requestUrl).origin : undefined;
+  return (origin ? `${origin}/.rill-cache/` : NS) + encodeURIComponent(key);
 }
 
-export async function cacheGet<T>(key: string): Promise<T | null> {
+export async function cacheGet<T>(key: string, origin?: string): Promise<T | null> {
   try {
-    const hit = await caches.default.match(keyUrl(key));
+    const hit = await caches.default.match(keyUrl(key, origin));
     return hit ? ((await hit.json()) as T) : null;
   } catch {
     return null;
   }
 }
 
-export async function cachePut(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+export async function cachePut(key: string, value: unknown, ttlSeconds: number, origin?: string): Promise<void> {
   try {
     const res = new Response(JSON.stringify(value), {
       headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${Math.max(1, Math.floor(ttlSeconds))}` },
     });
-    await caches.default.put(keyUrl(key), res);
+    await caches.default.put(keyUrl(key, origin), res);
   } catch {
   }
 }
 
-export async function cacheDelete(key: string): Promise<void> {
-  try { await caches.default.delete(keyUrl(key)); } catch {}
+export async function cacheDelete(key: string, origin?: string): Promise<void> {
+  try { await caches.default.delete(keyUrl(key, origin)); } catch {}
 }
 
 export async function memo<T>(key: string, ttlSeconds: number, produce: () => Promise<T>): Promise<T> {

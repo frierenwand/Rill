@@ -66,7 +66,7 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
         if (job.operation === 'drop') {
           if (!tracker.drop) throw new Error('Tracker does not support dropping shows');
           for (const target of await dropTargets(ctx, event as DropEvent, tracker.name)) await tracker.drop(ctx, target);
-          await cacheDelete(`tracker-snapshot:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}:${tracker.name}`);
+          await cacheDelete(`tracker-snapshot:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}:${tracker.name}`, ctx.origin);
         } else if (job.operation === 'clear') await tracker.clearResume?.(ctx,event as ResumeEntry);
         else {
           const events = await trackerTargets(ctx,event as ScrobbleEvent | MarkEvent,job.service);

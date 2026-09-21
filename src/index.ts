@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { contextStorage } from 'hono/context-storage';
 import type { Env } from './env';
 import type { Ctx } from './context';
 import { decodeConfig } from './config/codec';
@@ -11,6 +12,8 @@ import { ensureSchema } from './storage/migrate';
 type App = { Bindings: Env; Variables: { ctx: Ctx } };
 
 const app = new Hono<App>();
+
+app.use(contextStorage());
 
 app.use('*', async (c, next) => {
   if (c.env.DB) await ensureSchema(c.env.DB);

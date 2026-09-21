@@ -15,7 +15,7 @@ export async function statePut(ctx: Ctx, key: string, value: unknown, ttl: numbe
 }
 
 export async function stateDelete(ctx: Ctx, key: string): Promise<void> {
-  if (!ctx.env.DB) { await cacheDelete(key); return; }
+  if (!ctx.env.DB) { await cacheDelete(key, ctx.origin); return; }
   await ctx.env.DB.prepare('DELETE FROM state WHERE key=?').bind(key).run();
 }
 

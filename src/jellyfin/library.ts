@@ -514,7 +514,7 @@ export class Library {
       p = (async () => {
         const type = metaTypeFor(title);
         const cacheKey = `jf-meta:v1:${this.ctx.scope}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.ctx.cfg.ageCap}:${k}`;
-        const cached = await cacheGet<{meta: Meta | null}>(cacheKey);
+        const cached = await cacheGet<{meta: Meta | null}>(cacheKey, this.ctx.origin);
         if (cached) return cached.meta;
         let meta: Meta | null = null;
         try {
@@ -535,7 +535,7 @@ export class Library {
         if (meta && !this.allowed(meta.certification)) meta = null;
         if(meta)await rememberPeople(this.ctx,meta).catch(() => {});
         // Reuse the resolved metadata, including enrichment and episode lists.
-        await cachePut(cacheKey, {meta}, meta ? 300 : 30);
+        await cachePut(cacheKey, {meta}, meta ? 300 : 30, this.ctx.origin);
         return meta;
       })();
       this.metas.set(k, p);
@@ -732,14 +732,14 @@ export class Library {
       local: snapshot.local, resume: snapshot.resume, dropped: snapshot.dropped,
     }));
     const cacheKey = `jf-shelf:v1:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
-    const cached = await cacheGet<{items: Dto[]; total: number}>(cacheKey);
+    const cached = await cacheGet<{items: Dto[]; total: number}>(cacheKey, this.ctx.origin);
     if (cached) {
       await this.decoratePreferences(cached.items);
       return cached;
     }
     const result = await build();
     // Playback changes produce a new revision; preferences are reapplied on reads.
-    await cachePut(cacheKey, result, 30);
+    await cachePut(cacheKey, result, 30, this.ctx.origin);
     return result;
   }
 

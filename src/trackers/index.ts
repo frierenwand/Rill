@@ -112,7 +112,7 @@ async function drop(ctx: Ctx, ids: IdBundle, dropped: boolean, itemId?: string, 
 
 async function invalidate(ctx: Ctx): Promise<void> {
   const t = primary(ctx);
-  if (t) await cacheDelete(snapshotKey(ctx, t));
+  if (t) await cacheDelete(snapshotKey(ctx, t), ctx.origin);
 }
 
 async function scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void> {
