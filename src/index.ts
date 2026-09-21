@@ -83,18 +83,21 @@ app.onError((err, c) => {
   return c.json({ error: 'internal', message: String(err?.message || err) }, 500);
 });
 
-import { scheduled } from './storage/scheduled';
-import { runLibraryRead, type WorkerJob } from './storage/worker-jobs';
+import { hasScheduledWork, scheduled } from './storage/scheduled';
 export default {
   fetch: app.fetch,
   async scheduled(event:ScheduledController,env:Env):Promise<void> {
-    if(env.RILL_JOBS)await env.RILL_JOBS.send({kind:'maintenance',scheduledTime:event.scheduledTime});
+    if(env.RILL_JOBS) {
+      // Keep idle maintenance from consuming the free daily Queue allowance.
+      if(Math.floor(event.scheduledTime/60_000)%30===0 || await hasScheduledWork(env,event.scheduledTime)) {
+        await env.RILL_JOBS.send({kind:'maintenance',scheduledTime:event.scheduledTime});
+      }
+    }
     else await scheduled(event,env);
   },
-  async queue(batch:MessageBatch<WorkerJob>,env:Env,exec:ExecutionContext):Promise<void> {
+  async queue(batch:MessageBatch<{kind:'maintenance';scheduledTime:number}>,env:Env):Promise<void> {
     for(const message of batch.messages) {
       if(message.body.kind==='maintenance')await scheduled({scheduledTime:message.body.scheduledTime,cron:'* * * * *',noRetry(){}} as ScheduledController,env);
-      else if(message.body.kind==='library')await runLibraryRead(message.body,env,exec,app.fetch);
       message.ack();
     }
   },

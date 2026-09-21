@@ -13,6 +13,18 @@ import { reconcileDropped } from './dropped';
 import { dailyUpdate } from './updates';
 import { drainPlaybackReports } from '../jellyfin/reports';
 
+const dueAccounts=`WHERE sync_after<=?
+  OR scope IN (SELECT scope FROM playback_reports WHERE due<=?)
+  OR scope IN (SELECT scope FROM deliveries WHERE status='pending' AND due<=?)
+  OR scope IN (SELECT scope FROM bulk_actions WHERE status='pending')
+  OR scope IN (SELECT scope FROM recommendation_jobs WHERE status='pending' AND lease_until<=?)`;
+
+export async function hasScheduledWork(env:Env,now:number):Promise<boolean> {
+  if(!env.DB)return false;
+  await ensureSchema(env.DB);
+  return Boolean(await env.DB.prepare(`SELECT 1 FROM accounts ${dueAccounts} LIMIT 1`).bind(now,now,now,now).first());
+}
+
 export async function scheduled(event: ScheduledController, env: Env): Promise<void> {
   if (!env.DB) throw new Error('Scheduled synchronization requires DB');
   await ensureSchema(env.DB);
@@ -21,11 +33,7 @@ export async function scheduled(event: ScheduledController, env: Env): Promise<v
   const db=budgetDatabase(env.DB,env.D1_QUERY_BUDGET==='1000'?1000:50);
   env={...env,DB:db};
   const now = Date.now();
-  const accounts = await db.prepare(`SELECT scope,config,origin,sync_after FROM accounts WHERE sync_after<=?
-    OR scope IN (SELECT scope FROM playback_reports WHERE due<=?)
-    OR scope IN (SELECT scope FROM deliveries WHERE status='pending' AND due<=?)
-    OR scope IN (SELECT scope FROM bulk_actions WHERE status='pending')
-    OR scope IN (SELECT scope FROM recommendation_jobs WHERE status='pending' AND lease_until<=?) ORDER BY processed_at,scope LIMIT 1`)
+  const accounts = await db.prepare(`SELECT scope,config,origin,sync_after FROM accounts ${dueAccounts} ORDER BY processed_at,scope LIMIT 1`)
     .bind(now,now,now,now).all<{scope:string;config:string;origin:string;sync_after:number}>();
   for (const a of accounts.results) {
     const cfg = await decodeConfig(a.config);

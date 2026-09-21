@@ -1,5 +1,4 @@
 import { profileContext, profileUsers } from './profiles';
-import { isLibraryRead, queueLibraryRead } from '../storage/worker-jobs';
 import { revokeToken } from './auth';
 import { registerAccount } from '../storage/state';
 import { Hono, type Context } from 'hono';
@@ -111,8 +110,7 @@ export async function handleJellyfinRequest(ctx: Ctx, raw: Request, env: Paramet
   state.set(routed, jf);
 
   if (exec) ctx.defer = work => exec!.waitUntil(work.catch(() => console.warn('Background tracking failed')));
-  const res = ctx.env.RILL_JOBS && ctx.env.DB && claims && isLibraryRead(raw.method,sub)
-    ? await queueLibraryRead(ctx,raw) : await inner.fetch(routed, env, exec);
+  const res = await inner.fetch(routed, env, exec);
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(CORS)) headers.set(k, v);
   if (res.status === 101) return res;
