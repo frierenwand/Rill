@@ -36,8 +36,8 @@ function aliases(row:Identified,kind:string):string[] {
 }
 class Records<T extends Identified> {
   rows=new Set<T>(); index=new Map<string,Set<T>>();
-  constructor(readonly kind:(row:T)=>string,rows:T[]=[]){for(const row of rows)this.add(row);}
-  add(row:T){this.rows.add(row);for(const key of aliases(row,this.kind(row))){const group=this.index.get(key)??new Set<T>();group.add(row);this.index.set(key,group);}}
+  constructor(readonly kind:(row:T)=>string,rows:T[]=[],readonly keys?:Set<string>){for(const row of rows)this.add(row);}
+  add(row:T){this.rows.add(row);for(const key of aliases(row,this.kind(row))){if(this.keys&&!this.keys.has(key))continue;const group=this.index.get(key)??new Set<T>();group.add(row);this.index.set(key,group);}}
   remove(row:Identified,kind:string):LocalRecord['ids'] {
     const found=new Set(aliases(row,kind).flatMap(k=>[...this.index.get(k)??[]]));
     const ids={...row.ids};
@@ -51,11 +51,12 @@ export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<Wat
   const rows = await ctx.env.DB.prepare('SELECT value FROM history WHERE scope=? ORDER BY updated').bind(ctx.historyScope ?? ctx.scope).all<{ value: string }>();
   const out:WatchSnapshot = {...base,local:[]};
   if(rows.results.length) {
-    const resume=new Records<ResumeEntry>(r=>r.kind,out.resume);
-    const movies=new Records<WatchSnapshot['movies'][number]>(()=>'movie',out.movies);
-    const episodes=new Records<WatchSnapshot['episodes'][number]>(()=>'episode',out.episodes);
-    for (const row of rows.results) {
-      const r = JSON.parse(row.value) as LocalRecord;
+    const local = rows.results.map(row => JSON.parse(row.value) as LocalRecord);
+    const keys = new Set(local.flatMap(row => aliases(row,row.kind)));
+    const resume=new Records<ResumeEntry>(r=>r.kind,out.resume,keys);
+    const movies=new Records<WatchSnapshot['movies'][number]>(()=>'movie',out.movies,keys);
+    const episodes=new Records<WatchSnapshot['episodes'][number]>(()=>'episode',out.episodes,keys);
+    for (const r of local) {
       r.ids={...resume.remove(r,r.kind),...(r.kind==='movie'?movies.remove(r,'movie'):episodes.remove(r,'episode'))};
       out.local!.push(r);
       if ((r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100) resume.add({ ids:r.ids, kind:r.kind, season:r.season, episode:r.episode, progress:r.progress, positionMs:r.positionMs, runtimeMs:r.runtimeMs, at:r.at });

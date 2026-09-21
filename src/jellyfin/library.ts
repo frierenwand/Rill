@@ -14,6 +14,7 @@ import { trackerApi } from '../trackers/index';
 import type { ResumeEntry, WatchSnapshot, WatchedEpisode, WatchedMovie } from '../trackers/types';
 import { mapLimit, uniq } from '../util/concurrency';
 import { cacheGet, cachePut } from '../util/cache';
+import { sha256 } from '../util/bytes';
 import { collectionFolder, episodeItem, placeholderSource, runtimeTicks, seasonItem, titleItem, userData, type Dto } from './dto';
 import {
   decodeGuid,
@@ -724,66 +725,88 @@ export class Library {
     return null;
   }
 
+  private async cachedShelf(name: string, idx: WatchIndex, build: () => Promise<{items: Dto[]; total: number}>): Promise<{items: Dto[]; total: number}> {
+    const snapshot = idx.snapshot;
+    const revision = await sha256(JSON.stringify({
+      imported: trackerApi.primary(this.ctx) ? snapshot.fetchedAt : '',
+      local: snapshot.local, resume: snapshot.resume, dropped: snapshot.dropped,
+    }));
+    const cacheKey = `jf-shelf:v1:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
+    const cached = await cacheGet<{items: Dto[]; total: number}>(cacheKey);
+    if (cached) {
+      await this.decoratePreferences(cached.items);
+      return cached;
+    }
+    const result = await build();
+    // Playback changes produce a new revision; preferences are reapplied on reads.
+    await cachePut(cacheKey, result, 30);
+    return result;
+  }
+
   async resumeShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
-    const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.kind === 'movie' || !idx.isDropped(bundleKeys(r.ids))) && (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-    const page = rows.slice(start, start + Math.min(limit, SHELF_LIMIT));
-    const shows = new Map<string, Show>();
-    const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
-      const g = this.guidOfBundle(row.ids, row.kind === 'movie' ? 'movie' : 'series');
-      if (!g) return null;
-      if (g.kind === 'movie') {
-        const meta = await this.meta(g);
-        return meta ? this.titleItemOf(meta, g) : null;
-      }
-      const show = await this.show(g);
-      if (!show || idx.isDropped(show.keys)) return null;
-      shows.set(show.id, show);
-      let ep = this.findEpisode(show, { ...g, kind: 'episode', season: row.season, episode: row.episode });
-      const local=idx.localEpisode(show.keys,row.season ?? 1,row.episode ?? 0);
-      if (!local) {
-        if (!ep || (await this.episodeState(idx,show,ep)).resume !== row) {
-          ep=undefined;
-          for(const candidate of show.episodes) if ((await this.episodeState(idx,show,candidate)).resume===row) {ep=candidate;break;}
+    return this.cachedShelf(`resume:${start}:${limit}`, idx, async () => {
+      const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.kind === 'movie' || !idx.isDropped(bundleKeys(r.ids))) && (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+      const page = rows.slice(start, start + Math.min(limit, SHELF_LIMIT));
+      const shows = new Map<string, Show>();
+      const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
+        const g = this.guidOfBundle(row.ids, row.kind === 'movie' ? 'movie' : 'series');
+        if (!g) return null;
+        if (g.kind === 'movie') {
+          const meta = await this.meta(g);
+          return meta ? this.titleItemOf(meta, g) : null;
         }
-      }
-      return ep ? this.episodeItem(show, ep) : null;
+        const show = await this.show(g);
+        if (!show || idx.isDropped(show.keys)) return null;
+        shows.set(show.id, show);
+        let ep = this.findEpisode(show, { ...g, kind: 'episode', season: row.season, episode: row.episode });
+        const local=idx.localEpisode(show.keys,row.season ?? 1,row.episode ?? 0);
+        if (!local) {
+          if (!ep || (await this.episodeState(idx,show,ep)).resume !== row) {
+            ep=undefined;
+            for(const candidate of show.episodes) if ((await this.episodeState(idx,show,candidate)).resume===row) {ep=candidate;break;}
+          }
+        }
+        return ep ? this.episodeItem(show, ep) : null;
+      });
+      const items = built.filter((x): x is Dto => Boolean(x));
+      await this.decorate(items, shows);
+      return { items, total: rows.length };
     });
-    const items = built.filter((x): x is Dto => Boolean(x));
-    await this.decorate(items, shows);
-    return { items, total: rows.length };
   }
 
   async nextUpShelf(start: number, limit: number, opts: { includeResumable: boolean; includeRewatching: boolean }): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
-    const shows = [...(idx.snapshot.shows ?? [])].filter(row => !idx.isDropped(bundleKeys(row.ids))).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
-    const page = shows.slice(start, start + Math.min(limit, SHELF_LIMIT));
-    const loaded = new Map<string, Show>();
-    const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
-      const g = this.guidOfBundle(row.ids, 'series');
-      if (!g) return null;
-      const show = await this.show(g);
-      if (!show || idx.isDropped(show.keys)) return null;
-      loaded.set(show.id, show);
-      const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
-      const states=await mapLimit(released,8,e=>this.episodeState(idx,show,e));
-      let cursor=-1,lastAt='';
-      for(let i=0;i<states.length;i++) {
-        const watched=states[i].watched;
-        if(watched && watched.lastAt>=lastAt) {cursor=i;lastAt=watched.lastAt;}
-      }
-      const nextIndex=states.findIndex((s,i)=>i>cursor && !s.watched);
-      const next=nextIndex>=0 ? released[nextIndex]:undefined;
-      if (!next) {
-        if (!opts.includeRewatching) return null;
-        return released.length ? this.episodeItem(show,released[0]):null;
-      }
-      if (!opts.includeResumable && states[nextIndex].resume) return null;
-      return this.episodeItem(show, next);
+    return this.cachedShelf(`next:${start}:${limit}:${opts.includeResumable}:${opts.includeRewatching}`, idx, async () => {
+      const shows = [...(idx.snapshot.shows ?? [])].filter(row => !idx.isDropped(bundleKeys(row.ids))).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+      const page = shows.slice(start, start + Math.min(limit, SHELF_LIMIT));
+      const loaded = new Map<string, Show>();
+      const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
+        const g = this.guidOfBundle(row.ids, 'series');
+        if (!g) return null;
+        const show = await this.show(g);
+        if (!show || idx.isDropped(show.keys)) return null;
+        loaded.set(show.id, show);
+        const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
+        const states=await mapLimit(released,8,e=>this.episodeState(idx,show,e));
+        let cursor=-1,lastAt='';
+        for(let i=0;i<states.length;i++) {
+          const watched=states[i].watched;
+          if(watched && watched.lastAt>=lastAt) {cursor=i;lastAt=watched.lastAt;}
+        }
+        const nextIndex=states.findIndex((s,i)=>i>cursor && !s.watched);
+        const next=nextIndex>=0 ? released[nextIndex]:undefined;
+        if (!next) {
+          if (!opts.includeRewatching) return null;
+          return released.length ? this.episodeItem(show,released[0]):null;
+        }
+        if (!opts.includeResumable && states[nextIndex].resume) return null;
+        return this.episodeItem(show, next);
+      });
+      const items = built.filter((x): x is Dto => Boolean(x));
+      await this.decorate(items, loaded);
+      return { items, total: shows.length };
     });
-    const items = built.filter((x): x is Dto => Boolean(x));
-    await this.decorate(items, loaded);
-    return { items, total: shows.length };
   }
 
   async upcomingShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
