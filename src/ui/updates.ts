@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 import type { Ctx } from '../context';
 import type { Env } from '../env';
-import { configureUpdates, disconnectUpdates, requestUpdate, updateStatus, UpdateError } from '../storage/updates';
+import { configureUpdates, configureUpdateMonitor, disconnectUpdates, requestUpdate, updateStatus, UpdateError } from '../storage/updates';
 
 type App = { Variables: { ctx?: Ctx }; Bindings: Env };
 
@@ -31,6 +31,13 @@ export function mountUpdateRoutes(router: Hono<App>, authorized: (c: Context<App
         case 'disconnect':
           await disconnectUpdates(c.env);
           return c.json(await updateStatus(c.env));
+        case 'monitor': {
+          let body: unknown;
+          try { body = await c.req.json(); } catch { throw new UpdateError('Enter your build status connection details.'); }
+          if (!body || typeof body !== 'object' || Array.isArray(body)) throw new UpdateError('Enter your build status connection details.');
+          await configureUpdateMonitor(c.env, body as Record<string, unknown>);
+          return c.json(await updateStatus(c.env));
+        }
         case 'start': return c.json(await requestUpdate(c.env), 202);
         default: return c.json({ error: 'Unknown update action.' }, 404);
       }

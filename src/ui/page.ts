@@ -354,6 +354,16 @@ h3 { font-size:16px; font-weight:600; }
 .svc > .b { margin:20px 0; }
 .svc .row + .row { margin-top:16px; }
 .settings-card { padding:28px; border:1px solid var(--line); background:#111; border-radius:14px; margin-bottom:28px; }
+.update-history { list-style:none; padding:0; margin:16px 0; }
+.update-history li { padding:16px 0; border-top:1px solid var(--line); }
+.update-history-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+.update-history .hint { margin:8px 0 0; overflow-wrap:anywhere; }
+.update-history details { margin-top:10px; }
+.update-result { font-size:12px; border:1px solid var(--line); border-radius:20px; padding:4px 10px; }
+.update-result[data-status=succeeded] { color:#a9dbb6; border-color:#345d40; }
+.update-result[data-status=failed],.update-result[data-status=request_failed] { color:#f1b4b4; border-color:#683b3b; }
+.update-overview { margin:18px 0; }
+#s-updates { scroll-margin-top:160px; }
 .card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
 .card-heading h3 { margin:0; display:flex; align-items:center; gap:10px; }
 .card-heading .hint { margin:6px 0 0; }
@@ -593,8 +603,12 @@ function body(): string {
   <h2>Updates</h2>
   <div class="settings-card">
     <p class="note">Get the latest Rill improvements. Your account, settings and watch history stay in place.</p>
-    <div class="b"><button type="button" class="primary" id="update-start" disabled>Update Rill</button><a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">View Cloudflare builds ↗</a></div>
+    <div class="b"><button type="button" class="primary" id="update-start" disabled>Update Rill</button><button type="button" class="q" id="update-refresh" disabled>Refresh status</button><a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">View Cloudflare builds ↗</a></div>
     <p class="status" id="update-status" role="status" aria-live="polite">Sign in to manage updates.</p>
+    <p class="hint update-overview" id="update-overview"></p>
+    <h3>Recent updates</h3>
+    <p class="hint" id="update-history-note">Sign in to see your update history.</p>
+    <ol class="update-history" id="update-history" aria-label="Update history"></ol>
     <details id="update-settings">
       <summary id="update-settings-label">Connect updates</summary>
       <p class="note">Connect Cloudflare once, then update here with one click.</p>
@@ -607,6 +621,16 @@ function body(): string {
       <label class="note"><input type="checkbox" id="update-daily"> Update automatically each day at 04:17 UTC</label>
       <div class="b"><button type="button" id="update-save" disabled>Connect updates</button><button type="button" class="q" id="update-disconnect" hidden>Disconnect</button></div>
       <p class="hint">Updates change your running Rill installation. Your GitHub copy stays unchanged.</p>
+    </details>
+    <details id="update-monitor-settings">
+      <summary>Build results in Rill</summary>
+      <p class="note">Optionally connect read-only access to see queued, running, succeeded, failed, and canceled builds here. Your Deploy Hook continues to work without this.</p>
+      <p class="hint">Create a user API token with <strong>Workers Builds Configuration: Read</strong> and <strong>Workers Scripts: Read</strong>, limited to your account. Cloudflare also calls the builds permission <strong>Workers CI Read</strong>.</p>
+      <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">Create a read-only token ↗</a>
+      <div class="f"><label class="t" for="update-account-id">Cloudflare account ID</label><input type="text" id="update-account-id" autocomplete="off" spellcheck="false"><p class="hint">The 32-character account ID in your Cloudflare dashboard address.</p></div>
+      <div class="f"><label class="t" for="update-worker">Worker name</label><input type="text" id="update-worker" autocomplete="off" spellcheck="false" placeholder="For example, rill"></div>
+      <div class="f"><label class="t" for="update-token">Read-only API token</label><input type="password" id="update-token" autocomplete="off" spellcheck="false"><p class="hint">Stored privately on your server. Leave blank to keep the saved token.</p></div>
+      <div class="b"><button type="button" id="update-monitor-save" disabled>Connect build results</button><button type="button" class="q" id="update-monitor-remove" hidden>Disconnect build results</button></div>
     </details>
   </div>
 </section>
@@ -1014,7 +1038,7 @@ const JS = String.raw`
   }
 
   var account = { durable: false, exists: false, signedIn: false, loaded: false, username: '' }, saveTimer = null, wantedTab = location.hash.slice(1);
-  var updateState = null, updateBusy = false, updateTimer = null, updateLoaded = false, updateLoading = false;
+  var updateState = null, updateBusy = false, updateTimer = null, updatePoll = null, updateLoaded = false, updateLoading = false;
   function showUpdateSettings() {
     location.hash = 'general'; selectTab('general', false);
     $('s-updates').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1030,40 +1054,93 @@ const JS = String.raw`
     $('update-disconnect').hidden = !updateState || !updateState.configured;
     $('update-settings-label').textContent = updateState && updateState.configured ? 'Update settings' : 'Connect updates';
     $('update-save').textContent = updateState && updateState.configured ? 'Save update settings' : 'Connect updates';
+    $('update-refresh').disabled = !signedIn || updateBusy || updateLoading;
+    ['update-account-id','update-worker','update-token','update-monitor-save'].forEach(function(id) { $(id).disabled = !signedIn || updateBusy || !updateLoaded; });
+    var monitor = updateState && updateState.monitor;
+    $('update-monitor-remove').hidden = !monitor || !monitor.configured;
+    $('update-monitor-remove').disabled = !signedIn || updateBusy;
+    $('update-monitor-save').textContent = monitor && monitor.configured ? 'Save build connection' : 'Connect build results';
+    var expanded = Array.from($('update-history').querySelectorAll('details[open]')).map(function(d) { return d.dataset.request; });
+    clear($('update-history'));
+    if (!signedIn || !updateState) {
+      $('update-overview').textContent = '';
+      $('update-history-note').textContent = 'Sign in to see your update history.';
+      return;
+    }
+    var next = new Date(); next.setUTCHours(4,17,0,0); if (next.getTime() <= Date.now()) next.setUTCDate(next.getUTCDate()+1);
+    $('update-overview').textContent = (updateState.configured ? 'Updates connected. ' : 'Updates disconnected. ') + (updateState.daily ? 'Next automatic request: ' + when(next.getTime()) + ' (04:17 UTC).' : 'Automatic updates off.') + (updateState.retryAfter > 0 ? ' You can request another update after ' + when(Date.now()+updateState.retryAfter*1000) + '.' : '');
+    var history = updateState.history || [];
+    $('update-history-note').textContent = !history.length ? 'No requests recorded yet. History starts with your next update.' : 'Your last ' + history.length + ' requests (up to 30).';
+    $('update-history-note').textContent += monitor && monitor.configured ? (monitor.error ? ' ' + monitor.error : monitor.checkedAt ? ' Build results checked ' + when(monitor.checkedAt) + '.' : '') : ' A request accepted by Cloudflare is not yet a confirmed successful build. Connect build results below, or check Cloudflare.';
+    var labels = {requesting:'Sending request',accepted:'Request accepted',request_failed:'Request failed',queued:'Queued',initializing:'Preparing build',running:'Building / deploying',succeeded:'Build succeeded',failed:'Build failed',cancelled:'Canceled',skipped:'Skipped',unknown:'Result unconfirmed'};
+    history.forEach(function(run) {
+      var item = el('li'), head = el('div',{class:'update-history-head'});
+      head.appendChild(el('strong',{text:run.source === 'daily' ? 'Automatic update' : 'Manual update'}));
+      var badge = el('span',{class:'update-result',text:labels[run.status] || 'Result unconfirmed'});
+      badge.setAttribute('data-status',run.status); head.appendChild(badge); item.appendChild(head);
+      item.appendChild(el('p',{class:'hint',text:'Requested ' + when(run.requested_at)}));
+      if (run.message) item.appendChild(el('p',{class:'hint',text:run.message}));
+      if (run.status === 'unknown' && !run.message) item.appendChild(el('p',{class:'hint',text:'No final result was confirmed. Check Cloudflare before requesting another update.'}));
+      if (run.status === 'succeeded') item.appendChild(el('p',{class:'hint',text:'Cloudflare completed the build and deploy command. Reload Rill to load the latest page.'}));
+      if (run.build_id || run.finished_at || run.checked_at) {
+        var details = el('details'); details.dataset.request = run.id; details.open = expanded.indexOf(run.id) !== -1;
+        details.appendChild(el('summary',{text:'Build details'}));
+        if (run.build_id) details.appendChild(el('p',{class:'hint',text:'Build ID: ' + run.build_id}));
+        if (run.branch) details.appendChild(el('p',{class:'hint',text:'Branch: ' + run.branch}));
+        if (run.finished_at) details.appendChild(el('p',{class:'hint',text:'Finished ' + when(run.finished_at) + ' · ' + Math.max(0,Math.round((run.finished_at-run.requested_at)/1000)) + ' seconds after request'}));
+        if (run.checked_at) details.appendChild(el('p',{class:'hint',text:'Confirmed by Cloudflare ' + when(run.checked_at)}));
+        if (run.buildUrl) details.appendChild(el('a',{text:'View build and logs ↗',href:run.buildUrl,target:'_blank',rel:'noopener noreferrer'}));
+        item.appendChild(details);
+      }
+      $('update-history').appendChild(item);
+    });
   }
-  function adoptUpdateStatus(result) {
+  function adoptUpdateStatus(result, resetSettings) {
+    if (!updateLoaded || resetSettings) {
+      $('update-hook').value = ''; $('update-token').value = '';
+      $('update-daily').checked = result.daily;
+      $('update-account-id').value = result.monitor ? result.monitor.accountId : '';
+      $('update-worker').value = result.monitor ? result.monitor.worker : '';
+    }
     updateState = result; updateLoaded = true;
-    $('update-hook').value = '';
-    $('update-daily').checked = result.daily;
     clearTimeout(updateTimer);
     if (result.retryAfter > 0) updateTimer = setTimeout(function () {
       if (updateState) updateState.retryAfter = 0;
       renderUpdates();
     }, result.retryAfter * 1000);
+    clearTimeout(updatePoll);
+    if ((result.history || []).some(function(run) { return Date.now()-run.requested_at < 3600000 && (run.status === 'requesting' || (result.monitor && result.monitor.configured && ['accepted','queued','initializing','running','unknown'].indexOf(run.status) !== -1)); })) {
+      updatePoll = setTimeout(function() { if (account.signedIn && !document.hidden) loadUpdates(true); }, 15000);
+    }
     renderUpdates();
   }
-  function loadUpdates() {
+  function loadUpdates(silent) {
     if (!account.signedIn || updateLoading) return;
-    updateLoading = true;
+    updateLoading = true; renderUpdates();
     api('/api/updates/status').then(function (r) {
       if (!account.signedIn) return;
-      if (r.error) { $('update-status').textContent = r.error; return; }
+      if (r.error) { if (!silent) $('update-status').textContent = r.error; return; }
       adoptUpdateStatus(r);
-      $('update-status').textContent = r.retryAfter > 0 ? 'An update was recently requested. Check Cloudflare builds for its progress.' : r.configured ? 'Ready when you are.' : 'Connect Cloudflare below to enable updates.';
-    }).finally(function () { updateLoading = false; });
+      if (!silent) $('update-status').textContent = r.retryAfter > 0 ? 'An update was recently requested. Its result is shown below.' : r.configured ? 'Ready when you are.' : 'Connect Cloudflare below to enable updates.';
+    }).finally(function () { updateLoading = false; renderUpdates(); });
   }
   function updateAction(action, body) {
     updateBusy = true; renderUpdates();
     $('update-status').textContent = action === 'start' ? 'Requesting an update…' : 'Saving…';
     api('/api/updates/' + action, body).then(function (r) {
       if (!account.signedIn) return;
-      if (r.error) { $('update-status').textContent = r.error; return; }
-      adoptUpdateStatus(r);
-      $('update-status').textContent = action === 'start' ? (r.alreadyRequested ? 'An update was already requested. ' : 'Update requested. ') + 'Cloudflare will build and deploy it. Check Cloudflare builds, then reload Rill after it succeeds.' : action === 'disconnect' ? 'Updates disconnected.' : 'Connected. You can now update Rill with one click.';
+      if (r.error) { $('update-status').textContent = r.error; if (action === 'start') loadUpdates(true); return; }
+      adoptUpdateStatus(r, action !== 'start');
+      $('update-status').textContent = action === 'start' ? (r.alreadyRequested ? 'An update request is already in progress or was recently accepted. ' : 'Update requested. ') + 'See its result below. Reload Rill after the build succeeds.' : action === 'disconnect' ? 'Updates disconnected.' : action === 'monitor' ? (r.monitor.configured ? 'Build results connected.' : 'Build results disconnected. Request history is kept.') : 'Connected. You can now update Rill with one click.';
       if (action === 'configure') $('update-settings').open = false;
+      if (action === 'monitor') $('update-monitor-settings').open = false;
     }).finally(function () { updateBusy = false; renderUpdates(); });
   }
   $('update-start').addEventListener('click', function () { updateAction('start'); });
+  $('update-refresh').addEventListener('click', function () { loadUpdates(); });
+  $('update-monitor-save').addEventListener('click', function () { updateAction('monitor', {accountId:$('update-account-id').value,worker:$('update-worker').value,token:$('update-token').value}); });
+  $('update-monitor-remove').addEventListener('click', function () { updateAction('monitor', {disconnect:true}); });
+  document.addEventListener('visibilitychange', function() { if (!document.hidden && account.signedIn && updateLoaded) loadUpdates(true); });
   $('update-save').addEventListener('click', function () { updateAction('configure', { hook: $('update-hook').value, daily: $('update-daily').checked }); });
   $('update-disconnect').addEventListener('click', function () { updateAction('disconnect'); });
   $('update-settings').addEventListener('toggle', function () { if (this.open && !updateLoaded) loadUpdates(); });
@@ -1106,8 +1183,8 @@ const JS = String.raw`
     $('setup-gate').hidden = !firstRun;
     if (firstRun) { $('setup-user').value = $('setup-user').value || (cfg.jellyfin.username !== 'rill' ? cfg.jellyfin.username : ''); $('setup-user').focus(); }
     if (!account.signedIn) {
-      updateState = null; updateLoaded = false; clearTimeout(updateTimer);
-      $('update-hook').value = ''; $('update-daily').checked = false;
+      updateState = null; updateLoaded = false; clearTimeout(updateTimer); clearTimeout(updatePoll);
+      $('update-hook').value = ''; $('update-token').value = ''; $('update-account-id').value = ''; $('update-worker').value = ''; $('update-daily').checked = false;
       $('update-status').textContent = 'Sign in to manage updates.';
     } else if (!updateLoaded) loadUpdates();
     renderUpdates();
