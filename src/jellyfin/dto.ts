@@ -73,7 +73,7 @@ export function userDto(ctx: Ctx, who: Identity): Dto {
     Name: ctx.profile?.name || ctx.cfg.jellyfin.username || 'Rill',
     ServerId: who.serverId,
     Id: who.userId,
-    PrimaryImageTag: ctx.profile?.avatar ? encodeURIComponent(ctx.profile.avatar) : undefined,
+    PrimaryImageTag: imageTag(ctx.profile?.avatar),
     HasPassword: Boolean(ctx.cfg.jellyfin.password),
     HasConfiguredPassword: Boolean(ctx.cfg.jellyfin.password),
     HasConfiguredEasyPassword: false,

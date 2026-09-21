@@ -17,9 +17,10 @@ import {
   tokenOf,
   verifyToken,
 } from './auth';
-import { collectionFolder, genreDto, imageTag, listOf, publicSystemInfo, sessionDto, systemInfo, userData, userDto, type Dto } from './dto';
+import { collectionFolder, genreDto, listOf, publicSystemInfo, sessionDto, systemInfo, userData, userDto, type Dto } from './dto';
 import { dashGuid, decodeGuid, encodeGuid, genreIdOf, parentSeriesOf, plainGuid, type LabelGuid, type TitleGuid } from './ids';
-import { imageUrlFor, redirectTo } from './images';
+import { imageUrlFor, imageResponse } from './images';
+import { imageTaggedJson, imageUrlByTag } from './image-tags';
 import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type Show } from './library';
 import { pickSource, playbackInfo, resolveSources, subtitleResponse } from './playback';
 import { qBool, qInt, qList, type JfEnv, type JfRequest } from './request';
@@ -45,7 +46,7 @@ const CORS: Record<string, string> = {
   'access-control-allow-credentials': 'true',
   'access-control-allow-headers': '*',
   'access-control-expose-headers': '*',
-  'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
 };
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
@@ -185,7 +186,7 @@ async function reply(c: C, body: unknown, status = 200): Promise<Response> {
   if (records.length && c.get('jf').claims) {
     await lib(c).decorateUserData(records);
   }
-  return c.body(JSON.stringify(body, dashIds), status as never, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  return c.body(await imageTaggedJson(c.get('jf').ctx, body, dashIds), status as never, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
 }
 
 function lib(c: C): Library {
@@ -1011,21 +1012,30 @@ inner.post('/useritems/:id/userdata', userDataHandler);
 inner.post('/users/:uid/items/:id/userdata', userDataHandler);
 
 async function imageHandler(c: C): Promise<Response> {
-  const tag = imageTag(c.get('jf').q('tag'));
-  if (tag) return redirectTo(tag);
-  const url = await imageUrlFor(lib(c), plainGuid(c.req.param('id')), c.req.param('type') ?? 'primary');
-  return url ? redirectTo(url) : c.body(null, 404);
+  const jf = c.get('jf');
+  const id = plainGuid(c.req.param('id'));
+  const type = (c.req.param('type') ?? '').toLowerCase();
+  const index = c.req.param('index') ?? jf.q('imageIndex') ?? '0';
+  if (!decodeGuid(id) || !['primary','backdrop','logo','thumb','banner','art'].includes(type) || index !== '0') return c.body(null, 404);
+  // Tags are opaque cache keys, never caller-supplied fetch destinations.
+  const url = await imageUrlByTag(jf.ctx, jf.q('tag')) ?? await imageUrlFor(lib(c), id, type);
+  return url ? imageResponse(jf, c.req.raw, url, type) : c.body(null, 404);
 }
 inner.get('/items/:id/images/:type', imageHandler);
 inner.get('/items/:id/images/:type/:index', imageHandler);
 inner.on('HEAD', '/items/:id/images/:type', imageHandler);
+inner.on('HEAD', '/items/:id/images/:type/:index', imageHandler);
 async function profileImage(c: C): Promise<Response> {
-  const profile = (await profileUsers(c.get('jf').ctx)).find(p => p.who.userId === plainGuid(c.req.param('uid')));
+  const jf = c.get('jf');
+  if (c.req.param('type')?.toLowerCase() !== 'primary' || (c.req.param('index') ?? jf.q('imageIndex') ?? '0') !== '0') return c.body(null, 404);
+  const profile = (await profileUsers(jf.ctx)).find(p => p.who.userId === plainGuid(c.req.param('uid')));
   const url = profile?.ctx.profile?.avatar;
-  return url ? c.redirect(url,302) : c.body(null,404);
+  return url ? imageResponse(jf, c.req.raw, url, 'primary') : c.body(null,404);
 }
 inner.get('/users/:uid/images/:type',profileImage);
 inner.get('/users/:uid/images/:type/:index',profileImage);
+inner.on('HEAD', '/users/:uid/images/:type',profileImage);
+inner.on('HEAD', '/users/:uid/images/:type/:index',profileImage);
 
 inner.notFound((c) => c.json({ Message: `Unsupported Jellyfin endpoint: ${c.req.method} ${c.get('jf')?.rawPath ?? ''}` }, 404));
 inner.onError((err, c) => c.json({ Message: err instanceof Error ? err.message : 'Internal error' }, 500));
