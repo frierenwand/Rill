@@ -21,8 +21,24 @@ export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Pr
   const old=await stateGet<SnapshotHead>(ctx,`${key}:head`);
   const statements=chunks.map((chunk,i)=>put(`${key}:part:${generation}:${i}`,chunk));
   statements.push(put(`${key}:head`,{generation,parts:chunks.length}));
+  const summary={generation,snapshot:{
+    movies:snapshot.movies,resume:snapshot.resume,dropped:snapshot.dropped,
+    episodes:[],shows:[],fetchedAt:snapshot.fetchedAt,
+  }};
+  // Large accounts keep using chunked storage instead of exceeding a D1 value limit.
+  if(JSON.stringify(summary).length<=131072)statements.push(put(`${key}:summary`,summary));
   if(old?.generation)statements.push(db.prepare('DELETE FROM state WHERE key>=? AND key<?').bind(`${key}:part:${old.generation}:`,`${key}:part:${old.generation};`));
   await db.batch(statements);
+}
+export async function loadSnapshotSummary(ctx:Ctx,key:string):Promise<WatchSnapshot|null> {
+  const row=await ctx.env.DB?.prepare(`SELECT s.value FROM state s JOIN state h
+    ON h.key=? AND json_extract(s.value,'$.generation')=json_extract(h.value,'$.generation')
+    WHERE s.key=? AND s.expires>? AND h.expires>?`)
+    .bind(`${key}:head`,`${key}:summary`,Date.now(),Date.now()).first<{value:string}>();
+  if(row)return (JSON.parse(row.value) as {snapshot:WatchSnapshot}).snapshot;
+  // Existing installations acquire a summary on their next successful import.
+  const snapshot=await loadSnapshot(ctx,key);
+  return snapshot ? {...snapshot,episodes:[],shows:[]} : null;
 }
 export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|null> {
   const db=ctx.env.DB;if(!db)return null;

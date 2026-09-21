@@ -9,6 +9,7 @@ import m0008 from '../../migrations/0008_item_ratings.sql';
 import m0009 from '../../migrations/0009_dropped_shows.sql';
 import m0010 from '../../migrations/0010_playback_reports.sql';
 import m0011 from '../../migrations/0011_update_history.sql';
+import m0012 from '../../migrations/0012_watch_revisions.sql';
 
 const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0001_durable.sql', m0001],
@@ -22,6 +23,7 @@ const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0009_dropped_shows.sql', m0009],
   ['0010_playback_reports.sql', m0010],
   ['0011_update_history.sql', m0011],
+  ['0012_watch_revisions.sql', m0012],
 ];
 
 const done = new WeakMap<D1Database, Promise<void>>();
@@ -41,7 +43,9 @@ async function apply(db: D1Database): Promise<void> {
   const applied = new Set(rows.results.map((r) => r.name));
   for (const [name, sql] of MIGRATIONS) {
     if (applied.has(name)) continue;
-    const statements = sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s));
+    // Trigger bodies contain semicolons; keep each BEGIN ... END together.
+    const statements = (sql.match(/\s*CREATE TRIGGER\b[\s\S]*?\bEND\s*;|[^;]+;/gi) ?? [])
+      .map(s => db.prepare(s.trim()));
     statements.push(db.prepare('INSERT OR IGNORE INTO d1_migrations(name) VALUES(?)').bind(name));
     await db.batch(statements);
   }

@@ -212,6 +212,14 @@ function episodeKeys(season: number | undefined, episode: number | undefined): s
   return keys;
 }
 
+// These indexes are read-only after construction. Every reuse checks the
+// database revision; the timeout only bounds memory and schedules import refresh.
+const watchIndexes = new WeakMap<D1Database, Map<string, {revision:string; expires:number; index:WatchIndex}>>();
+
+function resumeIdentity(row:ResumeEntry):string {
+  return JSON.stringify([row.kind,bundleKeys(row.ids).sort(),row.season ?? 1,row.episode ?? 0]);
+}
+
 export interface EpisodeView {
   season: number;
   episode: number;
@@ -289,6 +297,9 @@ export class Library {
   private episodeStates=new Map<string,Promise<{watched?:EpisodeMark;resume?:ResumeEntry}>>();
   private catalogsPromise?: Promise<CatalogRef[]>;
   private watchPromise?: Promise<WatchIndex>;
+  private summaryPromise?: Promise<WatchIndex>;
+  private importRevision?: string;
+  private metadataUnavailable = false;
   private favoritesPromise?: Promise<Set<string>>;
   private ratingsPromise?: Promise<Map<string, boolean>>;
   private readonly metas = new Map<string, Promise<Meta | null>>();
@@ -312,7 +323,7 @@ export class Library {
 
   ratings(): Promise<Map<string, boolean>> {
     this.ratingsPromise ??= (async () => {
-      const [ratings, idx] = await Promise.all([itemRatings(this.ctx), this.watch()]);
+      const [ratings, idx] = await Promise.all([itemRatings(this.ctx), this.watch(true)]);
       for (const [id, likes] of ratings) {
         const g = decodeGuid(id);
         if (!g || g.kind === 'movie' || g.kind === 'misc' || g.kind === 'view') continue;
@@ -336,6 +347,7 @@ export class Library {
       const previous = this.watchPromise;
       await trackerApi.drop(this.ctx, ids, likes === false, encodeGuid(root), { itemId: id, likes: likes === false ? null : likes, profile: this.ctx.profile?.id ?? '' });
       this.watchPromise = previous?.then(async idx => new WatchIndex(await overlayDropped(this.ctx, idx.snapshot)));
+      this.summaryPromise = undefined;
     } else await saveRating(this.ctx, id, likes);
     this.ratingsPromise = undefined;
   }
@@ -348,7 +360,7 @@ export class Library {
       record.IsFavorite = favorites.has(id);
       record.Likes = ratings.get(id) ?? null;
       const g = decodeGuid(id);
-      if (g && (g.kind === 'series' || g.kind === 'season' || g.kind === 'episode') && (await this.watch()).isDropped(this.keysOf(id, g))) record.Likes = false;
+      if (g && (g.kind === 'series' || g.kind === 'season' || g.kind === 'episode') && (await this.watch(true)).isDropped(this.keysOf(id, g))) record.Likes = false;
     }
   }
 
@@ -513,7 +525,7 @@ export class Library {
     if (!p) {
       p = (async () => {
         const type = metaTypeFor(title);
-        const cacheKey = `jf-meta:v1:${this.ctx.scope}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.ctx.cfg.ageCap}:${k}`;
+        const cacheKey = `jf-meta:v2:${this.ctx.scope}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.ctx.cfg.ageCap}:${k}`;
         const cached = await cacheGet<{meta: Meta | null}>(cacheKey, this.ctx.origin);
         if (cached) return cached.meta;
         let meta: Meta | null = null;
@@ -535,7 +547,8 @@ export class Library {
         if (meta && !this.allowed(meta.certification)) meta = null;
         if(meta)await rememberPeople(this.ctx,meta).catch(() => {});
         // Reuse the resolved metadata, including enrichment and episode lists.
-        await cachePut(cacheKey, {meta}, meta ? 300 : 30, this.ctx.origin);
+        if(meta)await cachePut(cacheKey, {meta}, 300, this.ctx.origin);
+        else this.metadataUnavailable=true;
         return meta;
       })();
       this.metas.set(k, p);
@@ -641,21 +654,47 @@ export class Library {
     return task;
   }
 
-  watch(): Promise<WatchIndex> {
-    this.watchPromise ??= (async () => {
-      try {
-        return new WatchIndex(await trackerApi.snapshot(this.ctx));
-      } catch (error) {
-        if (this.ctx.env.DB) throw error;
-        return new WatchIndex({ movies: [], episodes: [], shows: [], resume: [], fetchedAt: new Date().toISOString() });
+  watch(summary = false): Promise<WatchIndex> {
+    if (this.watchPromise) return this.watchPromise;
+    if (summary) return this.summaryPromise ??= this.loadWatch(true);
+    return this.watchPromise = this.loadWatch(false);
+  }
+
+  private async loadWatch(summary:boolean):Promise<WatchIndex> {
+    const ctx=this.ctx, db=ctx.env.DB, tracker=trackerApi.primary(ctx);
+    const cacheKey=JSON.stringify([ctx.origin,ctx.scope,ctx.historyScope,ctx.profile?.id,ctx.cacheRevision ?? ctx.cfgToken,summary]);
+    let revision:string|undefined;
+    if(db) {
+      const row=await db.prepare(`SELECT
+        (SELECT value FROM state WHERE key=? AND expires>?) AS head,
+        COALESCE((SELECT version FROM watch_revisions WHERE scope=?),0) AS history,
+        COALESCE((SELECT version FROM watch_revisions WHERE scope=?),0) AS preferences`)
+        .bind(`history-import:${ctx.scope}:${tracker?.name}:head`,Date.now(),ctx.historyScope ?? ctx.scope,ctx.scope)
+        .first<{head:string|null;history:number;preferences:number}>();
+      if(row && (!tracker || row.head)) revision=JSON.stringify(row);
+      this.importRevision=row?.head ?? undefined;
+      const hit=watchIndexes.get(db)?.get(cacheKey);
+      if(revision && hit?.revision===revision && hit.expires>Date.now()) return hit.index;
+    }
+    try {
+      const index=new WatchIndex(await trackerApi.snapshot(ctx,summary));
+      if(db && revision && index.snapshot.episodes.length+index.snapshot.movies.length+index.snapshot.resume.length<=10_000) {
+        let entries=watchIndexes.get(db);
+        if(!entries){entries=new Map();watchIndexes.set(db,entries);}
+        entries.delete(cacheKey);
+        if(entries.size>=8)entries.delete(entries.keys().next().value!);
+        entries.set(cacheKey,{revision,expires:Date.now()+30_000,index});
       }
-    })();
-    return this.watchPromise;
+      return index;
+    } catch(error) {
+      if(db)throw error;
+      return new WatchIndex({movies:[],episodes:[],shows:[],resume:[],fetchedAt:new Date().toISOString()});
+    }
   }
 
   async decorate(items: Dto[], shows: Map<string, Show> = new Map()): Promise<Dto[]> {
     if (!items.length) return items;
-    const idx = await this.watch();
+    const idx = await this.watch(!shows.size && !items.some(item => item.Type==='Episode'));
     for (const item of items) {
       const id = String(item.Id ?? '');
       const g = decodeGuid(id);
@@ -727,19 +766,42 @@ export class Library {
 
   private async cachedShelf(name: string, idx: WatchIndex, build: () => Promise<{items: Dto[]; total: number}>): Promise<{items: Dto[]; total: number}> {
     const snapshot = idx.snapshot;
+    const resume=new Map(snapshot.resume.map(row=>[resumeIdentity(row),row]));
     const revision = await sha256(JSON.stringify({
-      imported: trackerApi.primary(this.ctx) ? snapshot.fetchedAt : '',
-      local: snapshot.local, resume: snapshot.resume, dropped: snapshot.dropped,
+      imported: trackerApi.primary(this.ctx) ? this.importRevision ?? snapshot.fetchedAt : '',
+      // Position changes do not change episode selection. Preserve membership,
+      // ordering and watched timestamps, then overlay the current position below.
+      local: snapshot.local?.map(row=>[row.kind,bundleKeys(row.ids),row.season,row.episode,row.watched,row.watched?row.at:null]),
+      resume: [...resume.keys()], dropped: snapshot.dropped,
+      shows: name.startsWith('next:') ? snapshot.shows.map(row=>bundleKeys(row.ids)) : undefined,
     }));
-    const cacheKey = `jf-shelf:v1:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
-    const cached = await cacheGet<{items: Dto[]; total: number}>(cacheKey, this.ctx.origin);
+    const cacheKey = `jf-shelf:v2:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
+    const cached = await cacheGet<{items: Dto[]; total: number; resumes:Record<string,string>}>(cacheKey, this.ctx.origin);
     if (cached) {
+      for(const item of cached.items) {
+        const id=String(item.Id),row=resume.get(cached.resumes[id]);
+        if(!row)continue;
+        const previous=item.UserData as Dto;
+        const runtime=row.runtimeMs && row.runtimeMs>0 ? row.runtimeMs*10_000 : typeof item.RunTimeTicks==='number' ? item.RunTimeTicks : null;
+        item.UserData=userData(id,{
+          played:Boolean(previous.Played),playCount:Number(previous.PlayCount ?? 0),
+          positionTicks:row.positionMs!==undefined ? row.positionMs*10_000 : runtime ? Math.round(runtime*row.progress/100) : 0,
+          runtimeTicks:runtime,lastPlayed:previous.Played ? String(previous.LastPlayedDate ?? row.at) : row.at,
+        });
+      }
       await this.decoratePreferences(cached.items);
-      return cached;
+      return {items:cached.items,total:cached.total};
     }
     const result = await build();
-    // Playback changes produce a new revision; preferences are reapplied on reads.
-    await cachePut(cacheKey, result, 30, this.ctx.origin);
+    const resumes:Record<string,string>={};
+    for(const item of result.items) {
+      const id=String(item.Id),g=decodeGuid(id),known=this.episodeBook.get(id);
+      const row=known ? (await this.episodeState(idx,known.show,known.episode)).resume
+        : g?.kind==='movie' ? idx.movie(this.keysOf(id,g)).resume : undefined;
+      if(row)resumes[id]=resumeIdentity(row);
+    }
+    // A provider failure must not turn into a cached, apparently empty shelf.
+    if(!this.metadataUnavailable)await cachePut(cacheKey, {...result,resumes}, 30, this.ctx.origin);
     return result;
   }
 

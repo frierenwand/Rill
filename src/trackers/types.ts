@@ -82,7 +82,7 @@ export interface Tracker {
 export interface TrackerApi {
   primary(ctx: Ctx): Tracker | null;
   sinks(ctx: Ctx): Tracker[];
-  snapshot(ctx: Ctx): Promise<WatchSnapshot>;
+  snapshot(ctx: Ctx, summary?: boolean): Promise<WatchSnapshot>;
   scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void>;
   mark(ctx: Ctx, ev: MarkEvent): Promise<void>;
   clearResume(ctx: Ctx, entry: ResumeEntry): Promise<void>;

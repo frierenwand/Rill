@@ -75,10 +75,10 @@ async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry
   return [...merged.values()].sort((a, b) => epoch(b.at) - epoch(a.at));
 }
 
-async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
+async function snapshot(ctx: Ctx, summary = false): Promise<WatchSnapshot> {
   const t = primary(ctx);
   if (!t) return overlayHistory(ctx, await overlayDropped(ctx, emptySnapshot()));
-  const base = await importedHistory(ctx, t, snapshotKey(ctx, t));
+  const base = await importedHistory(ctx, t, snapshotKey(ctx, t), summary);
   const resume = await overlayBuffer(ctx,base.resume);
   return overlayHistory(ctx, await overlayDropped(ctx,{...base,resume}));
 }

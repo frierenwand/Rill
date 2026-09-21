@@ -3,17 +3,18 @@ import type { Tracker, WatchSnapshot } from '../trackers/types';
 import { emptySnapshot } from '../trackers/common';
 import { cacheGet, cachePut } from '../util/cache';
 import { reconcileDropped } from './dropped';
-import { loadSnapshot, saveSnapshot } from './snapshots';
+import { loadSnapshot, loadSnapshotSummary, saveSnapshot } from './snapshots';
 
 const REFRESH_SECONDS = 60;
 
 // Local progress is overlaid by the caller, so serving the last complete
 // import never delays a user's own playback updates.
-export async function importedHistory(ctx: Ctx, tracker: Tracker, cacheKey: string): Promise<WatchSnapshot> {
-  const cached = await cacheGet<WatchSnapshot>(cacheKey);
+export async function importedHistory(ctx: Ctx, tracker: Tracker, cacheKey: string, summary = false): Promise<WatchSnapshot> {
+  // Database generations are authoritative across isolates and Cloudflare regions.
+  const cached = !ctx.env.DB ? await cacheGet<WatchSnapshot>(cacheKey) : null;
   if (cached) return cached;
   const durableKey = `history-import:${ctx.scope}:${tracker.name}`;
-  const stored = ctx.env.DB ? await loadSnapshot(ctx, durableKey) : null;
+  const stored = ctx.env.DB ? await (summary ? loadSnapshotSummary : loadSnapshot)(ctx, durableKey) : null;
 
   const refresh = async (): Promise<WatchSnapshot> => {
     if (ctx.env.DB) {
@@ -30,7 +31,7 @@ export async function importedHistory(ctx: Ctx, tracker: Tracker, cacheKey: stri
       const fresh = await tracker.snapshot(ctx);
       await reconcileDropped(ctx, tracker.name, fresh);
       if (ctx.env.DB) await saveSnapshot(ctx, durableKey, fresh);
-      await cachePut(cacheKey, fresh, REFRESH_SECONDS);
+      if (!ctx.env.DB) await cachePut(cacheKey, fresh, REFRESH_SECONDS);
       return fresh;
     } catch {
       console.warn(`History refresh failed (${tracker.name}); retaining saved history`);
@@ -41,7 +42,7 @@ export async function importedHistory(ctx: Ctx, tracker: Tracker, cacheKey: stri
   };
 
   if (stored) {
-    await cachePut(cacheKey, stored, REFRESH_SECONDS);
+    if (!ctx.env.DB) await cachePut(cacheKey, stored, REFRESH_SECONDS);
     const fetchedAt = Date.parse(stored.fetchedAt);
     if (ctx.defer && (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt >= REFRESH_SECONDS * 1000)) {
       // A full import also consumes the browsing request's CPU budget in waitUntil.

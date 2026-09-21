@@ -170,14 +170,16 @@ async function reply(c: C, body: unknown, status = 200): Promise<Response> {
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) { value.forEach(visit); return; }
     const dto = value as Dto;
-    if (typeof dto.IsFavorite === 'boolean' && plainGuid(dto.ItemId ?? dto.Key)) records.push(dto);
-    for (const child of Object.values(dto)) visit(child);
+    if (typeof dto.IsFavorite === 'boolean' && plainGuid(dto.ItemId ?? dto.Key)) {records.push(dto);return;}
+    // Item metadata (people, streams and images) contains no nested user state.
+    // Only traverse the response containers that can contain item DTOs.
+    for (const key of ['UserData','Items','NowPlayingItem','CurrentProgram']) visit(dto[key]);
   };
   visit(body);
   if (records.length && c.get('jf').claims) {
     await lib(c).decorateUserData(records);
   }
-  return c.body(JSON.stringify(body, dashIds), status as never, { 'Content-Type': 'application/json' });
+  return c.body(JSON.stringify(body, dashIds), status as never, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
 }
 
 function lib(c: C): Library {
