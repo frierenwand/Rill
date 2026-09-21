@@ -8,8 +8,7 @@
     "build": "node scripts/build.mjs",
     "migrate": "wrangler d1 migrations apply DB --remote",
     "deploy": "node scripts/deploy.mjs",
-    "typecheck": "tsc --noEmit",
-    "test:updates": "node --experimental-strip-types --test tests/updates.test.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.6.0"

@@ -6,6 +6,7 @@ import { decodeConfig, encodeConfig } from '../config/codec';
 import { registerAccount } from '../storage/state';
 import { signingSecret } from '../jellyfin/auth';
 import { b64urlDecode, b64urlEncode, hmac, sha256, timingSafeEqual } from '../util/bytes';
+import { mountUpdateRoutes } from './updates';
 
 const COOKIE = 'rill_owner';
 const SESSION_DAYS = 30;
@@ -81,6 +82,9 @@ async function readBody(req: Request): Promise<Json> {
 
 export function mountAccountRoutes(router: Hono<{ Variables: { ctx?: Ctx }; Bindings: Env }>, buildCtx: BuildCtx): void {
   const baseCtx = (env: Env, origin: string) => buildCtx(normalizeConfig({}), env, origin);
+
+  mountUpdateRoutes(router, async (c) => Boolean(c.env.DB && await readOwner(c.env) &&
+    await validSession(await baseCtx(c.env, new URL(c.req.url).origin), c.req.raw)));
 
   router.post('/api/account/status', async (c) => {
     const origin = new URL(c.req.url).origin;

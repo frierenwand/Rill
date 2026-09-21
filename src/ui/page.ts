@@ -589,6 +589,28 @@ function body(): string {
   <div class="setting-row"><div><label class="t" for="language">Language</label><p class="hint">For titles, descriptions and artwork.</p></div><div class="f"><input type="text" id="language" data-k="language" list="langs" autocomplete="off" spellcheck="false" placeholder="en-US"><datalist id="langs">${LANGUAGES.map((l) => `<option value="${l}">`).join('')}</datalist></div></div>
 </section>
 
+<section id="s-updates">
+  <h2>Updates</h2>
+  <div class="settings-card">
+    <p class="note">Get the latest Rill improvements. Your account, settings and watch history stay in place.</p>
+    <div class="b"><button type="button" class="primary" id="update-start" disabled>Update Rill</button><a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">View Cloudflare builds ↗</a></div>
+    <p class="status" id="update-status" role="status" aria-live="polite">Sign in to manage updates.</p>
+    <details id="update-settings">
+      <summary id="update-settings-label">Connect updates</summary>
+      <p class="note">Connect Cloudflare once, then update here with one click.</p>
+      <ol class="note">
+        <li>Open your Worker in Cloudflare and go to <strong>Settings → Builds → Deploy Hooks</strong>.</li>
+        <li>Create a hook named <strong>Rill updates</strong> for your production branch (usually <strong>main</strong>).</li>
+        <li>Copy its URL and paste it below.</li>
+      </ol>
+      <div class="f"><label class="t" for="update-hook">Cloudflare Deploy Hook URL</label><input type="password" id="update-hook" autocomplete="off" spellcheck="false" placeholder="Paste your hook URL"><p class="hint">Stored privately on your server. Leave blank to keep your saved connection.</p></div>
+      <label class="note"><input type="checkbox" id="update-daily"> Update automatically each day at 04:17 UTC</label>
+      <div class="b"><button type="button" id="update-save" disabled>Connect updates</button><button type="button" class="q" id="update-disconnect" hidden>Disconnect</button></div>
+      <p class="hint">Updates change your running Rill installation. Your GitHub copy stays unchanged.</p>
+    </details>
+  </div>
+</section>
+
 <section id="s-meta">
   <h2><small>2</small>Metadata</h2>
   <h3>API keys</h3>
@@ -850,7 +872,7 @@ const JS = String.raw`
     section.appendChild(content);
   });
   document.querySelector('#s-general .section-content').appendChild(document.getElementById('s-age'));
-  var groups = { general:['general'], meta:['meta','search'], catalogs:['catalogs'], collections:['collections'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
+  var groups = { general:['general','updates'], meta:['meta','search'], catalogs:['catalogs'], collections:['collections'], addons:['addons'], tracking:['tracking'], jellyfin:['jellyfin'], install:['install'] };
   Object.keys(groups).forEach(function(key) {
     var panel = document.createElement('div');
     panel.id = 'panel-' + key;
@@ -992,6 +1014,59 @@ const JS = String.raw`
   }
 
   var account = { durable: false, exists: false, signedIn: false, loaded: false, username: '' }, saveTimer = null, wantedTab = location.hash.slice(1);
+  var updateState = null, updateBusy = false, updateTimer = null, updateLoaded = false, updateLoading = false;
+  function showUpdateSettings() {
+    location.hash = 'general'; selectTab('general', false);
+    $('s-updates').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function renderUpdates() {
+    var signedIn = account.durable && account.signedIn;
+    $('update-start').disabled = !signedIn || updateBusy || !updateState || !updateState.configured || updateState.retryAfter > 0;
+    $('update-start').textContent = updateBusy ? 'Please wait…' : 'Update Rill';
+    $('update-save').disabled = !signedIn || updateBusy || !updateLoaded;
+    $('update-hook').disabled = !signedIn || updateBusy || !updateLoaded;
+    $('update-daily').disabled = !signedIn || updateBusy || !updateLoaded;
+    $('update-disconnect').disabled = !signedIn || updateBusy;
+    $('update-disconnect').hidden = !updateState || !updateState.configured;
+    $('update-settings-label').textContent = updateState && updateState.configured ? 'Update settings' : 'Connect updates';
+    $('update-save').textContent = updateState && updateState.configured ? 'Save update settings' : 'Connect updates';
+  }
+  function adoptUpdateStatus(result) {
+    updateState = result; updateLoaded = true;
+    $('update-hook').value = '';
+    $('update-daily').checked = result.daily;
+    clearTimeout(updateTimer);
+    if (result.retryAfter > 0) updateTimer = setTimeout(function () {
+      if (updateState) updateState.retryAfter = 0;
+      renderUpdates();
+    }, result.retryAfter * 1000);
+    renderUpdates();
+  }
+  function loadUpdates() {
+    if (!account.signedIn || updateLoading) return;
+    updateLoading = true;
+    api('/api/updates/status').then(function (r) {
+      if (!account.signedIn) return;
+      if (r.error) { $('update-status').textContent = r.error; return; }
+      adoptUpdateStatus(r);
+      $('update-status').textContent = r.retryAfter > 0 ? 'An update was recently requested. Check Cloudflare builds for its progress.' : r.configured ? 'Ready when you are.' : 'Connect Cloudflare below to enable updates.';
+    }).finally(function () { updateLoading = false; });
+  }
+  function updateAction(action, body) {
+    updateBusy = true; renderUpdates();
+    $('update-status').textContent = action === 'start' ? 'Requesting an update…' : 'Saving…';
+    api('/api/updates/' + action, body).then(function (r) {
+      if (!account.signedIn) return;
+      if (r.error) { $('update-status').textContent = r.error; return; }
+      adoptUpdateStatus(r);
+      $('update-status').textContent = action === 'start' ? (r.alreadyRequested ? 'An update was already requested. ' : 'Update requested. ') + 'Cloudflare will build and deploy it. Check Cloudflare builds, then reload Rill after it succeeds.' : action === 'disconnect' ? 'Updates disconnected.' : 'Connected. You can now update Rill with one click.';
+      if (action === 'configure') $('update-settings').open = false;
+    }).finally(function () { updateBusy = false; renderUpdates(); });
+  }
+  $('update-start').addEventListener('click', function () { updateAction('start'); });
+  $('update-save').addEventListener('click', function () { updateAction('configure', { hook: $('update-hook').value, daily: $('update-daily').checked }); });
+  $('update-disconnect').addEventListener('click', function () { updateAction('disconnect'); });
+  $('update-settings').addEventListener('toggle', function () { if (this.open && !updateLoaded) loadUpdates(); });
   function adoptServerConfig(config) {
     if (!config) return;
     var key = cfg.installationKey;
@@ -1016,6 +1091,7 @@ const JS = String.raw`
       var pop = el('div', { class: 'popover', role: 'menu', hidden: true });
       function openPop(open) { pop.hidden = !open; chip.setAttribute('aria-expanded', String(open)); if (open) { clear(pop);
         pop.appendChild(el('div', { class: 'pop-user' }, [el('span', { class: 'avatar big', 'aria-hidden': 'true', text: initial(account.username) }), el('div', {}, [el('strong', { text: account.username }), el('small', { text: statusText() })])]));
+        pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Update Rill', onclick: function () { openPop(false); showUpdateSettings(); } }));
         pop.appendChild(el('button', { type: 'button', role: 'menuitem', text: 'Log out', onclick: function () { openPop(false); logout(); } })); } }
       chip.addEventListener('click', function (e) { e.stopPropagation(); openPop(pop.hidden); });
       activePop = { pop: pop, chip: chip, host: host, close: function () { openPop(false); } };
@@ -1029,6 +1105,12 @@ const JS = String.raw`
     var firstRun = account.durable && !account.exists;
     $('setup-gate').hidden = !firstRun;
     if (firstRun) { $('setup-user').value = $('setup-user').value || (cfg.jellyfin.username !== 'rill' ? cfg.jellyfin.username : ''); $('setup-user').focus(); }
+    if (!account.signedIn) {
+      updateState = null; updateLoaded = false; clearTimeout(updateTimer);
+      $('update-hook').value = ''; $('update-daily').checked = false;
+      $('update-status').textContent = 'Sign in to manage updates.';
+    } else if (!updateLoaded) loadUpdates();
+    renderUpdates();
   }
   $('setup-form').addEventListener('submit', function (e) {
     e.preventDefault();

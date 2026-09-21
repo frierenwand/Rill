@@ -63,15 +63,18 @@ Your username can contain 1–32 letters, numbers, dots, dashes or underscores.
 
 ### Updates
 
-**Update now:** in Cloudflare, open your Worker → **Deployments**, open the latest build, and select **Retry build**. Every build fetches the latest code from the original Rill repository and deploys it using your existing Worker and database settings. Wait for the build to succeed.
+**Connect once:**
 
-**Update daily:** enable this once, entirely in Cloudflare:
+1. In Cloudflare, open your Worker → **Settings → Builds → Deploy Hooks**. Create a hook named **Rill updates** for your production branch (normally `main`) and copy its URL.
+2. In Rill → **General → Updates → Connect updates**, paste the URL and click **Connect updates**. Saving the connection does not start a build.
 
-1. Open your Worker → **Settings → Builds → Deploy Hooks**. Create a hook named **Daily updates** for your production branch (normally `main`) and copy its URL.
-2. Under **Settings → Variables and Secrets**, add a **Secret** named `RILL_UPDATE_HOOK` and paste that URL as its value. Save and deploy the change.
-3. Leave your Worker's existing scheduled trigger enabled. Rill will request an update build every day at **04:17 UTC**.
+After that, updates take one click inside Rill. No API token or GitHub workflow is needed. The hook is saved privately in your installation database, separate from shared configurations; it is never returned to the browser after saving. Anyone with the hook URL can request a build, so keep it private. [About Cloudflare Deploy Hooks](https://developers.cloudflare.com/workers/ci-cd/builds/deploy-hooks/).
 
-Cloudflare's install button does not create this hook automatically; the one-time setup is needed for daily updates. Keep its URL private. Remove the `RILL_UPDATE_HOOK` secret to turn daily updates off. [About Cloudflare Deploy Hooks](https://developers.cloudflare.com/workers/ci-cd/builds/deploy-hooks/).
+**Update now:** sign in to Rill, open **General → Updates**, and click **Update Rill**. You can also reach it from your account menu. Cloudflare starts a fresh build using the latest original Rill code and your existing Worker and database settings. Open **View Cloudflare builds**, select your Worker, and wait for the build to succeed before reloading Rill. “Update requested” means Cloudflare accepted the request; it does not mean deployment has finished.
+
+**Update daily:** enable **Update automatically each day at 04:17 UTC** in Rill's update settings and save. Leave the existing scheduled trigger enabled. Disable the checkbox to return to manual updates, or choose **Disconnect** to disable both. Existing installations using the `RILL_UPDATE_HOOK` secret remain connected with daily updates enabled until changed in Rill.
+
+Cloudflare's standard install button does not provision Deploy Hooks. Creating one through its API requires Workers Builds Configuration edit access (`Workers CI Write`), which is not included in the documented default build token permissions. That is why connecting the hook is a one-time step. [Hook creation API](https://developers.cloudflare.com/api/resources/workers_builds/subresources/deploy_hooks/methods/create/) · [Build token permissions](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/#api-token).
 
 Updates change your running installation; your GitHub copy is not synced. Builds use the original Rill application code, so edits to application code in your copy are not included. Your installation's `wrangler.jsonc`, existing database, and Cloudflare secrets are retained. Failed builds leave the currently deployed version running.
 
@@ -84,7 +87,9 @@ In Cloudflare → your Worker → **Settings → Build**, set **Build command** 
 git fetch https://github.com/mrtxiv/Rill.git main && git restore --source=FETCH_HEAD -- scripts package.json package-lock.json && npm run build
 ```
 
-Set **Deploy command** to `npm run deploy`, save, then **Retry build**. Keep these settings for future builds. After it succeeds, you can enable daily updates using the steps above. No GitHub Actions setup is needed.
+Set **Deploy command** to `npm run deploy` and save. To start a fresh build, open the connected repository on GitHub, make a small edit to its README, and commit it to the production branch. Keep these build settings for future updates. Once the build succeeds, reload Rill and connect updates using the steps above. No GitHub Actions setup is needed.
+
+Do not retry the original install build: Cloudflare can reject it with “cannot retry a build that was created with a seed repo override.” A new commit or Deploy Hook starts a fresh build and avoids that retry restriction. Cloudflare creates a separate repository copy, so GitHub's **Sync fork** button is not part of this update flow.
 
 </details>
 
