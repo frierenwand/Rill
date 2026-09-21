@@ -84,15 +84,17 @@ app.onError((err, c) => {
 });
 
 import { scheduled } from './storage/scheduled';
+import { runLibraryRead, type WorkerJob } from './storage/worker-jobs';
 export default {
   fetch: app.fetch,
   async scheduled(event:ScheduledController,env:Env):Promise<void> {
     if(env.RILL_JOBS)await env.RILL_JOBS.send({kind:'maintenance',scheduledTime:event.scheduledTime});
     else await scheduled(event,env);
   },
-  async queue(batch:MessageBatch<{kind:'maintenance';scheduledTime:number}>,env:Env):Promise<void> {
+  async queue(batch:MessageBatch<WorkerJob>,env:Env,exec:ExecutionContext):Promise<void> {
     for(const message of batch.messages) {
       if(message.body.kind==='maintenance')await scheduled({scheduledTime:message.body.scheduledTime,cron:'* * * * *',noRetry(){}} as ScheduledController,env);
+      else if(message.body.kind==='library')await runLibraryRead(message.body,env,exec,app.fetch);
       message.ack();
     }
   },
