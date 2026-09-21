@@ -15,7 +15,7 @@ import type { ResumeEntry, WatchSnapshot, WatchedEpisode, WatchedMovie } from '.
 import { mapLimit, uniq } from '../util/concurrency';
 import { cacheGet, cachePut } from '../util/cache';
 import { sha256 } from '../util/bytes';
-import { collectionFolder, episodeItem, placeholderSource, runtimeTicks, seasonItem, titleItem, userData, type Dto } from './dto';
+import { collectionFolder, episodeItem, peopleOf, PREVIEW_PEOPLE_LIMIT, placeholderSource, runtimeTicks, seasonItem, titleItem, userData, type Dto } from './dto';
 import {
   decodeGuid,
   encodeGuid,
@@ -517,10 +517,10 @@ export class Library {
     return g ? [key(g.source, g.num)] : [];
   }
 
-  meta(g: TitleGuid): Promise<Meta | null> {
+  meta(g: TitleGuid, withEpisodes = true): Promise<Meta | null> {
     const title = g.kind === 'movie' ? g : parentSeriesOf(g);
     const stremioId = stremioIdOfGuid(title);
-    const k = `${metaTypeFor(title)}:${stremioId}`;
+    const k = `${withEpisodes ? '' : 'presentation:'}${metaTypeFor(title)}:${stremioId}`;
     let p = this.metas.get(k);
     if (!p) {
       p = (async () => {
@@ -530,8 +530,8 @@ export class Library {
         if (cached) return cached.meta;
         let meta: Meta | null = null;
         try {
-          meta = await metaApi.resolveMeta(this.ctx, type, stremioId);
-          if (!meta && type === 'anime') meta = await metaApi.resolveMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'series', stremioId);
+          meta = await metaApi.resolveMeta(this.ctx, type, stremioId, {withEpisodes});
+          if (!meta && type === 'anime') meta = await metaApi.resolveMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'series', stremioId, {withEpisodes});
         } catch {
           meta = null;
         }
@@ -541,7 +541,7 @@ export class Library {
         }
         // Related titles and filmographies use TMDB IDs, even in add-on-only mode.
         if (!meta && this.ctx.tmdbKey && title.source === 'tmdb') {
-          meta = await tmdbMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'tv', title.num, stremioId).catch(() => null);
+          meta = await tmdbMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'tv', title.num, stremioId, {withEpisodes}).catch(() => null);
         }
         if (meta) meta = await enrichWithTmdb(this.ctx, meta, bundleOf(title, meta), title.anime);
         if (meta && !this.allowed(meta.certification)) meta = null;
@@ -622,6 +622,8 @@ export class Library {
         runtimeTicks: rt,
         backdrop: show.meta.background,
         logo: show.meta.logo,
+        seriesPoster: show.meta.poster,
+        people: peopleOf(show.meta).slice(0, PREVIEW_PEOPLE_LIMIT),
       },
       this.jf.who,
     );
@@ -789,7 +791,7 @@ export class Library {
       resume: [...resume.keys()], dropped: snapshot.dropped,
       shows: name.startsWith('next:') ? snapshot.shows.map(row=>bundleKeys(row.ids)) : undefined,
     }));
-    const cacheKey = `jf-shelf:v2:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
+    const cacheKey = `jf-shelf:v3:${this.ctx.scope}:${this.ctx.profile?.id ?? ''}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.jf.base}:${name}:${revision}`;
     const cached = await cacheGet<{items: Dto[]; total: number; resumes:Record<string,string>}>(cacheKey, this.ctx.origin);
     if (cached) {
       for(const item of cached.items) {

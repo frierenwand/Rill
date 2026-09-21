@@ -1,4 +1,5 @@
 import { profileContext, profileUsers } from './profiles';
+import { presentTitles } from './presentation';
 import { revokeToken } from './auth';
 import { registerAccount } from '../storage/state';
 import { Hono, type Context } from 'hono';
@@ -164,6 +165,11 @@ function dashIds(key: string, value: unknown): unknown {
 }
 
 async function reply(c: C, body: unknown, status = 200): Promise<Response> {
+  const items = Array.isArray(body) ? body : (body as {Items?: unknown} | null)?.Items;
+  if (Array.isArray(items) && c.get('jf').claims) {
+    try { await presentTitles(c.get('jf').ctx, items); }
+    catch { console.warn('Homepage metadata cache unavailable'); }
+  }
   // Cover every item response, including folders and playback/user-data updates.
   const records: Dto[] = [];
   const visit = (value: unknown): void => {

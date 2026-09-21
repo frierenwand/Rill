@@ -278,10 +278,16 @@ export function providerIds(meta: Partial<Meta>, g: TitleGuid): Record<string, s
   return out;
 }
 
-function peopleOf(meta: Partial<Meta>): Dto[] {
+export const PREVIEW_PEOPLE_LIMIT = 40;
+
+export function peopleOf(meta: Partial<Meta>): Dto[] {
   const out: Dto[] = (meta.people ?? []).map(p => ({ Name: p.name, Id: personIdOf(p.name, p.tmdbId), Role: p.role ?? '', Type: p.type, PrimaryImageTag: imageTag(p.image) }));
+  const seen = new Set(out.map(p => `${p.Type}:${String(p.Name).toLowerCase()}`));
   for (const [type, names] of [['Actor', (meta.cast ?? []).slice(0, 20)], ['Director', meta.director ?? []], ['Writer', meta.writer ?? []]] as const) {
-    for (const name of names) if (!out.some(p => p.Type === type && String(p.Name).toLowerCase() === name.toLowerCase())) out.push({ Name: name, Id: personIdOf(name), Role: '', Type: type });
+    for (const name of names) {
+      const key = `${type}:${name.toLowerCase()}`;
+      if (!seen.has(key)) { seen.add(key); out.push({ Name: name, Id: personIdOf(name), Role: '', Type: type }); }
+    }
   }
   return out.filter((p) => p.Name);
 }
@@ -408,6 +414,8 @@ export interface EpisodeInput {
   runtimeTicks?: number | null;
   backdrop?: string;
   logo?: string;
+  seriesPoster?: string;
+  people?: Dto[];
 }
 
 export function episodeItem(e: EpisodeInput, who: Identity): Dto {
@@ -450,13 +458,20 @@ export function episodeItem(e: EpisodeInput, who: Identity): Dto {
     Path: `/library/${e.id}`,
   };
   if (imageTag(e.backdrop)) {
+    item.BackdropImageTags = [imageTag(e.backdrop)!];
+    (item.ImageTags as Dto).Thumb = imageTag(e.backdrop)!;
     item.ParentBackdropItemId = e.seriesId;
     item.ParentBackdropImageTags = [imageTag(e.backdrop)!];
+    item.ParentThumbItemId = e.seriesId;
+    item.ParentThumbImageTag = imageTag(e.backdrop)!;
   }
   if (imageTag(e.logo)) {
+    (item.ImageTags as Dto).Logo = imageTag(e.logo)!;
     item.ParentLogoItemId = e.seriesId;
     item.ParentLogoImageTag = imageTag(e.logo)!;
   }
+  if (imageTag(e.seriesPoster)) item.SeriesPrimaryImageTag = imageTag(e.seriesPoster)!;
+  item.People = e.people ?? [];
   if (premiere && Date.parse(premiere) > Date.now()) item.IsUnaired = true;
   return item;
 }

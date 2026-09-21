@@ -80,8 +80,8 @@ function fillGaps(into: Meta, from: Meta | null | undefined): Meta {
   return out;
 }
 
-function needsMore(meta: Meta, type: ContentType): boolean {
-  if (type !== 'movie' && !(meta.videos?.length)) return true;
+function needsMore(meta: Meta, type: ContentType, withEpisodes: boolean): boolean {
+  if (withEpisodes && type !== 'movie' && !(meta.videos?.length)) return true;
   return !meta.description || !meta.poster;
 }
 
@@ -129,7 +129,7 @@ function stripByAgeCap(ctx: Ctx, meta: Meta): Meta | null {
   return passesAgeCap(meta.certification, cap, allowsUnrated(ctx.cfg)) ? meta : null;
 }
 
-async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
+async function buildMeta(ctx: Ctx, type: ContentType, id: string, withEpisodes = true): Promise<Meta | null> {
   if ((type === 'movie' ? ctx.cfg.providers.movie : ctx.cfg.providers.series) === 'off') return null;
   const parsed = parseStremioId(id);
   let ids = await bridgeIds(ctx, bundleFromStremioId(parsed.title), type);
@@ -143,7 +143,7 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   const tried = new Set<MetaProvider>();
   for (const provider of order) {
     tried.add(provider);
-    const m = await providerMeta(ctx, provider, type, ids, videoId, true);
+    const m = await providerMeta(ctx, provider, type, ids, videoId, withEpisodes);
     if (!m) continue;
     meta = m;
     break;
@@ -152,9 +152,9 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   ids = { ...ids, ...(meta.ids ?? {}) };
 
   for (const provider of order) {
-    if (tried.has(provider) || !needsMore(meta, type)) continue;
+    if (tried.has(provider) || !needsMore(meta, type, withEpisodes)) continue;
     tried.add(provider);
-    const wantEpisodes = type !== 'movie' && !meta.videos?.length;
+    const wantEpisodes = withEpisodes && type !== 'movie' && !meta.videos?.length;
     const extra = await providerMeta(ctx, provider, type, ids, videoId, wantEpisodes);
     if (extra) meta = fillGaps(meta, extra);
   }
@@ -173,7 +173,7 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
     }
   }
 
-  if (type !== 'movie') await fillAirDates(ctx, meta, ids);
+  if (withEpisodes && type !== 'movie') await fillAirDates(ctx, meta, ids);
 
   const lang = splitLanguageTag(ctx.cfg.language).lang;
   if (ctx.tmdbKey && ids.tmdb && ctx.cfg.artwork.posters.concat(ctx.cfg.artwork.backgrounds, ctx.cfg.artwork.logos).includes('tmdb')) {
@@ -202,7 +202,8 @@ async function buildMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta 
   return meta;
 }
 
-async function resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null> {
+async function resolveMeta(ctx: Ctx, type: ContentType, id: string, opts: {withEpisodes?: boolean} = {}): Promise<Meta | null> {
+  const withEpisodes = opts.withEpisodes !== false;
   if(/^(tvdbc|tmdbc):\d+$/.test(id))return collectionMeta(ctx,id);
   if (type === 'anime' || isAnimeId(id)) {
     const meta = await animeApi.animeMeta(ctx, id);
@@ -212,9 +213,9 @@ async function resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Met
   const parsed = parseStremioId(id);
   if (parsed.source === 'other') return null;
 
-  const key = `meta:v5:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}:${type}:${parsed.title}`;
+  const key = `meta:v5:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}:${withEpisodes ? '' : 'presentation:'}${type}:${parsed.title}`;
   const meta = await memo<Meta | null>(key, type === 'movie' ? TTL_MOVIE : TTL_SERIES, async () => {
-    const built = await buildMeta(ctx, type, parsed.title);
+    const built = await buildMeta(ctx, type, parsed.title, withEpisodes);
     if (built && type !== 'movie') {
       const ttl = metaTtl(built, type);
       if (ttl < TTL_SERIES) await cachePut(key, built, ttl);

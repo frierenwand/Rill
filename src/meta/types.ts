@@ -20,7 +20,7 @@ export interface IdBundle {
 }
 
 export interface MetaApi {
-  resolveMeta(ctx: Ctx, type: ContentType, id: string): Promise<Meta | null>;
+  resolveMeta(ctx: Ctx, type: ContentType, id: string, opts?: {withEpisodes?: boolean}): Promise<Meta | null>;
   searchMeta(ctx: Ctx, type: ContentType, query: string, opts?: { skip?: number; limit?: number }): Promise<MetaPreview[]>;
   resolveIds(ctx: Ctx, id: string, type?: ContentType): Promise<IdBundle>;
   canonicalId(ids: IdBundle, type: ContentType): string | null;

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { contextStorage } from 'hono/context-storage';
-import type { Env } from './env';
+import type { Env, RillJob } from './env';
+import { preparePresentation } from './jellyfin/presentation';
 import type { Ctx } from './context';
 import { decodeConfig } from './config/codec';
 import { sha256 } from './util/bytes';
@@ -95,9 +96,10 @@ export default {
     }
     else await scheduled(event,env);
   },
-  async queue(batch:MessageBatch<{kind:'maintenance';scheduledTime:number}>,env:Env):Promise<void> {
+  async queue(batch:MessageBatch<RillJob>,env:Env):Promise<void> {
     for(const message of batch.messages) {
       if(message.body.kind==='maintenance')await scheduled({scheduledTime:message.body.scheduledTime,cron:'* * * * *',noRetry(){}} as ScheduledController,env);
+      else if(message.body.kind==='presentation')await preparePresentation(message.body,env);
       message.ack();
     }
   },
