@@ -78,7 +78,7 @@ export async function requestUpdate(env: Env) {
     .bind(REQUEST_KEY, lease, now + COOLDOWN, now).run();
   if (!claim.meta.changes) return { alreadyRequested: true, ...await updateStatus(env) };
   try {
-    const response = await fetch(hook, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(hook, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000) });
     const result = await response.json<{ success?: boolean; result?: { build_uuid?: string } }>();
     if (!response.ok || result.success !== true) throw new Error('Build request rejected');
     const record: RequestRecord = { id, requestedAt: now };
