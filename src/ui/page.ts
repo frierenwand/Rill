@@ -343,6 +343,9 @@ h3 { font-size:16px; font-weight:600; }
 .item { padding:16px; gap:16px; }
 .gname { padding:0 0 16px; font-size:14px; font-weight:600; color:var(--fg); }
 #catalogs .group .list { margin:0; }
+.catalog-source-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding-bottom:16px; }
+.catalog-source-heading .gname { padding:0; }
+.catalog-source-heading .check { margin:0; font-size:13px; }
 .catalog-toolbar { margin:0 0 24px; gap:20px; }
 #catalog-picker { margin-bottom:32px; }
 .service-card { margin:16px 0; border-radius:12px; }
@@ -617,7 +620,7 @@ function body(): string {
 
 <section id="s-catalogs">
   <h2><small>3</small>Catalogs</h2>
-  <p class="note">Choose what appears in your apps. Enable catalogs and use the arrows to arrange them within each source.</p>
+  <p class="note">Added add-ons appear first and their catalogs start enabled. Services appear below, disabled by default; those requiring a key appear after you add it. Use each source’s toggle to enable or disable all its catalogs, and the arrows to arrange them.</p>
   <div id="catalog-picker">
   <div class="catalog-toolbar"><input type="text" id="catalog-filter" aria-label="Filter catalogs" placeholder="Search catalogs" autocomplete="off" spellcheck="false"><span id="catalog-count" role="status"></span></div>
   <div id="catalogs"></div>
@@ -689,7 +692,7 @@ function body(): string {
   <div class="settings-card">
     <div class="card-heading"><div><h3>Added add-ons <span class="count-badge" id="addon-count">0</span></h3><p class="hint">Check a connection, change its role, or remove a source.</p></div></div>
     <div id="addon-list"></div>
-    <div class="empty-state" id="addon-empty"><span class="empty-symbol" aria-hidden="true">＋</span><strong>Your sources start here</strong><p>Add your first manifest link above. Cinemeta provides default catalogs and metadata automatically.</p></div>
+    <div class="empty-state" id="addon-empty"><span class="empty-symbol" aria-hidden="true">＋</span><strong>Your sources start here</strong><p>Add your first manifest link above to choose your catalog and metadata sources.</p></div>
     <div class="b" id="addon-undo-row" hidden><span class="hint" id="addon-removed" role="status"></span><button type="button" id="addon-undo">Undo removal</button></div>
   </div>
   <div class="destination-grid">
@@ -733,7 +736,7 @@ function body(): string {
     <p class="status" id="trakt-status"></p>
   </div></details>
 
-  <details class="service-card tracker-service" id="svc-mdblist"><summary>MDBList</summary><div class="svc"><p class="note">Use MDBList for watched history and resume positions, or only send it watch updates. This key also enables your MDBList catalogs.</p><div class="f"><div class="key-row"><label class="t" for="k-mdblist">MDBList API key</label><span class="pill" data-key-status="mdblist">Not set</span></div><input type="password" id="k-mdblist" data-k="keys.mdblist" autocomplete="off" spellcheck="false"><a class="key-link" href="https://mdblist.com/preferences/" target="_blank" rel="noopener">Get an MDBList key ↗</a></div></div></details>
+  <details class="service-card tracker-service" id="svc-mdblist"><summary>MDBList</summary><div class="svc"><p class="note">Use MDBList for watched history and resume positions, or only send it watch updates. This key makes MDBList catalogs available to enable in Catalogs.</p><div class="f"><div class="key-row"><label class="t" for="k-mdblist">MDBList API key</label><span class="pill" data-key-status="mdblist">Not set</span></div><input type="password" id="k-mdblist" data-k="keys.mdblist" autocomplete="off" spellcheck="false"><a class="key-link" href="https://mdblist.com/preferences/" target="_blank" rel="noopener">Get an MDBList key ↗</a></div></div></details>
   <details class="service-card tracker-service" id="svc-publicmetadb"><summary>PublicMetaDB</summary><div class="svc"><p class="note">Use PublicMetaDB for watched history and resume positions, or only send it watch updates. Playback positions are sent when you stop. PublicMetaDB applies its own resume-completion rules.</p><p class="hint">To display imported titles, use an add-on that supports TMDB IDs, or enable TMDB in Metadata.</p><div class="f"><div class="key-row"><label class="t" for="k-publicmetadb">PublicMetaDB API key</label><span class="pill" data-key-status="publicmetadb">Not set</span></div><input type="password" id="k-publicmetadb" data-k="keys.publicmetadb" autocomplete="off" spellcheck="false"><p class="hint">Create a key in PublicMetaDB → Settings → API.</p><a class="key-link" href="https://publicmetadb.com/api-docs" target="_blank" rel="noopener">PublicMetaDB API setup ↗</a></div></div></details>
   <details class="service-card tracker-service" id="svc-simkl"><summary>Simkl</summary><div class="svc">
     <p class="note">Create an app at simkl.com/settings/developer and paste its client id.</p>
@@ -1132,7 +1135,7 @@ const JS = String.raw`
     var kept = cfg.catalogs.slice();
     var have = {};
     kept.forEach(function (c) { have[catKey(c)] = true; if(known[catKey(c)] && !c.name) c.name = known[catKey(c)].name; });
-    catDefs.forEach(function (d) { if (!have[catKey(d)]) kept.push({ id: d.id, type: d.type, enabled: true, name: d.name }); });
+    catDefs.forEach(function (d) { if (!have[catKey(d)]) kept.push({ id: d.id, type: d.type, enabled: d.defaultEnabled === true, name: d.name }); });
     cfg.catalogs = kept;
   }
   function renderCatalogs() {
@@ -1141,30 +1144,55 @@ const JS = String.raw`
     if (!catDefs.length) { filterCatalogs(); return; }
     var defs = {};
     catDefs.forEach(function (d) { defs[catKey(d)] = d; });
-    var groups = [], byName = {};
+    var groups = [], byName = {}, groupNames = {};
     cfg.catalogs.forEach(function (c, idx) {
       var d = defs[catKey(c)]; if (!d) return;
-      var g = d.group || 'Catalogs';
-      if (!byName[g]) { byName[g] = []; groups.push(g); }
+      var g = d.source ? d.source.id : d.group || 'Catalogs';
+      if (!byName[g]) { byName[g] = []; groupNames[g] = d.source ? d.source.name : g; groups.push(g); }
       byName[g].push(idx);
+    });
+    groups.sort(function(a, b) {
+      return Number(cfg.catalogs[byName[b][0]].id.startsWith('addon.')) - Number(cfg.catalogs[byName[a][0]].id.startsWith('addon.'));
     });
     groups.forEach(function (g) {
       var idxs = byName[g];
-      var box = el('div', { class: 'group' }, [el('div', { class: 'gname', text: g }), null]);
+      var sourceToggle = el('input', { type: 'checkbox', 'aria-label': 'Enable all catalogs from ' + groupNames[g] });
+      var sourceCount = el('span');
+      function updateSourceToggle() {
+        var enabled = idxs.filter(function(idx) { return cfg.catalogs[idx].enabled; }).length;
+        sourceToggle.checked = enabled === idxs.length;
+        sourceToggle.indeterminate = enabled > 0 && enabled < idxs.length;
+        sourceCount.textContent = 'Enable all · ' + enabled + '/' + idxs.length;
+      }
+      var box = el('div', { class: 'group' }, [el('div', { class: 'catalog-source-heading' }, [
+        el('div', { class: 'gname', text: groupNames[g] }), el('label', { class: 'check' }, [sourceToggle, sourceCount])
+      ])]);
       var list = el('div', { class: 'list' });
+      var rows = [];
+      sourceToggle.addEventListener('change', function () {
+        rows.forEach(function(entry) {
+          entry.catalog.enabled = sourceToggle.checked;
+          entry.checkbox.checked = sourceToggle.checked;
+          entry.row.className = 'item' + (sourceToggle.checked ? '' : ' off');
+        });
+        updateSourceToggle();
+        changed();
+      });
       idxs.forEach(function (idx, pos) {
         var c = cfg.catalogs[idx], d = defs[catKey(c)];
         var cb = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + d.name });
         cb.checked = !!c.enabled;
-        cb.addEventListener('change', function () { c.enabled = cb.checked; row.className = 'item' + (c.enabled ? '' : ' off'); changed(); });
+        cb.addEventListener('change', function () { c.enabled = cb.checked; row.className = 'item' + (c.enabled ? '' : ' off'); updateSourceToggle(); changed(); });
         var sub = d.type + (d.needs ? ' · needs ' + (Array.isArray(d.needs) ? d.needs.join(', ') : d.needs) : '');
         var name = el('div', { class: 'n' }, [document.createTextNode(d.name), el('small', { text: sub })]);
         var up = el('button', { type: 'button', text: '↑', title: 'Move ' + d.name + ' up', 'aria-label': 'Move ' + d.name + ' up', disabled: pos === 0, onclick: function () { swapCatalog(idxs[pos], idxs[pos - 1]); } });
         var dn = el('button', { type: 'button', text: '↓', title: 'Move ' + d.name + ' down', 'aria-label': 'Move ' + d.name + ' down', disabled: pos === idxs.length - 1, onclick: function () { swapCatalog(idxs[pos], idxs[pos + 1]); } });
         var row = el('div', { class: 'item' + (c.enabled ? '' : ' off') }, [cb, name, el('div', { class: 'ud' }, [up, dn])]);
+        rows.push({ catalog: c, checkbox: cb, row: row });
         list.appendChild(row);
       });
       box.appendChild(list);
+      updateSourceToggle();
       root.appendChild(box);
     });
     filterCatalogs();

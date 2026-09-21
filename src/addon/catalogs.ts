@@ -230,44 +230,55 @@ async function addonDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
 }
 
 export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
-  return memo(`catalog-defs:v4:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
+  return memo(`catalog-defs:v5:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
     const have = satisfied(ctx);
     const [movieGenres, tvGenres, tracker, mdb, trakt, addons, sources] = await Promise.all([
       tmdbGenres(ctx, 'movie'), tmdbGenres(ctx, 'tv'), trackerDefinitions(ctx), mdblistDefinitions(ctx), traktListDefinitions(ctx), addonDefinitions(ctx),
       sourceDefinitions(ctx),
     ]);
     const all: CatalogDefinition[] = [
+      ...addons,
       ...searchDefinitions(),
       ...tracker,
       ...tmdbDefinitions(movieGenres.map((g) => g.name), tvGenres.map((g) => g.name), ctx.cfg.language),
       ...animeDefinitions(),
       ...mdb,
       ...trakt,
-      ...addons,
       ...sources,
       ...(ctx.cfg.recommendations?.enabled&&ctx.cfg.recommendations.apiKey&&ctx.cfg.recommendations.model&&ctx.tmdbKey?(['movie','series','anime'] as const).map(type=>({id:`recommendations.${type}`,type,name:type==='movie'?'Films For You':type==='series'?'Series For You':'Anime For You',group:'Recommendations',extra:[SKIP]})):[]),
     ];
     const simple = !ctx.cfg.advanced;
-    return all.filter((d) => (d.needs ?? []).every((n) => have.has(n)) && (!simple || ['rill', 'addon'].includes(d.id.split('.')[0])));
+    const keyedSources = new Set<CatalogNeed>(['tmdb', 'tvdb', 'trakt', 'simkl', 'mdblist', 'publicmetadb']);
+    return all.filter((d) => {
+      const source = catalogSource(d).id;
+      if (keyedSources.has(source as CatalogNeed) && !have.has(source as CatalogNeed)) return false;
+      if (source === 'movielens' && (!ctx.cfg.movieLens?.username || !ctx.cfg.movieLens.password)) return false;
+      return (d.needs ?? []).every((n) => have.has(n)) && (!simple || ['rill', 'addon'].includes(d.id.split('.')[0]));
+    });
   });
 }
 
-function defaultOn(def: CatalogDefinition, hasTmdb: boolean): boolean {
-  const head = def.id.split('.')[0];
-  if(def.id.includes('.custom.'))return true;
-  if (head === 'rill' || head === 'tracker' || head === 'addon' || head === 'trakt') return true;
-  if (head === 'mdblist') return def.group === 'MDBList: my lists';
-  if (head === 'tmdb') return ['tmdb.trending', 'tmdb.popular', 'tmdb.top_rated', 'tmdb.now_playing', 'tmdb.on_the_air', 'tmdb.genre'].includes(def.id);
-  if (head === 'cinemeta') return false;
-  if (head === 'mal') return ['mal.airing', 'mal.top_anime', 'mal.seasons', 'mal.genres'].includes(def.id);
-  if (['tvdb','letterboxd','movielens','flixpatrol','merged','recommendations'].includes(head)) return true;
-  return false;
+export function defaultCatalogEnabled(def: CatalogDefinition): boolean {
+  return def.id.startsWith('addon.');
+}
+
+export function catalogSource(def: CatalogDefinition): { id: string; name: string } {
+  const [head, detail] = def.id.split('.');
+  if (head === 'addon') return { id: `addon.${detail}`, name: def.group };
+  const id = head === 'tracker' ? detail.split(':')[0] : head;
+  const names: Record<string, string> = {
+    tmdb: 'TMDB', tvdb: 'TVDB', tvmaze: 'TVmaze', mal: 'MyAnimeList', anilist: 'AniList',
+    kitsu: 'Kitsu', trakt: 'Trakt', simkl: 'Simkl', mdblist: 'MDBList', publicmetadb: 'PublicMetaDB',
+    letterboxd: 'Letterboxd', movielens: 'MovieLens', flixpatrol: 'FlixPatrol',
+    rill: 'Search', merged: 'Merged catalogs', recommendations: 'Recommendations',
+  };
+  return { id, name: names[id] || def.group };
 }
 
 export async function enabledCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
   const all = await listCatalogDefinitions(ctx);
   const toggles = ctx.cfg.catalogs;
-  if (!toggles.length) return all.filter((d) => defaultOn(d, Boolean(ctx.tmdbKey)));
+  if (!toggles.length) return all.filter(defaultCatalogEnabled);
   const byKey = new Map(all.map((d) => [`${d.type}|${d.id}`, d]));
   const out: CatalogDefinition[] = [];
   for (const t of toggles) {
@@ -276,7 +287,7 @@ export async function enabledCatalogDefinitions(ctx: Ctx): Promise<CatalogDefini
     if (!def) continue;
     out.push(t.name?.trim() ? { ...def, name: t.name.trim() } : def);
   }
-  return out;
+  return out.sort((a, b) => Number(b.id.startsWith('addon.')) - Number(a.id.startsWith('addon.')));
 }
 
 function cleanGenre(extra: CatalogExtra): string | undefined {

@@ -6,7 +6,7 @@ import { DECADES, FRANCHISES, NETWORKS, STUDIOS, dedupe } from '../jellyfin/cura
 import { decodeConfig, encodeConfig } from '../config/codec';
 import { getManifest } from '../stremio/client';
 import { sha256 } from '../util/bytes';
-import { listCatalogDefinitions } from '../addon/catalogs';
+import { listCatalogDefinitions, defaultCatalogEnabled, catalogSource } from '../addon/catalogs';
 import { renderPage, renderLogo } from './page';
 import { BRAND_ICON, BRAND_WORDMARK } from '../brand';
 import { queueRecommendations,recommendationJob } from '../storage/recommendation-jobs';
@@ -146,7 +146,7 @@ uiRouter.post('/api/catalogs', async (c) => {
   try {
     const ctx = await buildCtx(cfg, c.env, origin);
     const catalogs = await listCatalogDefinitions(ctx);
-    return c.json({ catalogs });
+    return c.json({ catalogs: catalogs.map(d => ({ ...d, defaultEnabled: defaultCatalogEnabled(d), source: catalogSource(d) })) });
   } catch {
     return c.json({ error: 'Catalog list is unavailable right now.', catalogs: [] }, 502);
   }
