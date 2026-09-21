@@ -53,7 +53,10 @@ export async function fetchJson<T = any>(url: string, opts: FetchJsonOptions = {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: ctrl.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await res.body?.cancel();
+      return null;
+    }
     const data = (await res.json()) as T;
     if (method === 'GET' && ttl > 0 && data !== null && data !== undefined) await cachePut(key, data, ttl);
     return data;

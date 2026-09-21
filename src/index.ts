@@ -22,13 +22,13 @@ app.use('*', async (c, next) => {
 });
 app.options('*', (c) => c.body(null, 204));
 
-async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfgToken: string): Promise<Ctx | null> {
+async function buildCtx(c: { req: { url: string; raw: Request }; env: Env }, cfgToken: string, savedConfig = false): Promise<Ctx | null> {
   let cfg = await decodeConfig(cfgToken);
   if (!cfg) return null;
   const url = new URL(c.req.url);
   const scope = (await sha256(cfg.installationKey || cfgToken)).slice(0, cfg.installationKey ? 32 : 16);
   let accountConfigToken=cfgToken;
-  if (c.env.DB && cfg.installationKey) {
+  if (c.env.DB && cfg.installationKey && !savedConfig) {
     const saved = await c.env.DB.prepare('SELECT config FROM accounts WHERE scope=?').bind(scope).first<{config:string}>();
     const active=saved ? await decodeConfig(saved.config):null;
     if (active) {cfg=active;accountConfigToken=saved!.config;}
@@ -55,7 +55,7 @@ app.use('*', async (c, next) => {
   if (!owner) return c.json({ Message: 'Set up your server account before connecting.' }, 503);
   const scope = (await sha256(owner.installation_key)).slice(0, 32);
   const saved = await c.env.DB.prepare('SELECT config FROM accounts WHERE scope=?').bind(scope).first<{ config: string }>();
-  const ctx = saved ? await buildCtx(c, saved.config) : null;
+  const ctx = saved ? await buildCtx(c, saved.config, true) : null;
   if (!ctx || ctx.scope !== scope) return c.json({ Message: 'Server configuration is unavailable.' }, 503);
   let exec: Parameters<typeof handleJellyfinRequest>[3];
   try { exec = c.executionCtx; } catch {}
@@ -65,6 +65,10 @@ app.use('*', async (c, next) => {
 app.use('/:cfg/*', async (c, next) => {
   const ctx = await buildCtx(c, c.req.param('cfg'));
   if (!ctx) return c.json({ error: 'bad config' }, 400);
+  try {
+    const exec = c.executionCtx;
+    ctx.defer = work => exec.waitUntil(work.catch(() => console.warn('Background work failed')));
+  } catch {}
   c.set('ctx', ctx);
   await next();
 });

@@ -1,7 +1,7 @@
-import { loadSnapshot, saveSnapshot } from '../storage/snapshots';
+import { importedHistory } from '../storage/imported-history';
 import type { Ctx } from '../context';
 import type { TrackerName } from '../config/schema';
-import { cacheDelete, cacheGet, cachePut, memo } from '../util/cache';
+import { cacheDelete, cacheGet, cachePut } from '../util/cache';
 import { anilistTracker } from './anilist';
 import { emptySnapshot, epoch, resumeKey, titleKey } from './common';
 import { recordConfirmed, bufferedRecords, finishedInBuffer, forgetTitle } from './debounce';
@@ -15,10 +15,8 @@ import { enqueue, drain } from '../storage/deliveries';
 import { overlayHistory } from '../storage/history';
 import type { DropEvent, MarkEvent, ResumeEntry, ScrobbleEvent, Tracker, TrackerApi, WatchSnapshot } from './types';
 import type { IdBundle } from '../meta/types';
-import { localDrop, overlayDropped, reconcileDropped, sameShow } from '../storage/dropped';
+import { localDrop, overlayDropped, sameShow } from '../storage/dropped';
 import { withStateLock } from '../storage/lock';
-
-const SNAPSHOT_TTL_S = 60;
 
 const REGISTRY: Record<TrackerName, Tracker> = {
   mdblist: mdblistTracker,
@@ -80,19 +78,7 @@ async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const t = primary(ctx);
   if (!t) return overlayDropped(ctx, await overlayHistory(ctx, emptySnapshot()));
-  const durableKey = `history-import:${ctx.scope}:${t.name}`;
-  const base = await memo<WatchSnapshot>(snapshotKey(ctx,t),SNAPSHOT_TTL_S,async () => {
-    try {
-      const fresh = await t.snapshot(ctx);
-      await reconcileDropped(ctx, t.name, fresh);
-      if (ctx.env.DB) await saveSnapshot(ctx,durableKey,fresh);
-      return fresh;
-    } catch {
-      const stored = ctx.env.DB ? await loadSnapshot(ctx,durableKey) : null;
-      if (stored) return stored;
-      return emptySnapshot();
-    }
-  });
+  const base = await importedHistory(ctx, t, snapshotKey(ctx, t));
   const resume = await overlayBuffer(ctx,base.resume);
   return overlayDropped(ctx, await overlayHistory(ctx,{...base,resume}));
 }

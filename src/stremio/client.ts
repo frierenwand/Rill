@@ -130,12 +130,11 @@ export async function externalSubtitles(ctx: Ctx, type: ContentType, ids: string
 }
 
 export async function externalCatalogs(ctx: Ctx): Promise<Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }>> {
-  const out: Array<{ base: string; addonName: string; catalog: Manifest['catalogs'][number] }> = [];
-  for (const url of metaAddons(ctx.cfg)) {
+  const groups = await mapLimit(metaAddons(ctx.cfg), 3, async (url) => {
     const base = addonBase(url);
     const manifest = base ? await getManifest(url) : null;
-    if (!base || !manifest) continue;
-    for (const catalog of manifest.catalogs || []) out.push({ base, addonName: manifest.name, catalog });
-  }
-  return out;
+    if (!base || !manifest) return [];
+    return (manifest.catalogs || []).map(catalog => ({ base, addonName: manifest.name, catalog }));
+  });
+  return groups.flat();
 }

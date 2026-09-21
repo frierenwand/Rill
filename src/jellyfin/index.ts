@@ -123,7 +123,15 @@ inner.use('*', async (c, next) => {
   if (!jf) return c.json({ Message: 'Request state missing' }, 500);
   c.set('jf', jf);
   c.set('ctx', jf.ctx);
+  const started = Date.now();
   await next();
+  const durationMs = Date.now() - started;
+  if (c.res.status >= 500 || durationMs >= 5000) {
+    // Route templates omit item IDs and authentication query parameters.
+    console.warn('Slow or failed Jellyfin request', {
+      method: c.req.method, route: c.req.routePath, status: c.res.status, durationMs,
+    });
+  }
 });
 
 const PUBLIC = [

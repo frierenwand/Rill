@@ -230,7 +230,8 @@ async function addonDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
 }
 
 export async function listCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
-  return memo(`catalog-defs:v5:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
+  return memo(`catalog-defs:v6:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600, async () => {
+    if (!ctx.cfg.advanced) return [...await addonDefinitions(ctx), ...searchDefinitions()];
     const have = satisfied(ctx);
     const [movieGenres, tvGenres, tracker, mdb, trakt, addons, sources] = await Promise.all([
       tmdbGenres(ctx, 'movie'), tmdbGenres(ctx, 'tv'), trackerDefinitions(ctx), mdblistDefinitions(ctx), traktListDefinitions(ctx), addonDefinitions(ctx),
@@ -276,8 +277,14 @@ export function catalogSource(def: CatalogDefinition): { id: string; name: strin
 }
 
 export async function enabledCatalogDefinitions(ctx: Ctx): Promise<CatalogDefinition[]> {
-  const all = await listCatalogDefinitions(ctx);
   const toggles = ctx.cfg.catalogs;
+  // Browsing add-on catalogs does not require discovering every connected
+  // tracker's lists. The settings page still discovers all available catalogs.
+  const addonOnly = toggles.filter(t => t.enabled).every(t => t.id.startsWith('addon.') || t.id === 'rill.search');
+  const all = addonOnly
+    ? await memo(`addon-catalog-defs:v1:${ctx.scope}:${ctx.cacheRevision ?? ctx.cfgToken}`, 600,
+      async () => [...await addonDefinitions(ctx), ...searchDefinitions()])
+    : await listCatalogDefinitions(ctx);
   if (!toggles.length) return all.filter(defaultCatalogEnabled);
   const byKey = new Map(all.map((d) => [`${d.type}|${d.id}`, d]));
   const out: CatalogDefinition[] = [];
