@@ -67,9 +67,19 @@ export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<Wat
     }
     out.movies=[...movies.rows];out.episodes=[...episodes.rows];out.resume=[...resume.rows];
   }
+  let shows: WatchSnapshot['shows'] | undefined;
+  return {
+    ...out,
+    resume: [...out.resume].sort((a,b) => b.at.localeCompare(a.at)),
+    // Library rows need progress, but only shelves need the complete show list.
+    get shows() { return shows ??= historyShows(out); },
+  };
+}
+
+function historyShows(snapshot: WatchSnapshot): WatchSnapshot['shows'] {
   type Show=WatchSnapshot['shows'][number];
   const shows=new Set<Show>(),showIndex=new Map<string,Show>();
-  const activity=[...out.episodes,...out.resume.filter(e=>e.kind==='episode')];
+  const activity=[...snapshot.episodes,...snapshot.resume.filter(e=>e.kind==='episode')];
   const date=(e:typeof activity[number])=>'lastAt' in e?e.lastAt:e.at;
   activity.sort((a,b)=>date(a).localeCompare(date(b)));
   for(const e of activity) {
@@ -87,7 +97,5 @@ export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<Wat
     show.lastAt=date(e);show.lastSeason=e.season;show.lastEpisode=e.episode;
     for(const key of aliases(show,'series')) showIndex.set(key,show);
   }
-  out.resume=[...out.resume].sort((a,b) => b.at.localeCompare(a.at));
-  out.shows=[...shows].sort((a,b) => b.lastAt.localeCompare(a.lastAt));
-  return out;
+  return [...shows].sort((a,b) => b.lastAt.localeCompare(a.lastAt));
 }

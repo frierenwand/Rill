@@ -83,16 +83,10 @@ function readU16(b: Uint8Array, at: number): number {
 }
 
 function writeU64(b: Uint8Array, at: number, v: number): void {
-  let big = BigInt(Math.max(0, Math.floor(v)));
-  for (let i = 7; i >= 0; i--) {
-    b[at + i] = Number(big & 0xffn);
-    big >>= 8n;
-  }
+  new DataView(b.buffer, b.byteOffset, b.byteLength).setBigUint64(at, BigInt(Math.max(0, Math.floor(v))));
 }
 function readU64(b: Uint8Array, at: number): number {
-  let big = 0n;
-  for (let i = 0; i < 8; i++) big = (big << 8n) | BigInt(b[at + i]);
-  return Number(big);
+  return Number(new DataView(b.buffer, b.byteOffset, b.byteLength).getBigUint64(at));
 }
 
 function seal(bytes: Uint8Array): string {

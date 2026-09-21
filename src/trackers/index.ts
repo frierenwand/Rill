@@ -77,10 +77,10 @@ async function overlayBuffer(ctx: Ctx, base: ResumeEntry[]): Promise<ResumeEntry
 
 async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
   const t = primary(ctx);
-  if (!t) return overlayDropped(ctx, await overlayHistory(ctx, emptySnapshot()));
+  if (!t) return overlayHistory(ctx, await overlayDropped(ctx, emptySnapshot()));
   const base = await importedHistory(ctx, t, snapshotKey(ctx, t));
   const resume = await overlayBuffer(ctx,base.resume);
-  return overlayDropped(ctx, await overlayHistory(ctx,{...base,resume}));
+  return overlayHistory(ctx, await overlayDropped(ctx,{...base,resume}));
 }
 
 const restoreSnapshots = new WeakMap<Ctx, Promise<WatchSnapshot>>();

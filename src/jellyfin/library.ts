@@ -13,6 +13,7 @@ import type { ContentType, Meta, MetaPreview, MetaVideo } from '../stremio/types
 import { trackerApi } from '../trackers/index';
 import type { ResumeEntry, WatchSnapshot, WatchedEpisode, WatchedMovie } from '../trackers/types';
 import { mapLimit, uniq } from '../util/concurrency';
+import { cacheGet, cachePut } from '../util/cache';
 import { collectionFolder, episodeItem, placeholderSource, runtimeTicks, seasonItem, titleItem, userData, type Dto } from './dto';
 import {
   decodeGuid,
@@ -114,22 +115,15 @@ export class WatchIndex {
   readonly dropped: Set<string>;
   readonly localEpisodes=new Map<string,NonNullable<WatchSnapshot['local']>[number]>();
   readonly movies = new Map<string, WatchedMovie>();
-  readonly episodes = new Map<string, Map<string, EpisodeMark>>();
+  private episodeIndex?: Map<string, Map<string, EpisodeMark>>;
   readonly resumeMovies = new Map<string, ResumeEntry>();
   readonly resumeEpisodes = new Map<string, Map<string, ResumeEntry>>();
-  readonly shows = new Map<string, WatchSnapshot['shows'][number]>();
+  private showIndex?: Map<string, WatchSnapshot['shows'][number]>;
 
   constructor(readonly snapshot: WatchSnapshot) {
     this.dropped = new Set((snapshot.dropped ?? []).flatMap(showKeys));
     for(const r of snapshot.local ?? []) if(r.kind==='episode') for(const k of bundleKeys(r.ids)) this.localEpisodes.set(`${k}:${r.season ?? 1}:${r.episode}`,r);
     for (const m of snapshot.movies ?? []) for (const k of bundleKeys(m.ids)) this.movies.set(k, m);
-    for (const e of snapshot.episodes ?? []) {
-      for (const k of bundleKeys(e.ids)) {
-        let map = this.episodes.get(k);
-        if (!map) this.episodes.set(k, (map = new Map()));
-        for (const ek of episodeKeys(e.season, e.episode)) map.set(ek, { plays: e.plays, lastAt: e.lastAt });
-      }
-    }
     for (const r of snapshot.resume ?? []) {
       for (const k of bundleKeys(r.ids)) {
         if (r.kind === 'movie') {
@@ -141,7 +135,28 @@ export class WatchIndex {
         for (const ek of episodeKeys(r.season, r.episode)) map.set(ek, r);
       }
     }
-    for (const s of snapshot.shows ?? []) for (const k of bundleKeys(s.ids)) this.shows.set(k, s);
+  }
+
+  get episodes(): Map<string, Map<string, EpisodeMark>> {
+    if (!this.episodeIndex) {
+      const index = this.episodeIndex = new Map();
+      for (const e of this.snapshot.episodes ?? []) {
+        for (const k of bundleKeys(e.ids)) {
+          let map = index.get(k);
+          if (!map) index.set(k, (map = new Map()));
+          for (const ek of episodeKeys(e.season, e.episode)) map.set(ek, { plays: e.plays, lastAt: e.lastAt });
+        }
+      }
+    }
+    return this.episodeIndex;
+  }
+
+  get shows(): Map<string, WatchSnapshot['shows'][number]> {
+    if (!this.showIndex) {
+      this.showIndex = new Map();
+      for (const s of this.snapshot.shows ?? []) for (const k of bundleKeys(s.ids)) this.showIndex.set(k, s);
+    }
+    return this.showIndex;
   }
 
   movie(keys: string[]): { watched?: WatchedMovie; resume?: ResumeEntry } {
@@ -233,7 +248,11 @@ export function episodesOf(meta: Meta, series: TitleGuid): { seasons: SeasonView
     const k = `${season}:${episode}`;
     if (seen.has(k)) continue;
     seen.add(k);
-    episodes.push({ season, episode, video: v, id: episodeIdOf(series, season, episode), seasonId: seasonIdOf(series, season) });
+    let id: string | undefined, seasonId: string | undefined;
+    episodes.push({ season, episode, video: v,
+      get id() { return id ??= episodeIdOf(series, season, episode); },
+      get seasonId() { return seasonId ??= seasonIdOf(series, season); },
+    });
   }
   episodes.sort((a, b) => a.season - b.season || a.episode - b.episode);
   const bySeason = new Map<number, EpisodeView[]>();
@@ -493,6 +512,9 @@ export class Library {
     if (!p) {
       p = (async () => {
         const type = metaTypeFor(title);
+        const cacheKey = `jf-meta:v1:${this.ctx.scope}:${this.ctx.cacheRevision ?? this.ctx.cfgToken}:${this.ctx.cfg.ageCap}:${k}`;
+        const cached = await cacheGet<{meta: Meta | null}>(cacheKey);
+        if (cached) return cached.meta;
         let meta: Meta | null = null;
         try {
           meta = await metaApi.resolveMeta(this.ctx, type, stremioId);
@@ -509,8 +531,10 @@ export class Library {
           meta = await tmdbMeta(this.ctx, title.kind === 'movie' ? 'movie' : 'tv', title.num, stremioId).catch(() => null);
         }
         if (meta) meta = await enrichWithTmdb(this.ctx, meta, bundleOf(title, meta), title.anime);
-        if (meta && !this.allowed(meta.certification)) return null;
+        if (meta && !this.allowed(meta.certification)) meta = null;
         if(meta)await rememberPeople(this.ctx,meta).catch(() => {});
+        // Reuse the resolved metadata, including enrichment and episode lists.
+        await cachePut(cacheKey, {meta}, meta ? 300 : 30);
         return meta;
       })();
       this.metas.set(k, p);
@@ -596,7 +620,8 @@ export class Library {
   async episodeState(idx:WatchIndex,show:Show,episode:EpisodeView): Promise<{watched?:EpisodeMark;resume?:ResumeEntry}> {
     const local=idx.localEpisode(show.keys,episode.season,episode.episode);
     if(local) return local;
-    const cached=this.episodeStates.get(episode.id);
+    const stateKey=`${show.id}:${episode.season}:${episode.episode}`;
+    const cached=this.episodeStates.get(stateKey);
     if(cached) return cached;
     const task=(async()=>{
       const primary=trackerApi.primary(this.ctx);
@@ -611,7 +636,7 @@ export class Library {
         return {watched,resume:states.find(s=>s.resume)?.resume};
       } catch { return {}; }
     })();
-    this.episodeStates.set(episode.id,task);
+    this.episodeStates.set(stateKey,task);
     return task;
   }
 
