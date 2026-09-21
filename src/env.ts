@@ -4,4 +4,5 @@ export interface Env {
   TMDB_KEY?: string;
   D1_QUERY_BUDGET?: string;
   RILL_UPDATE_HOOK?: string;
+  RILL_JOBS?: Queue<{kind:'maintenance'; scheduledTime:number}>;
 }

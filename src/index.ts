@@ -84,4 +84,16 @@ app.onError((err, c) => {
 });
 
 import { scheduled } from './storage/scheduled';
-export default { fetch: app.fetch, scheduled };
+export default {
+  fetch: app.fetch,
+  async scheduled(event:ScheduledController,env:Env):Promise<void> {
+    if(env.RILL_JOBS)await env.RILL_JOBS.send({kind:'maintenance',scheduledTime:event.scheduledTime});
+    else await scheduled(event,env);
+  },
+  async queue(batch:MessageBatch<{kind:'maintenance';scheduledTime:number}>,env:Env):Promise<void> {
+    for(const message of batch.messages) {
+      if(message.body.kind==='maintenance')await scheduled({scheduledTime:message.body.scheduledTime,cron:'* * * * *',noRetry(){}} as ScheduledController,env);
+      message.ack();
+    }
+  },
+};
