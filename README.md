@@ -17,9 +17,9 @@ Have a [GitHub account](https://github.com/signup) and a [Cloudflare account](ht
 
 - Choose your Cloudflare account and connect GitHub when prompted. Approve access for **Cloudflare Workers & Pages**.
 - Choose where to create your GitHub repository and give it a name. Cloudflare makes the copy for you.
-- Keep the suggested Worker and database names, or choose unused names. Leave the detected settings as they are, then select **Deploy**.
+- Keep the suggested Worker, database, and queue names, or choose unused names. Leave the detected settings as they are, then select **Deploy**.
 
-Wait for the deployment to succeed. Cloudflare handles the build and database setup. Each build fetches the latest Rill code. [About this deployment flow](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
+Wait for the deployment to succeed. Cloudflare handles the build, database, and background queue setup. Each build fetches the latest Rill code. [About this deployment flow](https://developers.cloudflare.com/workers/platform/deploy-buttons/).
 
 <details>
 <summary>If you’re asked for build settings</summary>
@@ -58,6 +58,14 @@ Your address looks like `https://your-worker.your-subdomain.workers.dev`. Use th
 Your username can contain 1–32 letters, numbers, dots, dashes or underscores.
 
 </details>
+
+### Background queue — automatic
+
+**Nothing extra to set up.** Deploy Rill normally, or click **Update Rill** on an existing installation. The build configures a background queue, and deployment creates it and connects it to your Worker automatically. If your configuration already includes a Rill queue, it is reused. Future updates keep the connection.
+
+The queue handles history imports and maintenance. Jellyfin browsing responds directly. Keep the existing scheduled trigger enabled; it sends background work to the queue.
+
+This works on **Cloudflare Free** and does not upgrade your plan. The free queue allowance is **10,000 operations per day** across your account; a normal message uses three operations. Other free-plan limits still apply. [Automatic provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning) · [Free allowance](https://developers.cloudflare.com/queues/platform/pricing/).
 
 ---
 

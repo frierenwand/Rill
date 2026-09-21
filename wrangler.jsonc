@@ -7,6 +7,16 @@
   "rules": [{ "type": "Text", "globs": ["**/*.sql"] }],
   "d1_databases": [{ "binding": "DB", "database_name": "rill", "migrations_dir": "migrations" }],
   "triggers": { "crons": ["* * * * *"] },
+  "queues": {
+    "producers": [{ "binding": "RILL_JOBS", "queue": "rill-jobs" }],
+    "consumers": [{
+      "queue": "rill-jobs",
+      "max_batch_size": 1,
+      "max_batch_timeout": 1,
+      "max_retries": 2,
+      "max_concurrency": 1
+    }]
+  },
   "observability": { "enabled": true },
   "vars": {}
 }
