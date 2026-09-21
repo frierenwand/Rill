@@ -31,6 +31,7 @@ export interface WatchSnapshot {
 export type ScrobbleAction = 'start' | 'pause' | 'stop';
 
 export interface ScrobbleEvent {
+  at?: string;
   positionMs?: number;
   numbering?: 'anime' | 'tvdb' | 'tmdb';
   animeEpisode?: { mal?: number; anilist?: number; kitsu?: number; anidb?: number; episode: number };

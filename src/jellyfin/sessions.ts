@@ -1,5 +1,4 @@
 import { queueBulk } from '../storage/bulk';
-import { withStateLock } from '../storage/lock';
 import { mapLimit } from '../util/concurrency';
 import { metaApi } from '../meta/index';
 import type { IdBundle } from '../meta/types';
@@ -18,6 +17,7 @@ const RETRY_DELAY_MS = 30_000;
 const MAX_ATTEMPTS = 2;
 
 interface PlayCursor {
+  at?: string;
   positionMs: number;
   paused: boolean;
   stopped?: boolean;
@@ -29,7 +29,7 @@ interface PlayCursor {
   retryAt?: number;
 }
 
-function cursorKey(lib: Library, r: PlayReport): string {
+export function cursorKey(lib: Library, r: PlayReport): string {
   return `jf:play:v2:${lib.ctx.historyScope ?? lib.ctx.scope}:${lib.jf.client.deviceId}:${r.itemId}:${r.playSessionId || 'legacy'}`;
 }
 
@@ -81,6 +81,7 @@ function progressOf(positionMs: number, runtimeMs: number | undefined): number {
 }
 
 export interface PlayReport {
+  at?: string;
   itemId: string;
   positionTicks?: unknown;
   runtimeTicks?: unknown;
@@ -114,12 +115,14 @@ async function transition(lib: Library, r: PlayReport, known: PlayCursor | null,
   const positionMs = retry ? known.positionMs : ticksToMs(r.positionTicks) ?? known?.positionMs ?? 0;
   const sequence = retry ? known.sequence : (known?.sequence ?? 0) + 1;
   const next: PlayCursor = {
+    at: retry ? known.at : r.at,
     positionMs, paused: action === 'pause', stopped: action === 'stop', target: t,
     sequence, generation: known?.generation ?? crypto.randomUUID(), pending: action, attempts: retry ? (known.attempts ?? 0) + 1 : 1,
     retryAt: Date.now() + RETRY_DELAY_MS,
   };
   await statePut(lib.ctx, key, next, POSITION_TTL);
   const ev: ScrobbleEvent = {
+    at: next.at,
     action, numbering: t.numbering, animeEpisode: t.animeEpisode, ids: t.ids, kind: t.kind, season: t.season, episode: t.episode,
     progress: progressOf(positionMs, t.runtimeMs), positionMs, runtimeMs: t.runtimeMs,
     deliveryId: `${key}:${next.generation}:${sequence}:${action}`,
@@ -143,7 +146,7 @@ async function checkpoint(lib: Library, r: PlayReport, known: PlayCursor | null)
   const positionMs = ticksToMs(r.positionTicks);
   if (positionMs === null) return;
   if (known && known.positionMs === positionMs) return;
-  if (known?.target) await saveHistory(lib.ctx, { ...known.target, positionMs, action:'start', progress:progressOf(positionMs, known.target.runtimeMs) }, 'progress');
+  if (known?.target) await saveHistory(lib.ctx, { ...known.target, at: r.at, positionMs, action:'start', progress:progressOf(positionMs, known.target.runtimeMs) }, 'progress');
   await statePut(lib.ctx, cursorKey(lib, r), {
     ...known, positionMs, paused: r.isPaused ?? known?.paused ?? false,
     sequence: known?.sequence ?? 0, generation: known?.generation ?? crypto.randomUUID(),
@@ -251,14 +254,9 @@ export async function updateUserData(lib: Library, itemId: string, body: Record<
   return userData(id, { positionTicks: positionTicks !== null ? positionTicks * 10_000 : 0 });
 }
 
-export async function onPlaying(lib: Library, r: PlayReport): Promise<void> {
-  return withStateLock(lib.ctx,cursorKey(lib,r),() => onPlayingUnlocked(lib,r));
-}
-
-export async function onProgress(lib: Library, r: PlayReport): Promise<void> {
-  return withStateLock(lib.ctx,cursorKey(lib,r),() => onProgressUnlocked(lib,r));
-}
-
-export async function onStopped(lib: Library, r: PlayReport): Promise<void> {
-  return withStateLock(lib.ctx,cursorKey(lib,r),() => onStoppedUnlocked(lib,r));
+// Durable report consumers hold the session lock while applying reports.
+export async function applyPlaybackReport(lib: Library, r: PlayReport, action: 'start' | 'progress' | 'stop'): Promise<void> {
+  if (action === 'start') return onPlayingUnlocked(lib, r);
+  if (action === 'stop') return onStoppedUnlocked(lib, r);
+  return onProgressUnlocked(lib, r);
 }
