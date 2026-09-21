@@ -89,7 +89,7 @@ git fetch https://github.com/mrtxiv/Rill.git main && git restore --source=FETCH_
 
 Set **Deploy command** to `npm run deploy` and save. To start a fresh build, open the connected repository on GitHub, make a small edit to its README, and commit it to the production branch. Keep these build settings for future updates. Once the build succeeds, reload Rill and connect updates using the steps above. No GitHub Actions setup is needed.
 
-Do not retry the original install build: Cloudflare can reject it with “cannot retry a build that was created with a seed repo override.” A new commit or Deploy Hook starts a fresh build and avoids that retry restriction. Cloudflare creates a separate repository copy, so GitHub's **Sync fork** button is not part of this update flow.
+Updates use a fresh build started by Rill's connected Deploy Hook. Cloudflare creates a separate repository copy, so GitHub's **Sync fork** button is not part of this update flow.
 
 </details>
 
