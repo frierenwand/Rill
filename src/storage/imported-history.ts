@@ -44,7 +44,11 @@ export async function importedHistory(ctx: Ctx, tracker: Tracker, cacheKey: stri
     await cachePut(cacheKey, stored, REFRESH_SECONDS);
     const fetchedAt = Date.parse(stored.fetchedAt);
     if (ctx.defer && (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt >= REFRESH_SECONDS * 1000)) {
-      ctx.defer(refresh());
+      // A full import also consumes the browsing request's CPU budget in waitUntil.
+      // Let the scheduled worker refresh it while clients use the complete snapshot.
+      if (ctx.env.DB) ctx.defer(ctx.env.DB.prepare('UPDATE accounts SET sync_after=MIN(sync_after,?) WHERE scope=?')
+        .bind(Date.now(),ctx.scope).run());
+      else ctx.defer(refresh());
     }
     return stored;
   }

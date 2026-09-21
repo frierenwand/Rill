@@ -49,29 +49,45 @@ class Records<T extends Identified> {
 export async function overlayHistory(ctx: Ctx, base: WatchSnapshot): Promise<WatchSnapshot> {
   if (!ctx.env.DB) return base;
   const rows = await ctx.env.DB.prepare('SELECT value FROM history WHERE scope=? ORDER BY updated').bind(ctx.historyScope ?? ctx.scope).all<{ value: string }>();
-  const out = structuredClone(base);
-  out.local=[];
-  const resume=new Records<ResumeEntry>(r=>r.kind,out.resume);
-  const movies=new Records<WatchSnapshot['movies'][number]>(()=>'movie',out.movies);
-  const episodes=new Records<WatchSnapshot['episodes'][number]>(()=>'episode',out.episodes);
-  for (const row of rows.results) {
-    const r = JSON.parse(row.value) as LocalRecord;
-    r.ids={...resume.remove(r,r.kind),...(r.kind==='movie'?movies.remove(r,'movie'):episodes.remove(r,'episode'))};
-    out.local.push(r);
-    if ((r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100) resume.add({ ids:r.ids, kind:r.kind, season:r.season, episode:r.episode, progress:r.progress, positionMs:r.positionMs, runtimeMs:r.runtimeMs, at:r.at });
-    if (r.kind === 'movie') {
-      if (r.watched) movies.add({ ids:r.ids, plays:1, lastAt:r.at });
-    } else {
-      if (r.watched && r.season !== undefined && r.episode !== undefined) episodes.add({ ids:r.ids, season:r.season, episode:r.episode, plays:1, lastAt:r.at });
+  const out:WatchSnapshot = {...base,local:[]};
+  if(rows.results.length) {
+    const resume=new Records<ResumeEntry>(r=>r.kind,out.resume);
+    const movies=new Records<WatchSnapshot['movies'][number]>(()=>'movie',out.movies);
+    const episodes=new Records<WatchSnapshot['episodes'][number]>(()=>'episode',out.episodes);
+    for (const row of rows.results) {
+      const r = JSON.parse(row.value) as LocalRecord;
+      r.ids={...resume.remove(r,r.kind),...(r.kind==='movie'?movies.remove(r,'movie'):episodes.remove(r,'episode'))};
+      out.local!.push(r);
+      if ((r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100) resume.add({ ids:r.ids, kind:r.kind, season:r.season, episode:r.episode, progress:r.progress, positionMs:r.positionMs, runtimeMs:r.runtimeMs, at:r.at });
+      if (r.kind === 'movie') {
+        if (r.watched) movies.add({ ids:r.ids, plays:1, lastAt:r.at });
+      } else {
+        if (r.watched && r.season !== undefined && r.episode !== undefined) episodes.add({ ids:r.ids, season:r.season, episode:r.episode, plays:1, lastAt:r.at });
+      }
     }
+    out.movies=[...movies.rows];out.episodes=[...episodes.rows];out.resume=[...resume.rows];
   }
-  out.movies=[...movies.rows];out.episodes=[...episodes.rows];out.resume=[...resume.rows];
-  const shows=new Records<WatchSnapshot['shows'][number]>(()=>'series');
-  for (const e of [...out.episodes.map(e => ({...e,at:e.lastAt})), ...out.resume.filter(e => e.kind === 'episode')].sort((a,b) => a.at.localeCompare(b.at))) {
-    const ids=shows.remove(e,'series');
-    shows.add({ ids, lastAt:e.at, lastSeason:e.season, lastEpisode:e.episode });
+  type Show=WatchSnapshot['shows'][number];
+  const shows=new Set<Show>(),showIndex=new Map<string,Show>();
+  const activity=[...out.episodes,...out.resume.filter(e=>e.kind==='episode')];
+  const date=(e:typeof activity[number])=>'lastAt' in e?e.lastAt:e.at;
+  activity.sort((a,b)=>date(a).localeCompare(date(b)));
+  for(const e of activity) {
+    let show:Show|undefined;
+    for(const key of aliases(e,'series')) {
+      const previous=showIndex.get(key);
+      if(!previous || previous===show) continue;
+      for(const alias of aliases(previous,'series')) showIndex.delete(alias);
+      if(!show) show=previous;
+      else {Object.assign(show.ids,previous.ids);shows.delete(previous);}
+    }
+    if(!show) show={ids:{},lastAt:date(e)};
+    shows.delete(show);shows.add(show);
+    Object.assign(show.ids,e.ids);
+    show.lastAt=date(e);show.lastSeason=e.season;show.lastEpisode=e.episode;
+    for(const key of aliases(show,'series')) showIndex.set(key,show);
   }
-  out.resume.sort((a,b) => b.at.localeCompare(a.at));
-  out.shows=[...shows.rows].sort((a,b) => b.lastAt.localeCompare(a.lastAt));
+  out.resume=[...out.resume].sort((a,b) => b.at.localeCompare(a.at));
+  out.shows=[...shows].sort((a,b) => b.lastAt.localeCompare(a.lastAt));
   return out;
 }

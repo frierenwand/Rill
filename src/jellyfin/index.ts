@@ -157,16 +157,10 @@ inner.use('*', async (c, next) => {
 });
 
 const ID_FIELD = /^(Id|ItemId|ParentId|SeriesId|SeasonId|UserId|ServerId|Key|DisplayPreferencesId|MediaSourceId|PlaylistItemId|OwnerId|Parent(Backdrop|Logo|Thumb|Primary|Art)ItemId|PrimaryImageItemId|BackdropImageItemId|ChannelId|AlbumId)$/;
-function dashIds(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(dashIds);
-  if (!value || typeof value !== 'object') return value;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'string' && (ID_FIELD.test(k) || k.endsWith('Ids')) && /^[0-9a-f]{32}$/i.test(v)) out[k] = dashGuid(v.toLowerCase());
-    else if (Array.isArray(v) && k.endsWith('Ids')) out[k] = v.map((x) => (typeof x === 'string' && /^[0-9a-f]{32}$/i.test(x) ? dashGuid(x.toLowerCase()) : x));
-    else out[k] = dashIds(v);
-  }
-  return out;
+function dashIds(key: string, value: unknown): unknown {
+  if (typeof value === 'string' && (ID_FIELD.test(key) || key.endsWith('Ids')) && /^[0-9a-f]{32}$/i.test(value)) return dashGuid(value.toLowerCase());
+  if (Array.isArray(value) && key.endsWith('Ids')) return value.map(v => typeof v === 'string' && /^[0-9a-f]{32}$/i.test(v) ? dashGuid(v.toLowerCase()) : v);
+  return value;
 }
 
 async function reply(c: C, body: unknown, status = 200): Promise<Response> {
@@ -183,7 +177,7 @@ async function reply(c: C, body: unknown, status = 200): Promise<Response> {
   if (records.length && c.get('jf').claims) {
     await lib(c).decorateUserData(records);
   }
-  return c.json(dashIds(body) as never, status as never);
+  return c.body(JSON.stringify(body, dashIds), status as never, { 'Content-Type': 'application/json' });
 }
 
 function lib(c: C): Library {
