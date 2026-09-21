@@ -631,17 +631,31 @@ export class Library {
     return item;
   }
 
-  async episodeState(idx:WatchIndex,show:Show,episode:EpisodeView): Promise<{watched?:EpisodeMark;resume?:ResumeEntry}> {
+  private episodeNumbering(show:Show,episode:EpisodeView): 'anime'|'tvdb'|'tmdb' {
+    const source=show.guid.source;
+    return episode.video.numbering ?? (isAnimeSource(source) ? 'anime' : source==='tvdb' ? 'tvdb' : source==='tmdb' ? 'tmdb' : this.ctx.cfg.providers.series==='tvdb' ? 'tvdb':'tmdb');
+  }
+
+  private directEpisodeState(idx:WatchIndex,show:Show,episode:EpisodeView): {watched?:EpisodeMark;resume?:ResumeEntry}|null {
     const local=idx.localEpisode(show.keys,episode.season,episode.episode);
-    if(local) return local;
+    if(local)return local;
+    const primary=trackerApi.primary(this.ctx);
+    if(!primary || primary.name==='publicmetadb' && !episode.video.trackerAnime && this.episodeNumbering(show,episode)==='tmdb') {
+      return idx.episode(show.keys,episode.season,episode.episode);
+    }
+    return null;
+  }
+
+  async episodeState(idx:WatchIndex,show:Show,episode:EpisodeView): Promise<{watched?:EpisodeMark;resume?:ResumeEntry}> {
+    const direct=this.directEpisodeState(idx,show,episode);
+    if(direct)return direct;
     const stateKey=`${show.id}:${episode.season}:${episode.episode}`;
     const cached=this.episodeStates.get(stateKey);
     if(cached) return cached;
     const task=(async()=>{
       const primary=trackerApi.primary(this.ctx);
       if(!primary) return idx.episode(show.keys,episode.season,episode.episode);
-      const source=show.guid.source;
-      const numbering=episode.video.numbering ?? (isAnimeSource(source) ? 'anime' : source==='tvdb' ? 'tvdb' : source==='tmdb' ? 'tmdb' : this.ctx.cfg.providers.series==='tvdb' ? 'tvdb':'tmdb');
+      const numbering=this.episodeNumbering(show,episode);
       try {
         const queries=await trackerTargets(this.ctx,{kind:'episode' as const,watched:true,ids:bundleOf(show.guid,show.meta),season:episode.season,episode:episode.episode,numbering,animeEpisode:episode.video.trackerAnime},primary.name);
         if(!queries.length) return {};
@@ -850,7 +864,9 @@ export class Library {
         if (!show || idx.isDropped(show.keys)) return null;
         loaded.set(show.id, show);
         const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
-        const states=await mapLimit(released,8,e=>this.episodeState(idx,show,e));
+        const direct=released.map(e=>this.directEpisodeState(idx,show,e));
+        const states=direct.every((state):state is NonNullable<typeof state>=>state!==null)
+          ? direct : await mapLimit(released,8,(e,i)=>direct[i] ? Promise.resolve(direct[i]!) : this.episodeState(idx,show,e));
         let cursor=-1,lastAt='';
         for(let i=0;i<states.length;i++) {
           const watched=states[i].watched;

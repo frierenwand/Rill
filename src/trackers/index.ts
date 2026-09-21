@@ -111,6 +111,9 @@ async function drop(ctx: Ctx, ids: IdBundle, dropped: boolean, itemId?: string, 
 }
 
 async function invalidate(ctx: Ctx): Promise<void> {
+  // Durable readers validate database generations and local write revisions.
+  // Deleting the old edge snapshot on every progress report adds unnecessary IO.
+  if (ctx.env.DB) return;
   const t = primary(ctx);
   if (t) await cacheDelete(snapshotKey(ctx, t), ctx.origin, ctx.env.DB);
 }
