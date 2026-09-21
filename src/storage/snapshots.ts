@@ -12,14 +12,16 @@ export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Pr
   const old=await stateGet<SnapshotHead>(ctx,`${key}:head`);
   const statements=chunks.map((chunk,i)=>put(`${key}:part:${generation}:${i}`,chunk));
   statements.push(put(`${key}:head`,{generation,parts:chunks.length}));
-  if(old?.generation)statements.push(db.prepare('DELETE FROM state WHERE key GLOB ?').bind(`${key}:part:${old.generation}:*`));
+  if(old?.generation)statements.push(db.prepare('DELETE FROM state WHERE key>=? AND key<?').bind(`${key}:part:${old.generation}:`,`${key}:part:${old.generation};`));
   await db.batch(statements);
 }
 export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|null> {
   const db=ctx.env.DB;if(!db)return null;
-  const rows=await db.prepare(`SELECT s.key,s.value FROM state s WHERE s.expires>? AND
-    (s.key=? OR s.key GLOB (? || json_extract((SELECT value FROM state WHERE key=? AND expires>?), '$.generation') || ':*'))`)
-    .bind(Date.now(),`${key}:head`,`${key}:part:`,`${key}:head`,Date.now()).all<{key:string;value:string}>();
+  const rows=await db.prepare(`WITH head AS (
+    SELECT key,value,? || json_extract(value,'$.generation') AS prefix FROM state WHERE key=? AND expires>?
+  ) SELECT key,value FROM head UNION ALL
+    SELECT s.key,s.value FROM state s JOIN head h ON s.key>=(h.prefix || ':') AND s.key<(h.prefix || ';') WHERE s.expires>?`)
+    .bind(`${key}:part:`,`${key}:head`,Date.now(),Date.now()).all<{key:string;value:string}>();
   const header=rows.results.find(r=>r.key===`${key}:head`);
   if(!header)return stateGet<WatchSnapshot>(ctx,key);
   const head=JSON.parse(header.value) as SnapshotHead,parts=new Map(rows.results.map(r=>[r.key,r.value]));

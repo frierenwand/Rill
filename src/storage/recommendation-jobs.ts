@@ -15,7 +15,7 @@ export async function queueRecommendations(ctx:Ctx,rebuild=false):Promise<Job> {
   await registerAccount(ctx);
   const id=crypto.randomUUID(),now=Date.now();
   const statements=[db.prepare("INSERT OR IGNORE INTO recommendation_jobs(id,scope,config,origin,created,updated) VALUES(?,?,?,?,?,?)").bind(id,ctx.scope,ctx.cfgToken,ctx.origin,now,now)];
-  if(rebuild)statements.push(db.prepare('DELETE FROM state WHERE (key GLOB ? OR key GLOB ?) AND EXISTS(SELECT 1 FROM recommendation_jobs WHERE id=?)').bind(`taste:v1:${ctx.scope}:*`,`recommendations:v1:${ctx.scope}:*`,id));
+  if(rebuild)statements.push(db.prepare('DELETE FROM state WHERE ((key>=? AND key<?) OR (key>=? AND key<?)) AND EXISTS(SELECT 1 FROM recommendation_jobs WHERE id=?)').bind(`taste:v1:${ctx.scope}:`,`taste:v1:${ctx.scope};`,`recommendations:v1:${ctx.scope}:`,`recommendations:v1:${ctx.scope};`,id));
   const [inserted]=await db.batch(statements);
   if(!inserted.meta.changes) {
     const active=await db.prepare("SELECT id FROM recommendation_jobs WHERE scope=? AND status='pending'").bind(ctx.scope).first<{id:string}>();
