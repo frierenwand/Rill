@@ -359,7 +359,7 @@ h3 { font-size:16px; font-weight:600; }
 .update-history-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
 .update-history .hint { margin:8px 0 0; overflow-wrap:anywhere; }
 .update-history details { margin-top:10px; }
-.update-result { font-size:12px; border:1px solid var(--line); border-radius:20px; padding:4px 10px; }
+.update-result { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
 .update-result[data-status=succeeded] { color:#a9dbb6; border-color:#345d40; }
 .update-result[data-status=failed],.update-result[data-status=request_failed] { color:#f1b4b4; border-color:#683b3b; }
 .update-overview { margin:18px 0; }
