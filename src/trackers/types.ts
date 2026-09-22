@@ -26,6 +26,7 @@ export interface WatchSnapshot {
   shows: Array<{ ids: IdBundle; lastAt: string; lastSeason?: number; lastEpisode?: number }>;
   resume: ResumeEntry[];
   fetchedAt: string;
+  activity?: Record<string, string>;
 }
 
 export type ScrobbleAction = 'start' | 'pause' | 'stop';
@@ -70,7 +71,7 @@ export interface DropEvent {
 export interface Tracker {
   name: TrackerName;
   ready(ctx: Ctx): boolean;
-  snapshot(ctx: Ctx): Promise<WatchSnapshot>;
+  snapshot(ctx: Ctx, previous?: WatchSnapshot | null): Promise<WatchSnapshot>;
   scrobble(ctx: Ctx, ev: ScrobbleEvent): Promise<void>;
   mark(ctx: Ctx, ev: MarkEvent): Promise<void>;
   clearResume?(ctx: Ctx, entry: ResumeEntry): Promise<void>;

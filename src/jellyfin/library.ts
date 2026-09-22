@@ -682,7 +682,7 @@ export class Library {
     let revision:string|undefined;
     if(db) {
       const row=await db.prepare(`SELECT
-        (SELECT value FROM state WHERE key=? AND expires>?) AS head,
+        (SELECT json_extract(value,'$.generation') FROM state WHERE key=? AND expires>?) AS head,
         COALESCE((SELECT version FROM watch_revisions WHERE scope=?),0) AS history,
         COALESCE((SELECT version FROM watch_revisions WHERE scope=?),0) AS preferences`)
         .bind(`history-import:${ctx.scope}:${tracker?.name}:head`,Date.now(),ctx.historyScope ?? ctx.scope,ctx.scope)
@@ -699,7 +699,7 @@ export class Library {
         if(!entries){entries=new Map();watchIndexes.set(db,entries);}
         entries.delete(cacheKey);
         if(entries.size>=8)entries.delete(entries.keys().next().value!);
-        entries.set(cacheKey,{revision,expires:Date.now()+30_000,index});
+        entries.set(cacheKey,{revision,expires:Date.now()+300_000,index});
       }
       return index;
     } catch(error) {

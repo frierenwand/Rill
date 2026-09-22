@@ -21,11 +21,6 @@ export async function enqueue(ctx: Ctx, operation: Operation, event: Event, targ
   const identity = operation !== 'clear' ? (event as ScrobbleEvent | MarkEvent).deliveryId || crypto.randomUUID() : crypto.randomUUID();
   const now = Date.now();
   const statements: D1PreparedStatement[] = [];
-  if (operation==='scrobble' && !targets.length) {
-    const id=await sha256(`${ctx.scope}:local:${identity}`);
-    statements.push(db.prepare("INSERT INTO deliveries(id,scope,service,operation,payload,created,due,status) VALUES(?,?,'local',?,?,?,?,'done') ON CONFLICT(id) DO NOTHING")
-      .bind(id,ctx.scope,operation,JSON.stringify(event),now,now));
-  }
   for (const t of targets) {
     const id = await sha256(`${ctx.scope}:${operation}:${t.name}:${identity}`);
     statements.push(db.prepare('INSERT INTO deliveries(id,scope,service,operation,payload,created,due) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING')
@@ -72,8 +67,8 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
           const events = await trackerTargets(ctx,event as ScrobbleEvent | MarkEvent,job.service);
           for (let i = 0; i < events.length; i++) {
             if(!hasDatabaseBudget(db,15)) throw new DatabaseBudgetExceeded();
-            const ack = `delivery:${job.id}:${i}`;
-            if (await db.prepare('SELECT key FROM state WHERE key=?').bind(ack).first()) continue;
+            const ack = events.length > 1 || job.operation !== 'scrobble' ? `delivery:${job.id}:${i}` : null;
+            if (ack && await db.prepare('SELECT key FROM state WHERE key=?').bind(ack).first()) continue;
             const renewed = await db.prepare('UPDATE deliveries SET lease_until=? WHERE id=? AND lease=?')
               .bind(Date.now()+180_000,job.id,lease).run();
             if (!renewed.meta.changes) return;
@@ -85,7 +80,7 @@ export async function drain(ctx: Ctx, registry: Record<TrackerName, Tracker>, li
               const dropped = await localDrop(ctx, event.ids);
               if (dropped?.dropped) await tracker.drop(ctx, { ids: { ...dropped.bundle, ...events[i].ids }, dropped: true, at: dropped.updated, scope: ctx.scope });
             }
-            await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING')
+            if (ack) await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING')
               .bind(ack,'true',Date.now()+30*86400_000).run();
           }
         }

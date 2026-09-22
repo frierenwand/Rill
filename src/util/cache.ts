@@ -1,6 +1,7 @@
 import { tryGetContext } from 'hono/context-storage';
 
 const NS = 'https://rill.cache.invalid/';
+const DATABASE_MIN_TTL = 900;
 
 function keyUrl(key: string, origin?: string): string {
   const requestUrl = tryGetContext()?.req.url;
@@ -62,7 +63,7 @@ export async function cachePut(key: string, value: unknown, ttlSeconds: number, 
   // workers.dev may not retain edge entries. Keep small results in the existing
   // database too; large history imports already have their own chunked storage.
   const db = cacheDatabase();
-  if (db && json.length <= 64_000 && new TextEncoder().encode(json).byteLength <= 64_000) {
+  if (db && ttl >= DATABASE_MIN_TTL && json.length <= 64_000 && new TextEncoder().encode(json).byteLength <= 64_000) {
     try {
       await db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires')
         .bind(`cache:${url}`,json,expires).run();

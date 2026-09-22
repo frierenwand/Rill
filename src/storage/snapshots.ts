@@ -2,7 +2,11 @@ import type { Ctx } from '../context';
 import type { WatchSnapshot } from '../trackers/types';
 import { stateGet } from './state';
 
-interface SnapshotHead { generation:string; parts:number }
+interface SnapshotHead { generation:string; parts:number; checkedAt?:number }
+function checked(snapshot:WatchSnapshot,head:SnapshotHead|null):WatchSnapshot {
+  if(head?.checkedAt && head.checkedAt>Date.parse(snapshot.fetchedAt))snapshot.fetchedAt=new Date(head.checkedAt).toISOString();
+  return snapshot;
+}
 const recent = new WeakMap<D1Database, Map<string, {generation:string; text:string}>>();
 function remember(db:D1Database,key:string,generation:string,text:string):void {
   if(text.length>1_000_000)return;
@@ -20,7 +24,7 @@ export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Pr
   const put=(k:string,value:unknown)=>db.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires').bind(k,JSON.stringify(value),expires);
   const old=await stateGet<SnapshotHead>(ctx,`${key}:head`);
   const statements=chunks.map((chunk,i)=>put(`${key}:part:${generation}:${i}`,chunk));
-  statements.push(put(`${key}:head`,{generation,parts:chunks.length}));
+  statements.push(put(`${key}:head`,{generation,parts:chunks.length,checkedAt:Date.now()}));
   const summary={generation,snapshot:{
     movies:snapshot.movies,resume:snapshot.resume,dropped:snapshot.dropped,
     episodes:[],shows:[],fetchedAt:snapshot.fetchedAt,
@@ -30,12 +34,15 @@ export async function saveSnapshot(ctx:Ctx,key:string,snapshot:WatchSnapshot):Pr
   if(old?.generation)statements.push(db.prepare('DELETE FROM state WHERE key>=? AND key<?').bind(`${key}:part:${old.generation}:`,`${key}:part:${old.generation};`));
   await db.batch(statements);
 }
+export async function touchSnapshot(ctx:Ctx,key:string):Promise<void> {
+  await ctx.env.DB?.prepare("UPDATE state SET value=json_set(value,'$.checkedAt',?) WHERE key=?").bind(Date.now(),`${key}:head`).run();
+}
 export async function loadSnapshotSummary(ctx:Ctx,key:string):Promise<WatchSnapshot|null> {
-  const row=await ctx.env.DB?.prepare(`SELECT s.value FROM state s JOIN state h
+  const row=await ctx.env.DB?.prepare(`SELECT s.value,h.value AS head FROM state s JOIN state h
     ON h.key=? AND json_extract(s.value,'$.generation')=json_extract(h.value,'$.generation')
     WHERE s.key=? AND s.expires>? AND h.expires>?`)
-    .bind(`${key}:head`,`${key}:summary`,Date.now(),Date.now()).first<{value:string}>();
-  if(row)return (JSON.parse(row.value) as {snapshot:WatchSnapshot}).snapshot;
+    .bind(`${key}:head`,`${key}:summary`,Date.now(),Date.now()).first<{value:string;head:string}>();
+  if(row)return checked((JSON.parse(row.value) as {snapshot:WatchSnapshot}).snapshot,JSON.parse(row.head) as SnapshotHead);
   // Existing installations acquire a summary on their next successful import.
   const snapshot=await loadSnapshot(ctx,key);
   return snapshot ? {...snapshot,episodes:[],shows:[]} : null;
@@ -45,7 +52,7 @@ export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|nul
   const cached=recent.get(db)?.get(key);
   if(cached){
     const head=await stateGet<SnapshotHead>(ctx,`${key}:head`);
-    if(head?.generation===cached.generation)return JSON.parse(cached.text) as WatchSnapshot;
+    if(head?.generation===cached.generation)return checked(JSON.parse(cached.text) as WatchSnapshot,head);
     recent.get(db)?.delete(key);
   }
   const rows=await db.prepare(`WITH head AS (
@@ -65,5 +72,5 @@ export async function loadSnapshot(ctx:Ctx,key:string):Promise<WatchSnapshot|nul
   const text=chunks.join('');
   const snapshot=JSON.parse(text) as WatchSnapshot;
   remember(db,key,head.generation,text);
-  return snapshot;
+  return checked(snapshot,head);
 }

@@ -15,6 +15,7 @@ import { parseStremioId } from '../stremio/ids';
 const POSITION_TTL = 6 * 60 * 60;
 const RETRY_DELAY_MS = 30_000;
 const MAX_ATTEMPTS = 2;
+const CHECKPOINT_MS = 60_000;
 
 interface PlayCursor {
   at?: string;
@@ -145,7 +146,7 @@ async function checkpoint(lib: Library, r: PlayReport, known: PlayCursor | null)
   if (known?.pending) return;
   const positionMs = ticksToMs(r.positionTicks);
   if (positionMs === null) return;
-  if (known && known.positionMs === positionMs) return;
+  if (known && Math.abs(known.positionMs - positionMs) < CHECKPOINT_MS && (r.isPaused ?? known.paused) === known.paused) return;
   if (known?.target) await saveHistory(lib.ctx, { ...known.target, at: r.at, positionMs, action:'start', progress:progressOf(positionMs, known.target.runtimeMs) }, 'progress');
   await statePut(lib.ctx, cursorKey(lib, r), {
     ...known, positionMs, paused: r.isPaused ?? known?.paused ?? false,
@@ -252,6 +253,17 @@ export async function updateUserData(lib: Library, itemId: string, body: Record<
     await trackerApi.invalidate(lib.ctx).catch(() => undefined);
   }
   return userData(id, { positionTicks: positionTicks !== null ? positionTicks * 10_000 : 0 });
+}
+
+export async function redundantReport(lib: Library, r: PlayReport, action: 'start' | 'progress' | 'stop'): Promise<boolean> {
+  if (action === 'stop') return false;
+  const known = await stateGet<PlayCursor>(lib.ctx, cursorKey(lib, r));
+  if (!known) return false;
+  if (action === 'progress' && known.stopped) return true;
+  if (known.pending || known.stopped || known.sequence <= 0) return false;
+  if (action === 'start' ? known.paused : r.isPaused !== undefined && r.isPaused !== known.paused) return false;
+  const positionMs = ticksToMs(r.positionTicks);
+  return positionMs === null || Math.abs(known.positionMs - positionMs) < CHECKPOINT_MS;
 }
 
 // Durable report consumers hold the session lock while applying reports.

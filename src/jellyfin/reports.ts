@@ -5,7 +5,7 @@ import { drainTracking } from '../trackers/index';
 import { identityOf } from './auth';
 import { Library } from './library';
 import { profileContext } from './profiles';
-import { applyPlaybackReport, cursorKey, type PlayReport } from './sessions';
+import { applyPlaybackReport, cursorKey, redundantReport, type PlayReport } from './sessions';
 
 type Action = 'start' | 'progress' | 'stop';
 interface QueuedReport {
@@ -62,6 +62,7 @@ async function processSession(ctx: Ctx, key: string, limit = 4): Promise<void> {
 async function receive(lib: Library, report: PlayReport, action: Action): Promise<void> {
   const ctx = lib.ctx, db = ctx.env.DB;
   if (!db) return applyPlaybackReport(lib, report, action);
+  if (await redundantReport(lib, report, action).catch(() => false)) return;
   const now = Date.now(), key = cursorKey(lib, report);
   await db.prepare('INSERT INTO playback_reports(scope,session_key,profile_id,device_id,action,report,due) VALUES(?,?,?,?,?,?,?)')
     .bind(ctx.scope, key, ctx.profile?.id ?? null, lib.jf.client.deviceId, action,

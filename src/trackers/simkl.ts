@@ -135,9 +135,11 @@ export async function simklSignals(ctx:Ctx):Promise<ViewingSignal[]> {
   }))).flat();
 }
 
-async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
+async function snapshot(ctx: Ctx, previous?: WatchSnapshot | null): Promise<WatchSnapshot> {
   const a = auth(ctx);
   if (!a) return emptySnapshot();
+  const changed = await activity(ctx, a);
+  if (previous?.activity?.simkl === changed) return previous;
 
   const [moviesDone, tvWatching, tvDone, animeWatching, animeDone, playback, dropped, held] = await Promise.all([
     library(ctx, a, 'movies', 'completed', false),
@@ -145,12 +147,13 @@ async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
     library(ctx, a, 'tv', 'completed', true),
     library(ctx, a, 'anime', 'watching', true),
     library(ctx, a, 'anime', 'completed', true),
-    get<PlaybackItem[]>(ctx, a, '/sync/playback', 30),
+    get<PlaybackItem[]>(ctx, a, '/sync/playback', 0),
     statusRows(ctx, a, 'dropped'),
     statusRows(ctx, a, 'hold'),
   ]);
 
   const out = emptySnapshot();
+  out.activity = { simkl: changed };
   out.dropped = [...dropped.shows ?? [], ...dropped.anime ?? []].flatMap(row => row.show ? [bundleOf(row.show.ids, 'tv')] : []);
 
   for (const m of moviesDone) {

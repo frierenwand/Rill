@@ -2,14 +2,14 @@ import type { Env } from '../env';
 import type { Ctx } from '../context';
 import { decodeConfig } from '../config/codec';
 import { drainTracking, trackerApi } from '../trackers/index';
-import { saveSnapshot } from './snapshots';
+import { loadSnapshot } from './snapshots';
 import { advanceBulk } from './bulk';
 import { sha256 } from '../util/bytes';
 import { budgetDatabase, cleanupDatabase, DatabaseBudgetExceeded, hasDatabaseBudget } from './budget';
 import { syncMovieLens } from '../addon/movielens-sync';
 import { advanceRecommendations } from './recommendation-jobs';
 import { ensureSchema } from './migrate';
-import { reconcileDropped } from './dropped';
+import { backOffImport, historyImportKey, importSnapshot } from './imported-history';
 import { dailyUpdate } from './updates';
 import { drainPlaybackReports } from '../jellyfin/reports';
 
@@ -51,14 +51,12 @@ export async function scheduled(event: ScheduledController, env: Env): Promise<v
         if (claimed.meta.changes) {
           const tracker = trackerApi.primary(ctx);
           try {
-            if (tracker) {
-              const snapshot = await tracker.snapshot(ctx);
-              await reconcileDropped(ctx, tracker.name, snapshot);
-              await saveSnapshot(ctx,`history-import:${ctx.scope}:${tracker.name}`,snapshot);
-            }
+            if (tracker) await importSnapshot(ctx, tracker, await loadSnapshot(ctx, historyImportKey(ctx, tracker)).catch(() => null));
             await trackerApi.invalidate(ctx);
           } catch(error) {
-            await cleanupDatabase(db).prepare('UPDATE accounts SET sync_after=? WHERE scope=?').bind(now+60_000,a.scope).run();
+            const retry = cleanupDatabase(db);
+            await retry.prepare('UPDATE accounts SET sync_after=? WHERE scope=?').bind(now+10*60_000,a.scope).run();
+            if (tracker) await backOffImport({ ...ctx, env: { ...env, DB: retry } }, tracker).catch(() => undefined);
             throw error;
           }
         }
@@ -69,7 +67,7 @@ export async function scheduled(event: ScheduledController, env: Env): Promise<v
   if(!hasDatabaseBudget(db,3)) return;
   await db.batch([
     db.prepare('DELETE FROM state WHERE expires<=?').bind(now),
-    db.prepare("DELETE FROM deliveries WHERE status IN ('done','superseded') AND created<?").bind(now-30*86400_000),
+    db.prepare("DELETE FROM deliveries WHERE status IN ('done','superseded') AND due<?").bind(now-30*86400_000),
     db.prepare("DELETE FROM bulk_actions WHERE status IN ('done','cancelled') AND created<?").bind(now-30*86400_000),
   ]);
 }

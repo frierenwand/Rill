@@ -112,19 +112,40 @@ function toPreview(entry: ListEntry, want: 'movie' | 'series'): MetaPreview | nu
   };
 }
 
-async function snapshot(ctx: Ctx): Promise<WatchSnapshot> {
+type Activities = Partial<Record<'movies' | 'episodes' | 'shows', Record<string, unknown>>>;
+
+function activityParts(a: Activities): Record<string, string> {
+  const m = a.movies ?? {}, e = a.episodes ?? {};
+  return {
+    playback: [m.paused_at, e.paused_at, m.watched_at, e.watched_at].join('|'),
+    movies: String(m.watched_at ?? ''),
+    shows: String(e.watched_at ?? ''),
+    dropped: JSON.stringify(a.shows ?? {}),
+  };
+}
+
+async function snapshot(ctx: Ctx, previous?: WatchSnapshot | null): Promise<WatchSnapshot> {
   const s = await session(ctx);
   if (!s) return emptySnapshot();
 
+  const activities = await get<Activities>(ctx, s, '/sync/last_activities', 0);
+  const activity = activities ? activityParts(activities) : undefined;
+  const same = (part: string) => !!activity && !!previous?.activity && previous.activity[part] === activity[part];
+  if (previous && Object.keys(activity ?? {}).length && Object.keys(activity!).every(same)) return previous;
+
   const [playback, movies, shows, dropped] = await Promise.all([
-    get<PlaybackItem[]>(ctx, s, '/sync/playback', 30),
-    allPages<WatchedMovieItem>(ctx, s, '/sync/watched/movies?extended=progress'),
-    allPages<WatchedShowItem>(ctx, s, '/sync/watched/shows?extended=progress'),
-    allPages<{ show?: TraktShow }>(ctx, s, '/users/hidden/dropped?type=show'),
+    same('playback') ? null : get<PlaybackItem[]>(ctx, s, '/sync/playback', 0),
+    same('movies') ? null : allPages<WatchedMovieItem>(ctx, s, '/sync/watched/movies?extended=progress'),
+    same('shows') ? null : allPages<WatchedShowItem>(ctx, s, '/sync/watched/shows?extended=progress'),
+    same('dropped') ? null : allPages<{ show?: TraktShow }>(ctx, s, '/users/hidden/dropped?type=show'),
   ]);
 
   const out = emptySnapshot();
-  out.dropped = dropped.flatMap(row => row.show ? [bundleOf(row.show.ids, 'tv')] : []);
+  out.activity = activity;
+  out.dropped = same('dropped') ? previous!.dropped : (dropped ?? []).flatMap(row => row.show ? [bundleOf(row.show.ids, 'tv')] : []);
+  if (same('playback')) out.resume = [...previous!.resume];
+  if (same('movies')) out.movies = previous!.movies;
+  if (same('shows')) { out.episodes = previous!.episodes; out.shows = [...previous!.shows]; }
 
   for (const p of playback ?? []) {
     const progress = clampPercent(p.progress);
@@ -175,6 +196,7 @@ async function allPages<T>(ctx: Ctx, s: Session, path: string): Promise<T[]> {
     const signature = JSON.stringify(data);
     if (seen.has(signature)) throw new Error('Trakt repeated a list page');
     seen.add(signature); rows.push(...data);
+    if (data.length < 100) return rows;
   }
   throw new Error('Trakt list exceeds the import limit');
 }

@@ -64,6 +64,7 @@ export async function reconcileDropped(ctx: Ctx, source: TrackerName, snapshot: 
     const ids = JSON.parse(row.ids) as IdBundle;
     const remote = snapshot.dropped.some(other => sameShow(ids, other));
     if (!row.confirmed && remote !== Boolean(row.dropped)) continue;
+    if (row.confirmed && remote === Boolean(row.dropped)) continue;
     await ctx.env.DB.prepare(`UPDATE dropped_shows SET dropped=?,confirmed=1 WHERE scope=? AND key=? AND updated=?
       AND NOT EXISTS (SELECT 1 FROM deliveries WHERE scope=? AND service=? AND operation='drop' AND status IN ('pending','failed')
         AND json_extract(payload,'$.scope')=? AND json_extract(payload,'$.at')>=?
