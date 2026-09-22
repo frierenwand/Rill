@@ -348,11 +348,20 @@ inner.get('/users/:uid/groupingoptions', groupingHandler);
 function sortWithin(items: Dto[], sortBy: string[], descending: boolean): Dto[] {
   const key = sortBy[0] ?? '';
   const num = (v: unknown) => (typeof v === 'number' ? v : Number.NEGATIVE_INFINITY);
+  const ud = (i: Dto) => (i.UserData ?? {}) as Dto;
+  const played = (i: Dto) => {
+    const ms = Date.parse(String(ud(i).LastPlayedDate ?? ''));
+    return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+  };
   const cmp: ((a: Dto, b: Dto) => number) | null =
     key === 'SortName' || key === 'Name'
       ? (a, b) => String(a.SortName ?? a.Name ?? '').localeCompare(String(b.SortName ?? b.Name ?? ''))
       : key === 'ProductionYear' || key === 'PremiereDate' || key === 'DateCreated'
         ? (a, b) => Date.parse(String(a.PremiereDate ?? '')) - Date.parse(String(b.PremiereDate ?? ''))
+        : key === 'DatePlayed'
+          ? (a, b) => played(a) - played(b)
+        : key === 'PlayCount'
+          ? (a, b) => num(ud(a).PlayCount) - num(ud(b).PlayCount)
         : key === 'CommunityRating'
           ? (a, b) => num(a.CommunityRating) - num(b.CommunityRating)
           : key === 'Runtime'

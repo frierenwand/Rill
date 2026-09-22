@@ -196,8 +196,13 @@ export function userData(id: string, u: UserDataInput = {}): Dto {
     ItemId: id,
   };
   if (u.unplayed !== undefined) out.UnplayedItemCount = u.unplayed;
-  if (u.lastPlayed) out.LastPlayedDate = u.lastPlayed;
+  if (u.lastPlayed) out.LastPlayedDate = isoDate(u.lastPlayed);
   return out;
+}
+
+export function isoDate(value: string): string {
+  const ms = Date.parse(/^\d{4}-\d{2}-\d{2} /.test(value) ? value.replace(' ', 'T') : value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : value;
 }
 
 export function collectionFolder(id: string, who: Identity, name: string, collectionType: string | null): Dto {
