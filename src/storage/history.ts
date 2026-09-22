@@ -8,7 +8,9 @@ interface LocalRecord {
   positionMs?: number; runtimeMs?: number;
 }
 
-export function historyStatement(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | ResumeEntry, mode: 'progress' | 'mark' | 'clear'): D1PreparedStatement | null {
+export interface SqlGuard { sql: string; params: unknown[] }
+
+export function historyStatement(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | ResumeEntry, mode: 'progress' | 'mark' | 'clear', guard?: SqlGuard): D1PreparedStatement | null {
   if (!ctx.env.DB || ev.kind === 'series') return null;
   const key = `${ev.kind}:${titleKey(ev.ids, ev.kind, ev.season, ev.episode)}`;
   const watched = mode === 'mark' ? (ev as MarkEvent).watched : mode === 'progress' && 'action' in ev && ev.action === 'stop' && ev.progress >= 90;
@@ -21,9 +23,9 @@ export function historyStatement(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | Resum
     runtimeMs:'runtimeMs' in ev ? ev.runtimeMs : undefined,
   };
   const preserve = mode !== 'mark';
-  return ctx.env.DB.prepare(`INSERT INTO history(scope,key,value,updated) VALUES(?,?,?,?) ON CONFLICT(scope,key) DO UPDATE SET
+  return ctx.env.DB.prepare(`INSERT INTO history(scope,key,value,updated) SELECT ?,?,?,? WHERE ${guard?.sql ?? '1'} ON CONFLICT(scope,key) DO UPDATE SET
     value=CASE WHEN ? AND json_extract(history.value,'$.watched')=1 THEN json_set(excluded.value,'$.watched',json('true')) ELSE excluded.value END,
-    updated=excluded.updated WHERE excluded.updated>=history.updated`).bind(ctx.historyScope ?? ctx.scope, key, JSON.stringify(value), Date.parse(at), preserve ? 1 : 0);
+    updated=excluded.updated WHERE excluded.updated>=history.updated`).bind(ctx.historyScope ?? ctx.scope, key, JSON.stringify(value), Date.parse(at), ...(guard?.params ?? []), preserve ? 1 : 0);
 }
 
 export async function saveHistory(ctx: Ctx, ev: ScrobbleEvent | MarkEvent | ResumeEntry, mode: 'progress' | 'mark' | 'clear'): Promise<void> {

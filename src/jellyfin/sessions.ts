@@ -5,7 +5,7 @@ import type { IdBundle } from '../meta/types';
 import { trackerApi } from '../trackers/index';
 import type { MarkEvent, ScrobbleEvent } from '../trackers/types';
 import { stateGet, statePut } from '../storage/state';
-import { saveHistory } from '../storage/history';
+import { historyStatement, saveHistory } from '../storage/history';
 import { runtimeTicks, ticksToMs, userData, type Dto } from './dto';
 import { decodeGuid, plainGuid, type TitleGuid } from './ids';
 import { bundleOf, type Library } from './library';
@@ -255,15 +255,28 @@ export async function updateUserData(lib: Library, itemId: string, body: Record<
   return userData(id, { positionTicks: positionTicks !== null ? positionTicks * 10_000 : 0 });
 }
 
-export async function redundantReport(lib: Library, r: PlayReport, action: 'start' | 'progress' | 'stop'): Promise<boolean> {
-  if (action === 'stop') return false;
-  const known = await stateGet<PlayCursor>(lib.ctx, cursorKey(lib, r));
-  if (!known) return false;
+export async function settleReport(lib: Library, r: PlayReport, action: 'start' | 'progress' | 'stop'): Promise<boolean> {
+  const db = lib.ctx.env.DB;
+  if (!db || action === 'stop') return false;
+  const key = cursorKey(lib, r);
+  const row = await db.prepare('SELECT value FROM state WHERE key=? AND expires>?').bind(key, Date.now()).first<{ value: string }>();
+  if (!row) return false;
+  const known = JSON.parse(row.value) as PlayCursor;
   if (action === 'progress' && known.stopped) return true;
   if (known.pending || known.stopped || known.sequence <= 0) return false;
   if (action === 'start' ? known.paused : r.isPaused !== undefined && r.isPaused !== known.paused) return false;
   const positionMs = ticksToMs(r.positionTicks);
-  return positionMs === null || Math.abs(known.positionMs - positionMs) < CHECKPOINT_MS;
+  if (positionMs === null || Math.abs(known.positionMs - positionMs) < CHECKPOINT_MS) return true;
+  if (action !== 'progress') return false;
+  const guard = {
+    sql: 'EXISTS (SELECT 1 FROM state WHERE key=? AND value=?) AND NOT EXISTS (SELECT 1 FROM playback_reports WHERE scope=? AND session_key=?)',
+    params: [key, row.value, lib.ctx.scope, key],
+  };
+  const history = known.target ? historyStatement(lib.ctx, { ...known.target, at: new Date().toISOString(), positionMs, action: 'start', progress: progressOf(positionMs, known.target.runtimeMs) }, 'progress', guard) : null;
+  const cursor = db.prepare(`UPDATE state SET value=?,expires=? WHERE key=? AND ${guard.sql}`)
+    .bind(JSON.stringify({ ...known, positionMs, paused: r.isPaused ?? known.paused }), Date.now() + POSITION_TTL * 1000, key, ...guard.params);
+  const results = await db.batch(history ? [history, cursor] : [cursor]);
+  return results[results.length - 1].meta.changes > 0;
 }
 
 // Durable report consumers hold the session lock while applying reports.
