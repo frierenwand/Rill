@@ -2,8 +2,9 @@ import type { Ctx } from '../context';
 import type { Meta, MetaPreview } from '../stremio/types';
 import { tmdbGet,previewFromListItem,type TmdbListItem } from '../meta/tmdb';
 import { fnv1a32,encodeGuid,personIdOf,type LabelGuid } from './ids';
+import { peopleOf } from './dto';
 export async function rememberPeople(ctx:Ctx,meta:Meta):Promise<void> {
-  const names=[...new Set([...(meta.cast??[]),...(meta.director??[]),...(meta.writer??[])])].slice(0,40);
+  const names=[...new Set(peopleOf(meta).filter(p=>p.Id===personIdOf(String(p.Name))).map(p=>String(p.Name)))].slice(0,40);
   if(!ctx.env.DB||!names.length)return;
   await ctx.env.DB.prepare(`INSERT INTO person_labels(id,name) VALUES ${names.map(()=>'(?,?)').join(',')} ON CONFLICT(id) DO NOTHING`).bind(...names.flatMap(name=>[personIdOf(name),name])).run();
 }
