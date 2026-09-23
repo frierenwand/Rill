@@ -11,6 +11,8 @@ import m0010 from '../../migrations/0010_playback_reports.sql';
 import m0011 from '../../migrations/0011_update_history.sql';
 import m0012 from '../../migrations/0012_watch_revisions.sql';
 import m0013 from '../../migrations/0013_delivery_status_index.sql';
+import m0014 from '../../migrations/0014_image_tags.sql';
+import m0015 from '../../migrations/0015_presentations.sql';
 
 const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0001_durable.sql', m0001],
@@ -26,6 +28,8 @@ const MIGRATIONS: Array<[name: string, sql: string]> = [
   ['0011_update_history.sql', m0011],
   ['0012_watch_revisions.sql', m0012],
   ['0013_delivery_status_index.sql', m0013],
+  ['0014_image_tags.sql', m0014],
+  ['0015_presentations.sql', m0015],
 ];
 
 const done = new WeakMap<D1Database, Promise<void>>();

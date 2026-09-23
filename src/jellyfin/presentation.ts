@@ -56,7 +56,7 @@ export async function presentTitles(ctx: Ctx, items: Dto[]): Promise<void> {
   const missing: string[] = [];
   for (let offset = 0; offset < keys.length; offset += 80) {
     const page = keys.slice(offset, offset + 80);
-    const rows = await db.prepare(`SELECT key,value FROM state WHERE key IN (${page.map(() => '?').join(',')}) AND expires>?`)
+    const rows = await db.prepare(`SELECT key,value FROM presentations WHERE key IN (${page.map(() => '?').join(',')}) AND expires>?`)
       .bind(...page, Date.now()).all<{key: string; value: string}>();
     const found = new Set<string>();
     for (const row of rows.results) {
@@ -77,8 +77,8 @@ async function requestPresentations(ctx: Ctx, keys: string[]): Promise<void> {
   for (let offset = 0; offset < keys.length; offset += 40) {
     const page = keys.slice(offset, offset + 40);
     const now = Date.now();
-    const claimed = await db.prepare(`INSERT INTO state(key,value,expires) VALUES ${page.map(() => "(?,'null',?)").join(',')}
-      ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires WHERE state.expires<=?
+    const claimed = await db.prepare(`INSERT INTO presentations(key,value,expires) VALUES ${page.map(() => "(?,'null',?)").join(',')}
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires WHERE presentations.expires<=?
       RETURNING key`).bind(...page.flatMap(key => [key, now + LEASE]), now).all<{key: string}>();
     if (!claimed.results.length) continue;
     try {
@@ -87,7 +87,7 @@ async function requestPresentations(ctx: Ctx, keys: string[]): Promise<void> {
         profileId: ctx.profile?.id, id: key.slice(key.lastIndexOf(':') + 1),
       } })));
     } catch (error) {
-      await db.prepare(`DELETE FROM state WHERE key IN (${claimed.results.map(() => '?').join(',')}) AND value='null' AND expires=?`)
+      await db.prepare(`DELETE FROM presentations WHERE key IN (${claimed.results.map(() => '?').join(',')}) AND value='null' AND expires=?`)
         .bind(...claimed.results.map(row => row.key), now + LEASE).run();
       throw error;
     }
@@ -115,6 +115,6 @@ export async function preparePresentation(job: PresentationJob, env: Env): Promi
   const data = Object.fromEntries(fields.map(field => [field, item[field]]));
   // Large series can have hundreds of crew credits. Keep homepage payloads bounded.
   data.People = (item.People as Dto[]).slice(0, PREVIEW_PEOPLE_LIMIT);
-  await env.DB.prepare('INSERT INTO state(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires')
+  await env.DB.prepare('INSERT INTO presentations(key,value,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,expires=excluded.expires')
     .bind(keyOf(ctx, job.id), JSON.stringify(data), Date.now() + TTL).run();
 }
