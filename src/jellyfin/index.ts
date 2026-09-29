@@ -21,7 +21,7 @@ import { collectionFolder, genreDto, listOf, publicSystemInfo, sessionDto, syste
 import { dashGuid, decodeGuid, encodeGuid, genreIdOf, parentSeriesOf, plainGuid, type LabelGuid, type TitleGuid } from './ids';
 import { imageUrlFor, imageResponse } from './images';
 import { imageTaggedJson, imageUrlByTag } from './image-tags';
-import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type Show } from './library';
+import { collectionTypeOf, filterByType, includeTypesOf, Library, type CatalogRef, type ItemType, type ResumeScope, type Show } from './library';
 import { pickSource, playbackInfo, resolveSources, subtitleResponse } from './playback';
 import { qBool, qInt, qList, type JfEnv, type JfRequest } from './request';
 import { reportOf, setPlayed, updateUserData } from './sessions';
@@ -701,12 +701,27 @@ async function latestHandler(c: C): Promise<Response> {
   return reply(c, filterByType(items, wanted).slice(0, limit));
 }
 
+async function resumeScope(L: Library, parentRaw: string | undefined): Promise<ResumeScope | null> {
+  if (!parentRaw) return {};
+  const parent = decodeGuid(parentRaw);
+  if (parent?.kind === 'view') {
+    const cat = await L.viewOf(parent);
+    return cat ? { kind: cat.type === 'movie' ? 'movie' : 'episode' } : null;
+  }
+  if (parent?.kind !== 'series' && parent?.kind !== 'season') return null;
+  const show = await L.show(parent);
+  return show ? { show, season: parent.kind === 'season' ? parent.season : undefined } : null;
+}
+
 async function resumeHandler(c: C): Promise<Response> {
   const jf = c.get('jf');
+  const L = lib(c);
   const start = Math.max(0, qInt(jf, 'StartIndex', 0));
   const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
   const wanted = includeTypesOf(qList(jf, 'IncludeItemTypes'));
-  const { items, total } = await lib(c).resumeShelf(start, limit);
+  const scope = await resumeScope(L, jf.q('ParentId'));
+  if (!scope) return reply(c, listOf([], 0, start));
+  const { items, total } = await L.resumeShelf(start, limit, scope);
   return reply(c, listOf(filterByType(items, wanted), total, start));
 }
 
@@ -714,10 +729,18 @@ inner.get('/shows/nextup', async (c) => {
   const jf = c.get('jf');
   const start = Math.max(0, qInt(jf, 'StartIndex', 0));
   const limit = Math.min(Math.max(1, qInt(jf, 'Limit', 20)), 100);
-  const { items, total } = await lib(c).nextUpShelf(start, limit, {
+  const opts = {
     includeResumable: qBool(jf, 'EnableResumable', true),
     includeRewatching: qBool(jf, 'EnableRewatching', false),
-  });
+  };
+  const seriesRaw = jf.q('SeriesId');
+  const scoped = decodeGuid(seriesRaw || jf.q('ParentId'));
+  const title = scoped && scoped.kind !== 'view' && scoped.kind !== 'misc' ? scoped : null;
+  if (seriesRaw || title) {
+    const items = title ? await lib(c).nextUpOf(title, opts) : [];
+    return reply(c, listOf(items.slice(start, start + limit), items.length, start));
+  }
+  const { items, total } = await lib(c).nextUpShelf(start, limit, opts);
   return reply(c, listOf(items, total, start));
 });
 

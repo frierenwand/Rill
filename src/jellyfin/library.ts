@@ -243,6 +243,17 @@ export interface Show {
   keys: string[];
 }
 
+export interface ResumeScope {
+  kind?: 'movie' | 'episode';
+  show?: Show;
+  season?: number;
+}
+
+export interface NextUpOptions {
+  includeResumable: boolean;
+  includeRewatching: boolean;
+}
+
 export function episodesOf(meta: Meta, series: TitleGuid): { seasons: SeasonView[]; episodes: EpisodeView[] } {
   const videos = Array.isArray(meta.videos) ? meta.videos : [];
   const seen = new Set<string>();
@@ -821,20 +832,22 @@ export class Library {
     return result;
   }
 
-  async resumeShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
+  async resumeShelf(start: number, limit: number, scope: ResumeScope = {}): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
-    return this.cachedShelf(`resume:${start}:${limit}`, idx, async () => {
-      const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.kind === 'movie' || !idx.isDropped(bundleKeys(r.ids))) && (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-      const page = rows.slice(start, start + Math.min(limit, SHELF_LIMIT));
+    const { kind, show: owner, season } = scope;
+    const build = async () => {
+      const rows = [...(idx.snapshot.resume ?? [])].filter((r) => (r.kind === 'movie' || !idx.isDropped(bundleKeys(r.ids))) && (r.progress > 0 || (r.positionMs ?? 0) > 0) && r.progress < 100
+        && (!kind || r.kind === kind) && (!owner || r.kind === 'episode' && bundleKeys(r.ids).some(k => owner.keys.includes(k)))).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+      const page = owner ? rows : rows.slice(start, start + Math.min(limit, SHELF_LIMIT));
       const shows = new Map<string, Show>();
       const built = await mapLimit(page, SHELF_CONCURRENCY, async (row): Promise<Dto | null> => {
-        const g = this.guidOfBundle(row.ids, row.kind === 'movie' ? 'movie' : 'series');
+        const g = owner?.guid ?? this.guidOfBundle(row.ids, row.kind === 'movie' ? 'movie' : 'series');
         if (!g) return null;
         if (g.kind === 'movie') {
           const meta = await this.meta(g);
           return meta ? this.titleItemOf(meta, g) : null;
         }
-        const show = await this.show(g);
+        const show = owner ?? await this.show(g);
         if (!show || idx.isDropped(show.keys)) return null;
         shows.set(show.id, show);
         let ep = this.findEpisode(show, { ...g, kind: 'episode', season: row.season, episode: row.episode });
@@ -848,12 +861,39 @@ export class Library {
         return ep ? this.episodeItem(show, ep) : null;
       });
       const items = built.filter((x): x is Dto => Boolean(x));
-      await this.decorate(items, shows);
-      return { items, total: rows.length };
-    });
+      if (!owner) {
+        await this.decorate(items, shows);
+        return { items, total: rows.length };
+      }
+      const matched = items.filter(item => season === undefined || item.ParentIndexNumber === season);
+      const window = matched.slice(start, start + Math.min(limit, SHELF_LIMIT));
+      await this.decorate(window, shows);
+      return { items: window, total: matched.length };
+    };
+    return owner ? build() : this.cachedShelf(`resume:${start}:${limit}:${kind ?? ''}`, idx, build);
   }
 
-  async nextUpShelf(start: number, limit: number, opts: { includeResumable: boolean; includeRewatching: boolean }): Promise<{ items: Dto[]; total: number }> {
+  private async nextEpisode(idx: WatchIndex, show: Show, opts: NextUpOptions): Promise<Dto | null> {
+    const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
+    const direct=released.map(e=>this.directEpisodeState(idx,show,e));
+    const states=direct.every((state):state is NonNullable<typeof state>=>state!==null)
+      ? direct : await mapLimit(released,8,(e,i)=>direct[i] ? Promise.resolve(direct[i]!) : this.episodeState(idx,show,e));
+    let cursor=-1,lastAt='';
+    for(let i=0;i<states.length;i++) {
+      const watched=states[i].watched;
+      if(watched && watched.lastAt>=lastAt) {cursor=i;lastAt=watched.lastAt;}
+    }
+    const nextIndex=states.findIndex((s,i)=>i>cursor && !s.watched);
+    const next=nextIndex>=0 ? released[nextIndex]:undefined;
+    if (!next) {
+      if (!opts.includeRewatching) return null;
+      return released.length ? this.episodeItem(show,released[0]):null;
+    }
+    if (!opts.includeResumable && states[nextIndex].resume) return null;
+    return this.episodeItem(show, next);
+  }
+
+  async nextUpShelf(start: number, limit: number, opts: NextUpOptions): Promise<{ items: Dto[]; total: number }> {
     const idx = await this.watch();
     return this.cachedShelf(`next:${start}:${limit}:${opts.includeResumable}:${opts.includeRewatching}`, idx, async () => {
       const shows = [...(idx.snapshot.shows ?? [])].filter(row => !idx.isDropped(bundleKeys(row.ids))).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
@@ -865,28 +905,21 @@ export class Library {
         const show = await this.show(g);
         if (!show || idx.isDropped(show.keys)) return null;
         loaded.set(show.id, show);
-        const released = show.episodes.filter(e => isReleased(e.video) && e.season>0);
-        const direct=released.map(e=>this.directEpisodeState(idx,show,e));
-        const states=direct.every((state):state is NonNullable<typeof state>=>state!==null)
-          ? direct : await mapLimit(released,8,(e,i)=>direct[i] ? Promise.resolve(direct[i]!) : this.episodeState(idx,show,e));
-        let cursor=-1,lastAt='';
-        for(let i=0;i<states.length;i++) {
-          const watched=states[i].watched;
-          if(watched && watched.lastAt>=lastAt) {cursor=i;lastAt=watched.lastAt;}
-        }
-        const nextIndex=states.findIndex((s,i)=>i>cursor && !s.watched);
-        const next=nextIndex>=0 ? released[nextIndex]:undefined;
-        if (!next) {
-          if (!opts.includeRewatching) return null;
-          return released.length ? this.episodeItem(show,released[0]):null;
-        }
-        if (!opts.includeResumable && states[nextIndex].resume) return null;
-        return this.episodeItem(show, next);
+        return this.nextEpisode(idx, show, opts);
       });
       const items = built.filter((x): x is Dto => Boolean(x));
       await this.decorate(items, loaded);
       return { items, total: shows.length };
     });
+  }
+
+  async nextUpOf(g: TitleGuid, opts: NextUpOptions): Promise<Dto[]> {
+    if (g.kind === 'movie') return [];
+    const idx = await this.watch();
+    const show = await this.show(g);
+    if (!show || idx.isDropped(show.keys)) return [];
+    const item = await this.nextEpisode(idx, show, opts);
+    return item ? this.decorate([item], new Map([[show.id, show]])) : [];
   }
 
   async upcomingShelf(start: number, limit: number): Promise<{ items: Dto[]; total: number }> {
